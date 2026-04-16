@@ -1,0 +1,873 @@
+
+import React, { useRef, Suspense, useState, useEffect, useMemo } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Environment, OrbitControls, ContactShadows } from '@react-three/drei';
+import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { ControlRefs, ModelType } from '../types';
+
+// Fix for TypeScript errors regarding R3F intrinsic elements and missing HTML elements
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      group: any;
+      primitive: any;
+      ambientLight: any;
+      spotLight: any;
+      pointLight: any;
+      mesh: any;
+      planeGeometry: any;
+      meshStandardMaterial: any;
+      [elemName: string]: any;
+    }
+  }
+}
+
+interface ModelViewerProps {
+  modelUrl: string;
+  modelType: ModelType;
+  controlRef: React.MutableRefObject<ControlRefs>;
+}
+
+const TABLE_TOP_Y = 0.03;
+const MODEL_TARGET_SIZE = 1.5;
+
+type GrabbablePart = THREE.Object3D;
+
+const isMeshObject = (object: THREE.Object3D): object is THREE.Mesh => {
+  return Boolean((object as THREE.Mesh).isMesh);
+};
+
+const hasRenderableMesh = (object: THREE.Object3D): boolean => {
+  let found = false;
+  object.traverse((child) => {
+    if (!found && isMeshObject(child)) {
+      found = true;
+    }
+  });
+  return found;
+};
+
+const collectMeshes = (object: THREE.Object3D): THREE.Mesh[] => {
+  const meshes: THREE.Mesh[] = [];
+  object.traverse((child) => {
+    if (isMeshObject(child)) {
+      meshes.push(child);
+    }
+  });
+  return meshes;
+};
+
+const findLayerRoots = (root: THREE.Object3D): GrabbablePart[] => {
+  const walk = (node: THREE.Object3D): GrabbablePart[] => {
+    const childrenWithMeshes = node.children.filter(hasRenderableMesh);
+
+    if (childrenWithMeshes.length > 1) {
+      return childrenWithMeshes;
+    }
+
+    if (childrenWithMeshes.length === 1) {
+      return walk(childrenWithMeshes[0]);
+    }
+
+    return collectMeshes(node);
+  };
+
+  const layerRoots = walk(root);
+  if (layerRoots.length > 1) {
+    return layerRoots;
+  }
+
+  const meshParts = collectMeshes(root);
+  return meshParts.length > 1 ? meshParts : [];
+};
+
+const isDescendantOf = (object: THREE.Object3D, ancestor: THREE.Object3D): boolean => {
+  let current: THREE.Object3D | null = object;
+
+  while (current) {
+    if (current === ancestor) {
+      return true;
+    }
+    current = current.parent;
+  }
+
+  return false;
+};
+
+const configureModel = (root: THREE.Object3D) => {
+  root.scale.set(1, 1, 1);
+  root.position.set(0, 0, 0);
+
+  let box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+
+  if (maxDim > 0 && Number.isFinite(maxDim)) {
+    root.scale.setScalar(MODEL_TARGET_SIZE / maxDim);
+  }
+
+  box = new THREE.Box3().setFromObject(root);
+  const center = box.getCenter(new THREE.Vector3());
+  root.position.set(-center.x, TABLE_TOP_Y - box.min.y, -center.z);
+
+  root.traverse((child) => {
+    if (isMeshObject(child)) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material: any) => {
+        if (material) {
+          material.envMapIntensity = 1.2;
+        }
+      });
+    }
+  });
+};
+
+const setPartHighlight = (part: GrabbablePart, color: number) => {
+  part.traverse((child) => {
+    if (!isMeshObject(child) || !child.material) return;
+
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material: any) => {
+      if (material.emissive) {
+        material.emissive.setHex(color);
+      }
+    });
+  });
+};
+
+// Unified model component. FBX / GLB / GLTF all use the same layer-based disassembly path.
+const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: React.MutableRefObject<ControlRefs> }> = ({ url, modelType, controlRef }) => {
+  const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
+  const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
+  const groupRef = useRef<THREE.Group>(null);
+  const { camera, raycaster, scene } = useThree();
+
+  // ========== 一比一复刻第一版变量 ==========
+  const isGrabbingRef = useRef(false);
+  const grabbedPartRef = useRef<GrabbablePart | null>(null);
+  const grabOffsetRef = useRef(new THREE.Vector3());
+  const dragPlaneRef = useRef(new THREE.Plane());
+  const physicsObjectsRef = useRef<GrabbablePart[]>([]);
+
+  // 手部状态 (一比一复刻第一版 handsState)
+  const leftHandStateRef = useRef<{
+    exists: boolean;
+    isFist: boolean;
+    isOpen: boolean;
+    isPinching: boolean;
+    ndc: THREE.Vector2 | null;
+    velocity: THREE.Vector3;
+    lastWorldPos: THREE.Vector3 | null;
+    lastTimestamp: number | null;
+  }>({
+    exists: false,
+    isFist: false,
+    isOpen: false,
+    isPinching: false,
+    ndc: null,
+    velocity: new THREE.Vector3(),
+    lastWorldPos: null,
+    lastTimestamp: null
+  });
+
+  // 虚拟平面 (用于手部3D投影)
+  const handPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0));
+
+  // Persistent spherical coords for smooth camera orbit (avoids zoom+rotation conflict)
+  const sphericalRef = useRef<THREE.Spherical | null>(null);
+  const cameraInitialized = useRef(false);
+
+  // Load model and detect whether the file contains detachable internal layers.
+  useEffect(() => {
+    let disposed = false;
+    let loadedRoot: THREE.Object3D | null = null;
+    let loadedParts: GrabbablePart[] = [];
+
+    setModelScene(null);
+    setModelParts([]);
+    physicsObjectsRef.current = [];
+    grabbedPartRef.current = null;
+    isGrabbingRef.current = false;
+    cameraInitialized.current = false;
+
+    const handleLoadedModel = (root: THREE.Object3D) => {
+      if (disposed) return;
+
+      configureModel(root);
+
+      const parts = findLayerRoots(root);
+      parts.forEach((part) => {
+        part.userData.originalPosition = part.position.clone();
+        part.userData.velocity = new THREE.Vector3();
+      });
+
+      loadedRoot = root;
+      loadedParts = parts;
+      setModelParts(parts);
+      setModelScene(root);
+
+      const format = modelType.toUpperCase();
+      const message = parts.length > 0
+        ? `${format}加载完成，检测到 ${parts.length} 个可拆解层级`
+        : `${format}加载完成，当前模型没有可拆解层级`;
+      console.log(message);
+    };
+
+    const handleLoadError = (error: unknown) => {
+      console.error('模型加载失败:', error);
+    };
+
+    if (modelType === 'fbx') {
+      const loader = new FBXLoader();
+      loader.load(url, handleLoadedModel, undefined, handleLoadError);
+    } else {
+      const loader = new GLTFLoader();
+      loader.load(url, (gltf) => handleLoadedModel(gltf.scene), undefined, handleLoadError);
+    }
+
+    return () => {
+      disposed = true;
+      loadedParts.forEach((part) => {
+        if (part.parent === scene) {
+          scene.remove(part);
+        }
+      });
+    };
+  }, [modelType, scene, url]);
+
+  // 物理模拟 (一比一复刻第一版 updatePhysics)
+  const updatePhysics = (dt: number) => {
+    const gravity = -9.8;
+    const restitution = 0.3;
+    const friction = 0.8;
+    const groundLevel = -0.5;
+
+    if (dt > 0.1) dt = 0.1;
+    if (dt <= 0) return;
+
+    const subSteps = 3;
+    const subDt = dt / subSteps;
+
+    for (let s = 0; s < subSteps; s++) {
+      physicsObjectsRef.current.forEach((obj) => {
+        if (!obj.userData.velocity) obj.userData.velocity = new THREE.Vector3();
+        const vel = obj.userData.velocity as THREE.Vector3;
+
+        vel.y += gravity * subDt;
+        obj.position.addScaledVector(vel, subDt);
+
+        const box = new THREE.Box3().setFromObject(obj);
+        const bottomY = box.min.y;
+
+        // Table collision: check if part is within table bounds
+        const TABLE_TOP_Y = 0.03;
+        const TABLE_HALF_X = 2.0;
+        const TABLE_HALF_Z = 1.5;
+        const isOverTable = Math.abs(obj.position.x) < TABLE_HALF_X && Math.abs(obj.position.z) < TABLE_HALF_Z;
+
+        const effectiveGround = isOverTable ? TABLE_TOP_Y : groundLevel;
+
+        if (bottomY < effectiveGround) {
+          const penetration = effectiveGround - bottomY;
+          obj.position.y += penetration;
+
+          if (vel.y < 0) {
+            vel.y = -vel.y * restitution;
+            vel.x *= friction;
+            vel.z *= friction;
+
+            if (Math.abs(vel.y) < 0.1 && (vel.x * vel.x + vel.z * vel.z) < 0.01) {
+              vel.set(0, 0, 0);
+            }
+          }
+        }
+      });
+    }
+  };
+
+  // 更新手部状态 (一比一复刻第一版 updateHandState)
+  const updateHandState = (landmarks: { x: number; y: number; z: number }[]) => {
+    const state = leftHandStateRef.current;
+    state.exists = true;
+
+    // 更新虚拟平面
+    const planeDistance = 2;
+    const cameraDir = camera.getWorldDirection(new THREE.Vector3());
+    const planePoint = camera.position.clone().addScaledVector(cameraDir, planeDistance);
+    handPlaneRef.current.setFromNormalAndCoplanarPoint(cameraDir, planePoint);
+
+    // 将landmarks投影到3D世界坐标
+    const project3D = (lmk: { x: number; y: number; z: number }): THREE.Vector3 => {
+      const ndcX = (0.5 - lmk.x) * 2;
+      const ndcY = -(lmk.y - 0.5) * 2;
+      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+      const point = new THREE.Vector3();
+      raycaster.ray.intersectPlane(handPlaneRef.current, point);
+      return point;
+    };
+
+    const wrist = project3D(landmarks[0]);
+    const middleMCP = project3D(landmarks[9]);
+    const handScale = wrist.distanceTo(middleMCP);
+
+    // 计算指尖到腕关节的平均距离
+    const tipIndices = [4, 8, 12, 16, 20];
+    let totalDist = 0;
+    tipIndices.forEach(i => {
+      totalDist += project3D(landmarks[i]).distanceTo(wrist);
+    });
+    const avgDist = totalDist / 5;
+
+    // 归一化距离 (一比一复刻第一版阈值)
+    const normalizedDist = handScale > 0 ? avgDist / handScale : 0;
+    state.isFist = normalizedDist < 1.2;
+    state.isOpen = normalizedDist > 1.8;
+
+    // 捏合检测 (一比一复刻第一版)
+    const thumbTip = project3D(landmarks[4]);
+    const indexTip = project3D(landmarks[8]);
+    const pinchDist = thumbTip.distanceTo(indexTip);
+    const normalizedPinchDist = handScale > 0 ? pinchDist / handScale : 1;
+
+    // 施密特触发器 (Hysteresis)
+    if (state.isPinching) {
+      state.isPinching = normalizedPinchDist < 0.6; // 退出阈值
+    } else {
+      state.isPinching = normalizedPinchDist < 0.4; // 进入阈值
+    }
+
+    // 优先级: 握拳 > 捏合
+    if (state.isFist) {
+      state.isPinching = false;
+    }
+    // 捏合时不算张开
+    if (state.isPinching) {
+      state.isOpen = false;
+    }
+
+    // 计算NDC (一比一复刻平滑滤波)
+    const avgX = (landmarks[4].x + landmarks[8].x) / 2;
+    const avgY = (landmarks[4].y + landmarks[8].y) / 2;
+    const targetNdcX = (0.5 - avgX) * 2;
+    const targetNdcY = -(avgY - 0.5) * 2;
+
+    if (!state.ndc) {
+      state.ndc = new THREE.Vector2(targetNdcX, targetNdcY);
+    } else {
+      const alpha = 0.2;
+      state.ndc.x += (targetNdcX - state.ndc.x) * alpha;
+      state.ndc.y += (targetNdcY - state.ndc.y) * alpha;
+    }
+
+    // 速度计算 (用于投掷)
+    const currentWorldPos = thumbTip.clone().add(indexTip).multiplyScalar(0.5);
+
+    if (state.lastWorldPos && state.lastTimestamp) {
+      const now = performance.now();
+      const dt = (now - state.lastTimestamp) / 1000;
+      if (dt > 0.01) {
+        state.velocity = currentWorldPos.clone().sub(state.lastWorldPos).divideScalar(dt);
+        state.lastTimestamp = now;
+        state.lastWorldPos = currentWorldPos;
+      }
+    } else {
+      state.velocity = new THREE.Vector3();
+      state.lastTimestamp = performance.now();
+      state.lastWorldPos = currentWorldPos;
+    }
+  };
+
+  // 释放零件 (一比一复刻第一版 releaseGrab)
+  const releaseGrab = () => {
+    const part = grabbedPartRef.current;
+    if (part) {
+      setPartHighlight(part, 0x000000);
+
+      // 投掷速度
+      const state = leftHandStateRef.current;
+      if (state.velocity) {
+        const throwVel = state.velocity.clone().multiplyScalar(1.2);
+        const maxSpeed = 10.0;
+        if (throwVel.length() > maxSpeed) {
+          throwVel.setLength(maxSpeed);
+        }
+        part.userData.velocity = throwVel;
+      } else {
+        part.userData.velocity = new THREE.Vector3(0, 0, 0);
+      }
+
+      // 加入物理列表
+      if (!physicsObjectsRef.current.includes(part)) {
+        physicsObjectsRef.current.push(part);
+      }
+    }
+
+    isGrabbingRef.current = false;
+    grabbedPartRef.current = null;
+    console.log('释放零件 - 开启物理');
+  };
+
+  useFrame((state, delta) => {
+    if (!modelScene || !groupRef.current) return;
+
+    const { rotationVelocity, zoomSpeed, handLandmarks } = controlRef.current;
+
+    // Initialize spherical coords from camera on first frame
+    if (!cameraInitialized.current) {
+      const offset = new THREE.Vector3().subVectors(camera.position, new THREE.Vector3(0, 0, 0));
+      sphericalRef.current = new THREE.Spherical().setFromVector3(offset);
+      cameraInitialized.current = true;
+    }
+
+    const sph = sphericalRef.current!;
+
+    // 旋转 — modify angles on persistent spherical
+    if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001) {
+      const sensitivity = 5.0;
+      sph.theta -= rotationVelocity.y * sensitivity;
+      sph.phi -= rotationVelocity.x * sensitivity;
+      sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
+      sph.makeSafe();
+    }
+
+    // 缩放 — modify radius on persistent spherical (no conflict with rotation)
+    if (zoomSpeed !== 0) {
+      sph.radius = Math.max(2, Math.min(15, sph.radius - zoomSpeed * 0.15));
+    }
+
+    // Apply spherical to camera
+    if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001 || zoomSpeed !== 0) {
+      camera.position.setFromSpherical(sph);
+      camera.lookAt(0, 0, 0);
+    }
+
+    // ========== 一比一复刻第一版手部交互 ==========
+    const leftLandmarks = handLandmarks?.left;
+    const handState = leftHandStateRef.current;
+
+    if (leftLandmarks && leftLandmarks.length >= 21) {
+      updateHandState(leftLandmarks);
+
+      // 抓取逻辑 (一比一复刻 executeInteractions)
+      if (handState.isPinching && !isGrabbingRef.current && handState.ndc && modelParts.length > 0) {
+        raycaster.setFromCamera(handState.ndc, camera);
+        const intersects = raycaster.intersectObjects(modelParts, true);
+
+        if (intersects.length > 0) {
+          const hitPart = modelParts.find((part) => isDescendantOf(intersects[0].object, part));
+          if (!hitPart) return;
+
+          isGrabbingRef.current = true;
+          grabbedPartRef.current = hitPart;
+
+          // 移除物理
+          const physIdx = physicsObjectsRef.current.indexOf(hitPart);
+          if (physIdx > -1) {
+            physicsObjectsRef.current.splice(physIdx, 1);
+          }
+          hitPart.userData.velocity = new THREE.Vector3();
+
+          // 获取世界坐标
+          const worldPos = new THREE.Vector3();
+          const worldQuat = new THREE.Quaternion();
+          const worldScale = new THREE.Vector3();
+          hitPart.getWorldPosition(worldPos);
+          hitPart.getWorldQuaternion(worldQuat);
+          hitPart.getWorldScale(worldScale);
+
+          // 移到场景根节点
+          if (hitPart.parent) {
+            hitPart.parent.remove(hitPart);
+          }
+          scene.add(hitPart);
+
+          hitPart.position.copy(worldPos);
+          hitPart.quaternion.copy(worldQuat);
+          hitPart.scale.copy(worldScale);
+
+          // 高亮
+          setPartHighlight(hitPart, 0x333333);
+
+          // 设置拖拽平面
+          dragPlaneRef.current.setFromNormalAndCoplanarPoint(
+            camera.getWorldDirection(new THREE.Vector3()),
+            worldPos
+          );
+
+          // 计算偏移
+          const intersectPoint = new THREE.Vector3();
+          raycaster.ray.intersectPlane(dragPlaneRef.current, intersectPoint);
+          grabOffsetRef.current.copy(worldPos).sub(intersectPoint);
+          console.log('✓ 抓取零件');
+        }
+      } else if (!handState.isPinching && isGrabbingRef.current) {
+        releaseGrab();
+      }
+
+      // 拖拽
+      if (isGrabbingRef.current && grabbedPartRef.current && handState.ndc) {
+        raycaster.setFromCamera(handState.ndc, camera);
+        const targetPoint = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(dragPlaneRef.current, targetPoint)) {
+          grabbedPartRef.current.position.copy(targetPoint).add(grabOffsetRef.current);
+        }
+      }
+    } else {
+      // 手部丢失
+      handState.exists = false;
+      if (isGrabbingRef.current) {
+        releaseGrab();
+      }
+    }
+
+    // 物理更新
+    updatePhysics(delta);
+
+    // 待机动画
+    if (rotationVelocity.x === 0 && rotationVelocity.y === 0 && !isGrabbingRef.current) {
+      groupRef.current.rotation.y += Math.sin(state.clock.elapsedTime * 0.3) * 0.001;
+    }
+  });
+
+  if (!modelScene) {
+    return (
+      <group>
+        <mesh position={[0, 0, 0]}>
+          <sphereGeometry args={[0.5, 16, 16]} />
+          <meshStandardMaterial color="#86e3ce" wireframe />
+        </mesh>
+      </group>
+    );
+  }
+
+  return (
+    <group ref={groupRef} position={[0, 0, 0]}>
+      <primitive object={modelScene} />
+    </group>
+  );
+};
+
+// Ground plane for physics (invisible, at floor level)
+const Ground: React.FC = () => {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+      <planeGeometry args={[20, 20]} />
+      <meshStandardMaterial color="#cccccc" transparent opacity={0} />
+    </mesh>
+  );
+};
+
+/* ── Workbench — clean minimalist work surface ── */
+const Workbench: React.FC = () => {
+  return (
+    <group position={[0, 0, 0]}>
+      {/* Table top */}
+      <mesh position={[0, 0, 0]} receiveShadow castShadow>
+        <boxGeometry args={[4, 0.06, 3]} />
+        <meshStandardMaterial
+          color="#f5f0eb"
+          roughness={0.55}
+          metalness={0.0}
+          envMapIntensity={0.3}
+        />
+      </mesh>
+      {/* Table legs — slim round */}
+      {([[-1.7, -0.25, -1.2], [1.7, -0.25, -1.2], [-1.7, -0.25, 1.2], [1.7, -0.25, 1.2]] as [number, number, number][]).map((pos, i) => (
+        <mesh key={i} position={pos} castShadow>
+          <cylinderGeometry args={[0.03, 0.03, 0.5, 16]} />
+          <meshStandardMaterial color="#e8e4e0" roughness={0.6} metalness={0.0} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+/* ── Floor — soft neutral ground plane with grid texture ── */
+const GridFloor: React.FC = () => {
+  const gridTexture = useMemo(() => {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = '#eee9e3';
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.strokeStyle = 'rgba(180, 170, 160, 0.15)';
+    ctx.lineWidth = 1;
+    const step = size / 8;
+    for (let i = 0; i <= 8; i++) {
+      const p = i * step;
+      ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4, 4);
+    return tex;
+  }, []);
+
+  return (
+    <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[24, 24]} />
+      <meshStandardMaterial
+        map={gridTexture}
+        roughness={0.85}
+        metalness={0.0}
+        color="#ffffff"
+      />
+    </mesh>
+  );
+};
+
+// 手部骨架连接定义 (从第一版移植)
+const HAND_CONNECTIONS = [
+  [0, 1], [1, 2], [2, 3], [3, 4],   // 拇指
+  [0, 5], [5, 6], [6, 7], [7, 8],   // 食指
+  [0, 9], [9, 10], [10, 11], [11, 12], // 中指
+  [0, 13], [13, 14], [14, 15], [15, 16], // 无名指
+  [0, 17], [17, 18], [18, 19], [19, 20], // 小指
+  [5, 9], [9, 13], [13, 17]         // 掌心连接
+];
+
+// 3D虚拟手组件 (从第一版移植)
+const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }> = ({ controlRef }) => {
+  const { camera } = useThree();
+
+  // 为每只手创建21个关节点引用
+  const leftJointsRef = useRef<THREE.Mesh[]>([]);
+  const rightJointsRef = useRef<THREE.Mesh[]>([]);
+  const leftLinesRef = useRef<THREE.Line[]>([]);
+  const rightLinesRef = useRef<THREE.Line[]>([]);
+
+  // 初始化关节点和连线
+  const [initialized, setInitialized] = useState(false);
+  const groupRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    if (!groupRef.current) return;
+
+    // 清除旧的对象
+    while (groupRef.current.children.length > 0) {
+      groupRef.current.remove(groupRef.current.children[0]);
+    }
+
+    // 创建关节点材质
+    const leftMaterial = new THREE.MeshBasicMaterial({ color: 0xffddca, transparent: true, opacity: 0.9 });
+    const rightMaterial = new THREE.MeshBasicMaterial({ color: 0x86e3ce, transparent: true, opacity: 0.9 });
+    const thumbMaterial = new THREE.MeshBasicMaterial({ color: 0xff6b6b });
+    const indexMaterial = new THREE.MeshBasicMaterial({ color: 0x4ecdc4 });
+
+    const jointGeometry = new THREE.SphereGeometry(0.03, 8, 8);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+    const leftLineMaterial = new THREE.LineBasicMaterial({ color: 0xffddca, transparent: true, opacity: 0.7 });
+
+    // 创建左手关节点
+    leftJointsRef.current = [];
+    for (let i = 0; i < 21; i++) {
+      const material = i === 4 ? thumbMaterial : i === 8 ? indexMaterial : leftMaterial;
+      const sphere = new THREE.Mesh(jointGeometry, material);
+      sphere.visible = false;
+      sphere.frustumCulled = false;
+      groupRef.current.add(sphere);
+      leftJointsRef.current.push(sphere);
+    }
+
+    // 创建右手关节点
+    rightJointsRef.current = [];
+    for (let i = 0; i < 21; i++) {
+      const material = i === 4 ? thumbMaterial : i === 8 ? indexMaterial : rightMaterial;
+      const sphere = new THREE.Mesh(jointGeometry, material);
+      sphere.visible = false;
+      sphere.frustumCulled = false;
+      groupRef.current.add(sphere);
+      rightJointsRef.current.push(sphere);
+    }
+
+    // 创建连线
+    leftLinesRef.current = [];
+    rightLinesRef.current = [];
+
+    HAND_CONNECTIONS.forEach(() => {
+      // 左手连线
+      const leftGeo = new THREE.BufferGeometry();
+      leftGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      const leftLine = new THREE.Line(leftGeo, leftLineMaterial);
+      leftLine.visible = false;
+      groupRef.current!.add(leftLine);
+      leftLinesRef.current.push(leftLine);
+
+      // 右手连线
+      const rightGeo = new THREE.BufferGeometry();
+      rightGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      const rightLine = new THREE.Line(rightGeo, lineMaterial);
+      rightLine.visible = false;
+      groupRef.current!.add(rightLine);
+      rightLinesRef.current.push(rightLine);
+    });
+
+    setInitialized(true);
+  }, []);
+
+  useFrame(() => {
+    if (!initialized || !groupRef.current) return;
+
+    const { handLandmarks } = controlRef.current;
+
+    // 更新手部可视化的辅助函数
+    const updateHand = (
+      landmarks: { x: number; y: number; z: number }[] | null,
+      joints: THREE.Mesh[],
+      lines: THREE.Line[]
+    ) => {
+      if (!landmarks || landmarks.length < 21) {
+        // 隐藏所有关节点和连线
+        joints.forEach(j => j.visible = false);
+        lines.forEach(l => l.visible = false);
+        return;
+      }
+
+      // 虚拟平面设置
+      const planeDistance = 3;
+      const cameraDir = camera.getWorldDirection(new THREE.Vector3());
+      const planePoint = camera.position.clone().addScaledVector(cameraDir, planeDistance);
+      const handPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDir, planePoint);
+
+      const positions: THREE.Vector3[] = [];
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      landmarks.forEach((pt, i) => {
+        // NDC坐标转换 (镜像X轴)
+        const ndcX = (0.5 - pt.x) * 2;
+        const ndcY = -(pt.y - 0.5) * 2;
+
+        mouse.set(ndcX, ndcY);
+        raycaster.setFromCamera(mouse, camera);
+
+        const projectionPoint = new THREE.Vector3();
+        raycaster.ray.intersectPlane(handPlane, projectionPoint);
+
+        positions.push(projectionPoint.clone());
+        joints[i].position.copy(projectionPoint);
+        joints[i].visible = true;
+      });
+
+      // 更新连线
+      HAND_CONNECTIONS.forEach((conn, i) => {
+        const line = lines[i];
+        const posArray = line.geometry.attributes.position.array as Float32Array;
+
+        posArray[0] = positions[conn[0]].x;
+        posArray[1] = positions[conn[0]].y;
+        posArray[2] = positions[conn[0]].z;
+        posArray[3] = positions[conn[1]].x;
+        posArray[4] = positions[conn[1]].y;
+        posArray[5] = positions[conn[1]].z;
+
+        line.geometry.attributes.position.needsUpdate = true;
+        line.visible = true;
+      });
+    };
+
+    // 更新左右手
+    updateHand(handLandmarks.left, leftJointsRef.current, leftLinesRef.current);
+    updateHand(handLandmarks.right, rightJointsRef.current, rightLinesRef.current);
+  });
+
+  return <group ref={groupRef} />;
+};
+
+const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, controlRef }) => {
+  const dirLightRef = useRef<THREE.DirectionalLight>(null);
+
+  return (
+    <div className="w-full h-full bg-[#fcfcfd]">
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        camera={{ position: [3.5, 4, 3.5], fov: 45, near: 0.1, far: 100 }}
+        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, alpha: false }}
+        raycaster={{ far: 100 }}
+        onCreated={({ gl }) => { gl.setClearColor('#f0f4f8'); }}
+      >
+        <Suspense fallback={null}>
+          {/* ---- Lighting — warm & soft (from 环境 package) ---- */}
+          <ambientLight intensity={0.6} color="#fff8f0" />
+          <directionalLight
+            ref={dirLightRef}
+            position={[5, 8, 4]}
+            intensity={1.2}
+            color="#ffffff"
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-left={-5}
+            shadow-camera-right={5}
+            shadow-camera-top={5}
+            shadow-camera-bottom={-5}
+            shadow-camera-near={0.5}
+            shadow-camera-far={20}
+            shadow-bias={-0.0005}
+          />
+          <pointLight position={[-4, 3, 2]} intensity={0.3} color="#e0f0ff" />
+          <pointLight position={[3, 2, -3]} intensity={0.2} color="#fff0e8" />
+
+          {/* ---- Environment reflections ---- */}
+          <Environment preset="apartment" background={false} />
+
+          {/* ---- Soft depth fog ---- */}
+          <fog attach="fog" args={['#f0f4f8', 15, 35]} />
+
+          {/* ---- Workbench (table) ---- */}
+          <Workbench />
+
+          {/* ---- Grid Floor ---- */}
+          <GridFloor />
+
+          {/* ---- Uploaded Model ---- */}
+          <LayeredModel url={modelUrl} modelType={modelType} controlRef={controlRef} />
+
+          {/* ---- Invisible physics ground ---- */}
+          <Ground />
+
+          {/* 3D虚拟手骨架可视化 */}
+          <VirtualHand controlRef={controlRef} />
+
+          {/* ---- Contact shadows on floor ---- */}
+          <ContactShadows
+            position={[0, -0.49, 0]}
+            opacity={0.25}
+            scale={14}
+            blur={3}
+            far={4}
+            color="#b0b8c4"
+          />
+
+          {/* ---- Camera controls ---- */}
+          <OrbitControls
+            makeDefault
+            target={[0, 0.3, 0]}
+            enablePan={false}
+            enableZoom={true}
+            minPolarAngle={Math.PI / 6}
+            maxPolarAngle={Math.PI / 2.2}
+            minDistance={3}
+            maxDistance={12}
+            enableDamping
+            dampingFactor={0.06}
+          />
+        </Suspense>
+      </Canvas>
+    </div>
+  );
+};
+
+export default ModelViewer;
