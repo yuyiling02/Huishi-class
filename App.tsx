@@ -89,6 +89,7 @@ const App: React.FC = () => {
       setModelAssetUrls(nextAssetUrls);
       setFileName(modelFile.name);
       resetControls();
+      setCameraActive(true);
       setAiAnalysis(`模型已加载: ${modelFile.name}，将按内部层级自动启用拆解`);
       event.target.value = '';
     }
@@ -291,14 +292,14 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-gray-500 uppercase">右手 (缩放)</span>
+                    <span className="text-[10px] font-black text-gray-500 uppercase">左手 (缩放)</span>
                     <span className="text-[9px] text-gray-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-gray-500 uppercase">左手 (拆解/旋转)</span>
+                    <span className="text-[10px] font-black text-gray-500 uppercase">右手 (拆解/旋转)</span>
                     <span className="text-[9px] text-purple-400 font-bold">捏合 (食+拇) → 抓取零件</span>
                     <span className="text-[9px] text-gray-400 font-bold">双指并拢 (食+中) → 旋转画面</span>
                   </div>
@@ -389,7 +390,7 @@ const App: React.FC = () => {
                   <h2 className="text-2xl font-black text-gray-700 mb-2">欢迎来到 3D AI 实验室</h2>
                   <p className="text-gray-400 text-sm font-medium max-w-[360px] leading-relaxed">
                     <b>交互指令更新：</b><br />
-                    右手捏合：拖拽 | 左手双指并拢+滑动：控制旋转<br />
+                    右手捏合：拖拽 | 右手双指并拢+滑动：控制旋转<br />
                     左手张开/闭合：缩放 | 双手接触：播放视频
                   </p>
                 </div>

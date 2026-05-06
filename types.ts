@@ -5,7 +5,7 @@ export type ModelType = 'glb' | 'gltf' | 'fbx';
 export enum GestureType {
   NONE = 'NONE',
   RIGHT_PINCH_DRAG = 'RIGHT_PINCH_DRAG', // Right Hand: Pinch -> Drag Position
-  LEFT_TWO_FINGER_ROTATE = 'LEFT_TWO_FINGER_ROTATE', // Left Hand: Index + Middle -> Free 360 Rotation
+  RIGHT_TWO_FINGER_ROTATE = 'RIGHT_TWO_FINGER_ROTATE', // Right Hand: Index + Middle -> Free 360 Rotation
   ZOOM_IN_PALM = 'ZOOM_IN_PALM', // Left Hand: Open Palm
   ZOOM_OUT_FIST = 'ZOOM_OUT_FIST', // Left Hand: Fist
   DUAL_HAND_CONTACT = 'DUAL_HAND_CONTACT', // Both Hands: Contact (Hold to show video)

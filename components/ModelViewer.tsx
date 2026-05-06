@@ -199,7 +199,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const dragPlaneRef = useRef(new THREE.Plane());
 
   // 手部状态 (一比一复刻第一版 handsState)
-  const leftHandStateRef = useRef<{
+  const interactionHandStateRef = useRef<{
     exists: boolean;
     isFist: boolean;
     isOpen: boolean;
@@ -285,7 +285,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
   // 更新手部状态 (一比一复刻第一版 updateHandState)
   const updateHandState = (landmarks: { x: number; y: number; z: number }[]) => {
-    const state = leftHandStateRef.current;
+    const state = interactionHandStateRef.current;
     state.exists = true;
 
     // 更新虚拟平面
@@ -406,11 +406,11 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     }
 
     // ========== 一比一复刻第一版手部交互 ==========
-    const leftLandmarks = handLandmarks?.left;
-    const handState = leftHandStateRef.current;
+    const rightLandmarks = handLandmarks?.right;
+    const handState = interactionHandStateRef.current;
 
-    if (leftLandmarks && leftLandmarks.length >= 21) {
-      updateHandState(leftLandmarks);
+    if (rightLandmarks && rightLandmarks.length >= 21) {
+      updateHandState(rightLandmarks);
 
       // 抓取逻辑 (一比一复刻 executeInteractions)
       if (handState.isPinching && !isGrabbingRef.current && handState.ndc && modelParts.length > 0) {

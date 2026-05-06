@@ -28,13 +28,13 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
 
   // Smoothing refs
   const smoothRightPinchRef = useRef({ x: 0.5, y: 0.5 });
-  const smoothLeftFingerCenterRef = useRef({ x: 0.5, y: 0.5 });
+  const smoothRightFingerCenterRef = useRef({ x: 0.5, y: 0.5 });
 
   // Previous contact state for hysteresis
   const wasContactingRef = useRef(false);
 
   // Store previous position for Delta calculation (Rotation)
-  const prevLeftPosRef = useRef<{ x: number, y: number } | null>(null);
+  const prevRightPosRef = useRef<{ x: number, y: number } | null>(null);
 
   // Smoothed rotation velocity (EMA)
   const smoothRotVelRef = useRef({ x: 0, y: 0 });
@@ -252,46 +252,46 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
         // 3. INDIVIDUAL HAND LOGIC (Only if not contacting)
         if (!isContacting) {
 
-          // --- 左手: 食指+中指并拢旋转 OR 捏合拆解零件 ---
-          if (leftHandLandmarks) {
-            const indexTip = leftHandLandmarks[8];
-            const middleTip = leftHandLandmarks[12];
+          // --- 右手: 食指+中指并拢旋转 OR 捏合拆解零件 ---
+          if (rightHandLandmarks) {
+            const indexTip = rightHandLandmarks[8];
+            const middleTip = rightHandLandmarks[12];
             const fingersDist = getDistance(indexTip, middleTip);
 
-            const isIndexUp = isFingerExtended(leftHandLandmarks, 8, 6);
-            const isMiddleUp = isFingerExtended(leftHandLandmarks, 12, 10);
+            const isIndexUp = isFingerExtended(rightHandLandmarks, 8, 6);
+            const isMiddleUp = isFingerExtended(rightHandLandmarks, 12, 10);
 
             const rawFingerCenterX = (indexTip.x + middleTip.x) / 2;
             const rawFingerCenterY = (indexTip.y + middleTip.y) / 2;
 
-            smoothLeftFingerCenterRef.current.x = lerp(smoothLeftFingerCenterRef.current.x, rawFingerCenterX, SMOOTHING_FACTOR_ROTATION);
-            smoothLeftFingerCenterRef.current.y = lerp(smoothLeftFingerCenterRef.current.y, rawFingerCenterY, SMOOTHING_FACTOR_ROTATION);
+            smoothRightFingerCenterRef.current.x = lerp(smoothRightFingerCenterRef.current.x, rawFingerCenterX, SMOOTHING_FACTOR_ROTATION);
+            smoothRightFingerCenterRef.current.y = lerp(smoothRightFingerCenterRef.current.y, rawFingerCenterY, SMOOTHING_FACTOR_ROTATION);
 
             // 1. 食指 + 中指并拢 → 旋转画面
             if (fingersDist < FINGER_CONTACT_THRESHOLD && isIndexUp && isMiddleUp) {
-              newGesture = GestureType.LEFT_TWO_FINGER_ROTATE;
+              newGesture = GestureType.RIGHT_TWO_FINGER_ROTATE;
 
-              if (prevLeftPosRef.current) {
-                const deltaX = smoothLeftFingerCenterRef.current.x - prevLeftPosRef.current.x;
-                const deltaY = smoothLeftFingerCenterRef.current.y - prevLeftPosRef.current.y;
+              if (prevRightPosRef.current) {
+                const deltaX = smoothRightFingerCenterRef.current.x - prevRightPosRef.current.x;
+                const deltaY = smoothRightFingerCenterRef.current.y - prevRightPosRef.current.y;
 
                 if (Math.abs(deltaX) > ROTATION_DEADZONE || Math.abs(deltaY) > ROTATION_DEADZONE) {
                   rotVelY = -deltaX * ROTATION_SENSITIVITY;
                   rotVelX = deltaY * ROTATION_SENSITIVITY;
                 }
               }
-              prevLeftPosRef.current = { ...smoothLeftFingerCenterRef.current };
+              prevRightPosRef.current = { ...smoothRightFingerCenterRef.current };
             }
             // 2. 食指 + 拇指捏合 → 拆解零件
             else {
-              prevLeftPosRef.current = null;
+              prevRightPosRef.current = null;
 
-              const pinchDist = getPinchDistance(leftHandLandmarks);
+              const pinchDist = getPinchDistance(rightHandLandmarks);
               if (pinchDist < PINCH_THRESHOLD) {
                 isDragging = true;
                 newGesture = GestureType.RIGHT_PINCH_DRAG;
 
-                const thumbTip = leftHandLandmarks[4];
+                const thumbTip = rightHandLandmarks[4];
                 const rawX = (thumbTip.x + indexTip.x) / 2;
                 const rawY = (thumbTip.y + indexTip.y) / 2;
 
@@ -307,18 +307,18 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
                 const targetY = (0.5 - smoothRightPinchRef.current.y) * DRAG_SCALE_Y;
                 controlRef.current.panPosition = { x: targetX, y: targetY };
               } else {
-                const wrist = leftHandLandmarks[0];
+                const wrist = rightHandLandmarks[0];
                 smoothRightPinchRef.current = { x: wrist.x, y: wrist.y };
               }
             }
           }
 
-          // --- 右手: 放大/缩小 (Open Palm = Zoom In, Fist = Zoom Out) ---
-          if (rightHandLandmarks) {
-            const isIndexUp = isFingerExtended(rightHandLandmarks, 8, 6);
-            const isMiddleUp = isFingerExtended(rightHandLandmarks, 12, 10);
-            const isRingUp = isFingerExtended(rightHandLandmarks, 16, 14);
-            const isPinkyUp = isFingerExtended(rightHandLandmarks, 20, 18);
+          // --- 左手: 放大/缩小 (Open Palm = Zoom In, Fist = Zoom Out) ---
+          if (leftHandLandmarks) {
+            const isIndexUp = isFingerExtended(leftHandLandmarks, 8, 6);
+            const isMiddleUp = isFingerExtended(leftHandLandmarks, 12, 10);
+            const isRingUp = isFingerExtended(leftHandLandmarks, 16, 14);
+            const isPinkyUp = isFingerExtended(leftHandLandmarks, 20, 18);
 
             // ZOOM IN: Open Palm (Check all fingers for reliability)
             if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
