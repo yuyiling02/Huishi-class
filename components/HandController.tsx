@@ -18,6 +18,7 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   const [error, setError] = useState<string | null>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const requestRef = useRef<number>(0);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Keep latest callback to avoid stale closures in RAF loop
   const onStateChangeRef = useRef(onStateChange);
@@ -55,6 +56,17 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   const ROTATION_DEADZONE = 0.005;
   const ROTATION_VEL_SMOOTHING = 0.25;
 
+  const stopWebcam = () => {
+    cancelAnimationFrame(requestRef.current);
+    if (videoRef.current) {
+      videoRef.current.onloadeddata = null;
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -66,19 +78,31 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
 
         if (!mounted) return;
 
-        handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: "/mediapipe/hand_landmarker.task",
-            delegate: "GPU"
-          },
-          runningMode: "VIDEO",
-          numHands: 2
-        });
+        try {
+          handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: "/mediapipe/hand_landmarker.task",
+              delegate: "GPU"
+            },
+            runningMode: "VIDEO",
+            numHands: 2
+          });
+        } catch (gpuErr) {
+          console.warn("MediaPipe GPU delegate failed, retrying with CPU:", gpuErr);
+          handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: "/mediapipe/hand_landmarker.task",
+              delegate: "CPU"
+            },
+            runningMode: "VIDEO",
+            numHands: 2
+          });
+        }
 
         startWebcam();
       } catch (err) {
         console.error("Error initializing MediaPipe:", err);
-        setError("AI 引擎加载失败");
+        setError("AI 引擎加载失败，请刷新后重试");
         setLoading(false);
       }
     };
@@ -90,24 +114,49 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       if (handLandmarkerRef.current) {
         handLandmarkerRef.current.close();
       }
-      cancelAnimationFrame(requestRef.current);
+      stopWebcam();
     };
   }, []);
 
   const startWebcam = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240, facingMode: "user" }
-      });
+      setError(null);
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("getUserMedia is not available in this browser or context");
+      }
+
+      if (!window.isSecureContext) {
+        throw new Error("Camera access requires HTTPS or localhost");
+      }
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 320 },
+            height: { ideal: 240 },
+            facingMode: { ideal: "user" }
+          },
+          audio: false
+        });
+      } catch (constraintErr) {
+        console.warn("Preferred webcam constraints failed, retrying with default camera:", constraintErr);
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
+      streamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.addEventListener("loadeddata", predictWebcam);
+        videoRef.current.onloadeddata = predictWebcam;
+        await videoRef.current.play();
       }
       setLoading(false);
     } catch (err) {
       console.error("Webcam error:", err);
-      setError("无法访问摄像头");
+      stopWebcam();
+      setError("无法访问摄像头，请允许权限并使用 HTTPS 或 localhost 打开");
       setLoading(false);
     }
   };
@@ -128,9 +177,20 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
 
   const predictWebcam = () => {
     if (!videoRef.current || !handLandmarkerRef.current || !canvasRef.current) return;
+    if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      requestRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
 
     const startTimeMs = performance.now();
-    const result = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
+    let result;
+    try {
+      result = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
+    } catch (err) {
+      console.error("Hand detection error:", err);
+      requestRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
 
     const ctx = canvasRef.current.getContext("2d");
     if (ctx) {
