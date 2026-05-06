@@ -1,6 +1,6 @@
 
 // 模型类型
-export type ModelType = 'glb' | 'fbx';
+export type ModelType = 'glb' | 'gltf' | 'fbx';
 
 export enum GestureType {
   NONE = 'NONE',
@@ -37,4 +37,3 @@ export interface ControlRefs {
     right: { x: number; y: number; z: number }[] | null;
   };
 }
-

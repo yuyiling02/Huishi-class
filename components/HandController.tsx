@@ -61,14 +61,14 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     const setupMediaPipe = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+          "/mediapipe/wasm"
         );
 
         if (!mounted) return;
 
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+            modelAssetPath: "/mediapipe/hand_landmarker.task",
             delegate: "GPU"
           },
           runningMode: "VIDEO",

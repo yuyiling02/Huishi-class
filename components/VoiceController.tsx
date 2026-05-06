@@ -4,6 +4,8 @@ import { GoogleGenAI, Modality, Type, LiveServerMessage } from '@google/genai';
 import { ControlRefs } from '../types';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 
+const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
+
 interface VoiceControllerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   onStatusChange: (status: string) => void;
@@ -32,6 +34,11 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
   };
 
   const startSession = async () => {
+    if (!ENABLE_GEMINI) {
+      onStatusChange('离线模式已启用：语音助手需要 Gemini 网络服务。');
+      return;
+    }
+
     setIsConnecting(true);
     onStatusChange('正在连接 AI 助教...');
     

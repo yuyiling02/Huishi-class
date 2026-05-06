@@ -1,10 +1,12 @@
 
 import React, { useRef, Suspense, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Environment, OrbitControls, ContactShadows } from '@react-three/drei';
+import { OrbitControls, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { ControlRefs, ModelType } from '../types';
 
 // Fix for TypeScript errors regarding R3F intrinsic elements and missing HTML elements
@@ -27,6 +29,7 @@ declare global {
 interface ModelViewerProps {
   modelUrl: string;
   modelType: ModelType;
+  assetUrls?: Record<string, string>;
   controlRef: React.MutableRefObject<ControlRefs>;
 }
 
@@ -140,8 +143,50 @@ const setPartHighlight = (part: GrabbablePart, color: number) => {
   });
 };
 
+const getAssetKey = (url: string): string => {
+  const cleanUrl = url.split(/[?#]/)[0];
+  const decodedUrl = decodeURIComponent(cleanUrl);
+  return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1).toLowerCase();
+};
+
+const createLocalLoadingManager = (assetUrls?: Record<string, string>) => {
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((requestedUrl) => {
+    if (!assetUrls || requestedUrl.startsWith('blob:') || requestedUrl.startsWith('data:')) {
+      return requestedUrl;
+    }
+
+    const directUrl = assetUrls[requestedUrl] || assetUrls[requestedUrl.toLowerCase()];
+    if (directUrl) return directUrl;
+
+    const assetKey = getAssetKey(requestedUrl);
+    return assetUrls[assetKey] || requestedUrl;
+  });
+  return manager;
+};
+
+const LocalEnvironment: React.FC = () => {
+  const { gl, scene } = useThree();
+
+  useEffect(() => {
+    const pmremGenerator = new THREE.PMREMGenerator(gl);
+    const environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    const previousEnvironment = scene.environment;
+
+    scene.environment = environment;
+
+    return () => {
+      scene.environment = previousEnvironment;
+      environment.dispose();
+      pmremGenerator.dispose();
+    };
+  }, [gl, scene]);
+
+  return null;
+};
+
 // Unified model component. FBX / GLB / GLTF all use the same layer-based disassembly path.
-const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: React.MutableRefObject<ControlRefs> }> = ({ url, modelType, controlRef }) => {
+const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs> }> = ({ url, modelType, assetUrls, controlRef }) => {
   const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
   const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
   const groupRef = useRef<THREE.Group>(null);
@@ -152,7 +197,6 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
   const grabbedPartRef = useRef<GrabbablePart | null>(null);
   const grabOffsetRef = useRef(new THREE.Vector3());
   const dragPlaneRef = useRef(new THREE.Plane());
-  const physicsObjectsRef = useRef<GrabbablePart[]>([]);
 
   // 手部状态 (一比一复刻第一版 handsState)
   const leftHandStateRef = useRef<{
@@ -161,18 +205,12 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
     isOpen: boolean;
     isPinching: boolean;
     ndc: THREE.Vector2 | null;
-    velocity: THREE.Vector3;
-    lastWorldPos: THREE.Vector3 | null;
-    lastTimestamp: number | null;
   }>({
     exists: false,
     isFist: false,
     isOpen: false,
     isPinching: false,
-    ndc: null,
-    velocity: new THREE.Vector3(),
-    lastWorldPos: null,
-    lastTimestamp: null
+    ndc: null
   });
 
   // 虚拟平面 (用于手部3D投影)
@@ -187,10 +225,11 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
     let disposed = false;
     let loadedRoot: THREE.Object3D | null = null;
     let loadedParts: GrabbablePart[] = [];
+    let dracoLoader: DRACOLoader | null = null;
+    const loadingManager = createLocalLoadingManager(assetUrls);
 
     setModelScene(null);
     setModelParts([]);
-    physicsObjectsRef.current = [];
     grabbedPartRef.current = null;
     isGrabbingRef.current = false;
     cameraInitialized.current = false;
@@ -203,7 +242,6 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
       const parts = findLayerRoots(root);
       parts.forEach((part) => {
         part.userData.originalPosition = part.position.clone();
-        part.userData.velocity = new THREE.Vector3();
       });
 
       loadedRoot = root;
@@ -223,72 +261,27 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
     };
 
     if (modelType === 'fbx') {
-      const loader = new FBXLoader();
+      const loader = new FBXLoader(loadingManager);
       loader.load(url, handleLoadedModel, undefined, handleLoadError);
     } else {
-      const loader = new GLTFLoader();
+      const loader = new GLTFLoader(loadingManager);
+      dracoLoader = new DRACOLoader(loadingManager);
+      dracoLoader.setDecoderPath('/draco/');
+      dracoLoader.setDecoderConfig({ type: 'wasm' });
+      loader.setDRACOLoader(dracoLoader);
       loader.load(url, (gltf) => handleLoadedModel(gltf.scene), undefined, handleLoadError);
     }
 
     return () => {
       disposed = true;
+      dracoLoader?.dispose();
       loadedParts.forEach((part) => {
         if (part.parent === scene) {
           scene.remove(part);
         }
       });
     };
-  }, [modelType, scene, url]);
-
-  // 物理模拟 (一比一复刻第一版 updatePhysics)
-  const updatePhysics = (dt: number) => {
-    const gravity = -9.8;
-    const restitution = 0.3;
-    const friction = 0.8;
-    const groundLevel = -0.5;
-
-    if (dt > 0.1) dt = 0.1;
-    if (dt <= 0) return;
-
-    const subSteps = 3;
-    const subDt = dt / subSteps;
-
-    for (let s = 0; s < subSteps; s++) {
-      physicsObjectsRef.current.forEach((obj) => {
-        if (!obj.userData.velocity) obj.userData.velocity = new THREE.Vector3();
-        const vel = obj.userData.velocity as THREE.Vector3;
-
-        vel.y += gravity * subDt;
-        obj.position.addScaledVector(vel, subDt);
-
-        const box = new THREE.Box3().setFromObject(obj);
-        const bottomY = box.min.y;
-
-        // Table collision: check if part is within table bounds
-        const TABLE_TOP_Y = 0.03;
-        const TABLE_HALF_X = 2.0;
-        const TABLE_HALF_Z = 1.5;
-        const isOverTable = Math.abs(obj.position.x) < TABLE_HALF_X && Math.abs(obj.position.z) < TABLE_HALF_Z;
-
-        const effectiveGround = isOverTable ? TABLE_TOP_Y : groundLevel;
-
-        if (bottomY < effectiveGround) {
-          const penetration = effectiveGround - bottomY;
-          obj.position.y += penetration;
-
-          if (vel.y < 0) {
-            vel.y = -vel.y * restitution;
-            vel.x *= friction;
-            vel.z *= friction;
-
-            if (Math.abs(vel.y) < 0.1 && (vel.x * vel.x + vel.z * vel.z) < 0.01) {
-              vel.set(0, 0, 0);
-            }
-          }
-        }
-      });
-    }
-  };
+  }, [assetUrls, modelType, scene, url]);
 
   // 更新手部状态 (一比一复刻第一版 updateHandState)
   const updateHandState = (landmarks: { x: number; y: number; z: number }[]) => {
@@ -364,22 +357,6 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
       state.ndc.y += (targetNdcY - state.ndc.y) * alpha;
     }
 
-    // 速度计算 (用于投掷)
-    const currentWorldPos = thumbTip.clone().add(indexTip).multiplyScalar(0.5);
-
-    if (state.lastWorldPos && state.lastTimestamp) {
-      const now = performance.now();
-      const dt = (now - state.lastTimestamp) / 1000;
-      if (dt > 0.01) {
-        state.velocity = currentWorldPos.clone().sub(state.lastWorldPos).divideScalar(dt);
-        state.lastTimestamp = now;
-        state.lastWorldPos = currentWorldPos;
-      }
-    } else {
-      state.velocity = new THREE.Vector3();
-      state.lastTimestamp = performance.now();
-      state.lastWorldPos = currentWorldPos;
-    }
   };
 
   // 释放零件 (一比一复刻第一版 releaseGrab)
@@ -387,32 +364,14 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
     const part = grabbedPartRef.current;
     if (part) {
       setPartHighlight(part, 0x000000);
-
-      // 投掷速度
-      const state = leftHandStateRef.current;
-      if (state.velocity) {
-        const throwVel = state.velocity.clone().multiplyScalar(1.2);
-        const maxSpeed = 10.0;
-        if (throwVel.length() > maxSpeed) {
-          throwVel.setLength(maxSpeed);
-        }
-        part.userData.velocity = throwVel;
-      } else {
-        part.userData.velocity = new THREE.Vector3(0, 0, 0);
-      }
-
-      // 加入物理列表
-      if (!physicsObjectsRef.current.includes(part)) {
-        physicsObjectsRef.current.push(part);
-      }
     }
 
     isGrabbingRef.current = false;
     grabbedPartRef.current = null;
-    console.log('释放零件 - 开启物理');
+    console.log('Released part - display position preserved.');
   };
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (!modelScene || !groupRef.current) return;
 
     const { rotationVelocity, zoomSpeed, handLandmarks } = controlRef.current;
@@ -464,13 +423,6 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
 
           isGrabbingRef.current = true;
           grabbedPartRef.current = hitPart;
-
-          // 移除物理
-          const physIdx = physicsObjectsRef.current.indexOf(hitPart);
-          if (physIdx > -1) {
-            physicsObjectsRef.current.splice(physIdx, 1);
-          }
-          hitPart.userData.velocity = new THREE.Vector3();
 
           // 获取世界坐标
           const worldPos = new THREE.Vector3();
@@ -525,9 +477,6 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
       }
     }
 
-    // 物理更新
-    updatePhysics(delta);
-
     // 待机动画
     if (rotationVelocity.x === 0 && rotationVelocity.y === 0 && !isGrabbingRef.current) {
       groupRef.current.rotation.y += Math.sin(state.clock.elapsedTime * 0.3) * 0.001;
@@ -549,16 +498,6 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; controlRef: Re
     <group ref={groupRef} position={[0, 0, 0]}>
       <primitive object={modelScene} />
     </group>
-  );
-};
-
-// Ground plane for physics (invisible, at floor level)
-const Ground: React.FC = () => {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
-      <planeGeometry args={[20, 20]} />
-      <meshStandardMaterial color="#cccccc" transparent opacity={0} />
-    </mesh>
   );
 };
 
@@ -660,14 +599,14 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
     }
 
     // 创建关节点材质
-    const leftMaterial = new THREE.MeshBasicMaterial({ color: 0xffddca, transparent: true, opacity: 0.9 });
-    const rightMaterial = new THREE.MeshBasicMaterial({ color: 0x86e3ce, transparent: true, opacity: 0.9 });
-    const thumbMaterial = new THREE.MeshBasicMaterial({ color: 0xff6b6b });
-    const indexMaterial = new THREE.MeshBasicMaterial({ color: 0x4ecdc4 });
+    const leftMaterial = new THREE.MeshBasicMaterial({ color: 0xff8a5b, transparent: true, opacity: 0.92 });
+    const rightMaterial = new THREE.MeshBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.92 });
+    const thumbMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d5a, transparent: true, opacity: 0.98 });
+    const indexMaterial = new THREE.MeshBasicMaterial({ color: 0xffd54a, transparent: true, opacity: 0.98 });
 
-    const jointGeometry = new THREE.SphereGeometry(0.03, 8, 8);
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
-    const leftLineMaterial = new THREE.LineBasicMaterial({ color: 0xffddca, transparent: true, opacity: 0.7 });
+    const jointGeometry = new THREE.SphereGeometry(0.018, 8, 8);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.82 });
+    const leftLineMaterial = new THREE.LineBasicMaterial({ color: 0xff8a5b, transparent: true, opacity: 0.82 });
 
     // 创建左手关节点
     leftJointsRef.current = [];
@@ -785,7 +724,7 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
   return <group ref={groupRef} />;
 };
 
-const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, controlRef }) => {
+const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
 
   return (
@@ -820,8 +759,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, controlR
           <pointLight position={[-4, 3, 2]} intensity={0.3} color="#e0f0ff" />
           <pointLight position={[3, 2, -3]} intensity={0.2} color="#fff0e8" />
 
-          {/* ---- Environment reflections ---- */}
-          <Environment preset="apartment" background={false} />
+          {/* ---- Local environment reflections ---- */}
+          <LocalEnvironment />
 
           {/* ---- Soft depth fog ---- */}
           <fog attach="fog" args={['#f0f4f8', 15, 35]} />
@@ -833,10 +772,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, controlR
           <GridFloor />
 
           {/* ---- Uploaded Model ---- */}
-          <LayeredModel url={modelUrl} modelType={modelType} controlRef={controlRef} />
-
-          {/* ---- Invisible physics ground ---- */}
-          <Ground />
+          <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} />
 
           {/* 3D虚拟手骨架可视化 */}
           <VirtualHand controlRef={controlRef} />

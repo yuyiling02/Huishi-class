@@ -9,6 +9,8 @@ import VoiceController from './components/VoiceController';
 import { Upload, Sparkles, Box, Atom, Dna, Calculator, ChevronDown, MessageSquare, Video, Film, Hand, ScanFace, Move3d } from 'lucide-react';
 import { ModelType } from './types';
 
+const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
+
 const RECONSTRUCTION_STEPS = [
   "正在提取教具视觉特征...",
   "计算空间拓扑结构...",
@@ -20,10 +22,11 @@ const RECONSTRUCTION_STEPS = [
 const App: React.FC = () => {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [modelType, setModelType] = useState<ModelType>('glb');
+  const [modelAssetUrls, setModelAssetUrls] = useState<Record<string, string>>({});
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [fileName, setFileName] = useState<string>('');
-  const [cameraActive, setCameraActive] = useState(true);
+  const [cameraActive, setCameraActive] = useState(false);
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,6 +40,7 @@ const App: React.FC = () => {
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
+  const objectUrlsRef = useRef<string[]>([]);
   const controlRef = useRef<ControlRefs>({
     rotationVelocity: { x: 0, y: 0 },
     zoomSpeed: 0,
@@ -55,17 +59,37 @@ const App: React.FC = () => {
     };
   };
 
+  const revokeObjectUrls = () => {
+    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    objectUrlsRef.current = [];
+  };
+
+  useEffect(() => revokeObjectUrls, []);
+
   const handleModelUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const nextModelType: ModelType = file.name.toLowerCase().endsWith('.fbx') ? 'fbx' : 'glb';
+    const files = Array.from(event.target.files || []);
+    const modelFile = files.find((file) => /\.(glb|gltf|fbx)$/i.test(file.name));
+    if (modelFile) {
+      revokeObjectUrls();
+
+      const nextAssetUrls: Record<string, string> = {};
+      files.forEach((file) => {
+        const url = URL.createObjectURL(file);
+        objectUrlsRef.current.push(url);
+        nextAssetUrls[file.name] = url;
+        nextAssetUrls[file.name.toLowerCase()] = url;
+      });
+
+      const url = nextAssetUrls[modelFile.name];
+      const lowerName = modelFile.name.toLowerCase();
+      const nextModelType: ModelType = lowerName.endsWith('.fbx') ? 'fbx' : lowerName.endsWith('.gltf') ? 'gltf' : 'glb';
 
       setModelUrl(url);
       setModelType(nextModelType);
-      setFileName(file.name);
+      setModelAssetUrls(nextAssetUrls);
+      setFileName(modelFile.name);
       resetControls();
-      setAiAnalysis(`模型已加载: ${file.name}，将按内部层级自动启用拆解`);
+      setAiAnalysis(`模型已加载: ${modelFile.name}，将按内部层级自动启用拆解`);
       event.target.value = '';
     }
   };
@@ -80,8 +104,13 @@ const App: React.FC = () => {
   };
 
   const loadDemoModel = (url: string, name: string, type: ModelType = 'glb') => {
+    if (/^https?:\/\//i.test(url)) {
+      setAiAnalysis('演示模型已切换为离线模式，请直接导入本地 GLB/GLTF/FBX 模型。');
+      return;
+    }
     setModelUrl(url);
     setModelType(type);
+    setModelAssetUrls({});
     setFileName(name);
     resetControls();
     setAiAnalysis(`正在演示: ${name}`);
@@ -96,6 +125,11 @@ const App: React.FC = () => {
     setAiAnalysis('AI 正在扫描图片...');
 
     try {
+      if (!ENABLE_GEMINI) {
+        setAiAnalysis('离线模式已启用：图片转 3D 需要 Gemini 网络服务。请直接导入本地 GLB/GLTF/FBX 模型。');
+        return;
+      }
+
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = () => resolve(reader.result as string);
@@ -121,16 +155,7 @@ const App: React.FC = () => {
         setCurrentStep(i);
       }
 
-      const demoModels = [
-        "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BoomBox/glTF-Binary/BoomBox.glb"
-      ];
-      const selectedModel = demoModels[Math.floor(Math.random() * demoModels.length)];
-
-      setModelUrl(selectedModel);
-      setModelType('glb');
-      setFileName(`EDU_3D_${file.name.split('.')[0]}.glb`);
-      resetControls();
+      setAiAnalysis('图片分析完成。当前离线版不再从外网下载演示模型，请导入生成后的本地 GLB/GLTF/FBX 文件。');
     } catch (error) {
       console.error("AI Reconstruction Error:", error);
       setAiAnalysis("AI 分析失败，请检查网络或配置。");
@@ -211,7 +236,8 @@ const App: React.FC = () => {
           <div className="relative group">
             <input
               type="file"
-              accept=".fbx,.glb,.gltf"
+              accept=".fbx,.glb,.gltf,.bin,image/*"
+              multiple
               onChange={handleModelUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
@@ -221,7 +247,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="w-11 h-11 rounded-full border-4 border-white shadow-md overflow-hidden bg-white">
-            <img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Felix" alt="avatar" />
+            <div className="w-full h-full bg-[#86e3ce] text-white flex items-center justify-center font-black text-sm">AI</div>
           </div>
         </div>
       </nav>
@@ -233,7 +259,7 @@ const App: React.FC = () => {
           <div>
             <h3 className="font-black text-xs text-gray-400 uppercase tracking-[0.2em] mb-4 border-l-4 border-[#86e3ce] pl-3">学科资源库</h3>
             <div className="space-y-1">
-              <div onClick={() => loadDemoModel("https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb", "原子结构模型")} className="sidebar-item p-3 rounded-2xl flex items-center text-sm font-bold text-gray-600">
+              <div onClick={() => setAiAnalysis('离线模式下请通过右上角导入本地模型。')} className="sidebar-item p-3 rounded-2xl flex items-center text-sm font-bold text-gray-600">
                 <Atom className="mr-3 text-blue-400" size={18} /> 物理化学模型
               </div>
               <div className="sidebar-item p-3 rounded-2xl flex items-center text-sm font-bold text-gray-600 opacity-60">
@@ -350,7 +376,7 @@ const App: React.FC = () => {
           {/* 3D 模型层 */}
           <div className={`w-full h-full transition-opacity duration-300 ${isVideoMode ? 'opacity-0' : 'opacity-100'}`}>
             {modelUrl ? (
-              <ModelViewer modelUrl={modelUrl} modelType={modelType} controlRef={controlRef} />
+              <ModelViewer modelUrl={modelUrl} modelType={modelType} assetUrls={modelAssetUrls} controlRef={controlRef} />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-white/20">
                 <div className="relative mb-8">
