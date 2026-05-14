@@ -6,7 +6,7 @@ import { ProcessingOverlay } from './components/UIComponents';
 import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import VoiceController from './components/VoiceController';
-import { Upload, Sparkles, Box, Atom, Dna, Calculator, ChevronDown, MessageSquare, Video, Film, Hand, ScanFace, Move3d } from 'lucide-react';
+import { Upload, Sparkles, Box, Atom, Dna, Calculator, Globe, ChevronDown, MessageSquare, Video, Film, Hand, ScanFace, Move3d } from 'lucide-react';
 import { ModelType } from './types';
 
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
@@ -266,8 +266,8 @@ const App: React.FC = () => {
               <div className="sidebar-item p-3 rounded-2xl flex items-center text-sm font-bold text-gray-600 opacity-60">
                 <Dna className="mr-3 text-green-400" size={18} /> 生物教具展示
               </div>
-              <div className="sidebar-item p-3 rounded-2xl flex items-center text-sm font-bold text-gray-600 opacity-60">
-                <Calculator className="mr-3 text-orange-400" size={18} /> 空间几何结构
+              <div onClick={() => { loadDemoModel('/models/earth-political.glb', '地理政区地球仪', 'glb'); setCameraActive(true); }} className="sidebar-item p-3 rounded-2xl flex items-center text-sm font-bold text-gray-600 cursor-pointer hover:bg-white/60 transition-colors">
+                <Globe className="mr-3 text-emerald-500" size={18} /> 地理地球仪
               </div>
               <div className="flex items-center justify-center pt-2 text-gray-300">
                 <ChevronDown size={14} />
