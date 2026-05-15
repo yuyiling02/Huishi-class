@@ -1,7 +1,6 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { FilesetResolver, HandLandmarker, DrawingUtils } from '@mediapipe/tasks-vision';
-import { ControlRefs, GestureType, MoveDirection } from '../types';
+import { ControlRefs, GestureType, HandLandmarkPoint, MoveDirection } from '../types';
 
 interface HandControllerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
@@ -10,6 +9,16 @@ interface HandControllerProps {
 
 // Simple Low-Pass Filter for smoothing coordinates
 const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
+const toPointList = (landmarks: any[] | null | undefined): HandLandmarkPoint[] =>
+  (landmarks ?? []).map((landmark: any) => ({
+    x: landmark.x,
+    y: landmark.y,
+    z: landmark.z || 0,
+  }));
+
+const toUserFacingHandedness = (categoryName: string) => (
+  categoryName === 'Left' ? 'Right' : 'Left'
+);
 
 const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -18,7 +27,8 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   const [error, setError] = useState<string | null>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const requestRef = useRef<number>(0);
-  const streamRef = useRef<MediaStream | null>(null);
+  const lastVideoTimeRef = useRef(-1);
+  const drawingUtilsRef = useRef<DrawingUtils | null>(null);
 
   // Keep latest callback to avoid stale closures in RAF loop
   const onStateChangeRef = useRef(onStateChange);
@@ -27,17 +37,23 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   }, [onStateChange]);
 
   // Smoothing refs
-  const smoothRightPinchRef = useRef({ x: 0.5, y: 0.5 });
-  const smoothRightFingerCenterRef = useRef({ x: 0.5, y: 0.5 });
+  const smoothDragPinchRef = useRef({ x: 0.5, y: 0.5 });
+  const smoothRotateFingerCenterRef = useRef({ x: 0.5, y: 0.5 });
 
   // Previous contact state for hysteresis
   const wasContactingRef = useRef(false);
 
   // Store previous position for Delta calculation (Rotation)
-  const prevRightPosRef = useRef<{ x: number, y: number } | null>(null);
+  const prevRotatePosRef = useRef<{ x: number, y: number } | null>(null);
 
   // Smoothed rotation velocity (EMA)
   const smoothRotVelRef = useRef({ x: 0, y: 0 });
+  const smoothZoomRef = useRef(0);
+  const lastPublishedStateRef = useRef<{
+    gesture: GestureType | null;
+    direction: MoveDirection | null;
+    isDragging: boolean | null;
+  }>({ gesture: null, direction: null, isDragging: null });
 
   // Constants
   const PINCH_THRESHOLD = 0.05;
@@ -50,22 +66,12 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   // Adjusted for better range of motion
   const DRAG_SCALE_X = 7.0;
   const DRAG_SCALE_Y = 5.5;
-  const ROTATION_SENSITIVITY = 4.0;
+  const ROTATION_SENSITIVITY = 4.6;
 
-  const SMOOTHING_FACTOR_ROTATION = 0.15;
-  const ROTATION_DEADZONE = 0.005;
-  const ROTATION_VEL_SMOOTHING = 0.25;
-
-  const stopWebcam = () => {
-    cancelAnimationFrame(requestRef.current);
-    if (videoRef.current) {
-      videoRef.current.onloadeddata = null;
-      videoRef.current.pause();
-      videoRef.current.srcObject = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-  };
+  const SMOOTHING_FACTOR_ROTATION = 0.28;
+  const ROTATION_DEADZONE = 0.0015;
+  const ROTATION_VEL_SMOOTHING = 0.34;
+  const ZOOM_VEL_SMOOTHING = 0.22;
 
   useEffect(() => {
     let mounted = true;
@@ -73,36 +79,24 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     const setupMediaPipe = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "/mediapipe/wasm"
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
         );
 
         if (!mounted) return;
 
-        try {
-          handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath: "/mediapipe/hand_landmarker.task",
-              delegate: "GPU"
-            },
-            runningMode: "VIDEO",
-            numHands: 2
-          });
-        } catch (gpuErr) {
-          console.warn("MediaPipe GPU delegate failed, retrying with CPU:", gpuErr);
-          handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath: "/mediapipe/hand_landmarker.task",
-              delegate: "CPU"
-            },
-            runningMode: "VIDEO",
-            numHands: 2
-          });
-        }
+        handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          numHands: 2
+        });
 
         startWebcam();
       } catch (err) {
         console.error("Error initializing MediaPipe:", err);
-        setError("AI 引擎加载失败，请刷新后重试");
+        setError("AI 引擎加载失败");
         setLoading(false);
       }
     };
@@ -114,49 +108,31 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       if (handLandmarkerRef.current) {
         handLandmarkerRef.current.close();
       }
-      stopWebcam();
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      stream?.getTracks().forEach((track) => track.stop());
+      cancelAnimationFrame(requestRef.current);
     };
   }, []);
 
   const startWebcam = async () => {
     try {
-      setError(null);
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("getUserMedia is not available in this browser or context");
-      }
-
-      if (!window.isSecureContext) {
-        throw new Error("Camera access requires HTTPS or localhost");
-      }
-
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 320 },
-            height: { ideal: 240 },
-            facingMode: { ideal: "user" }
-          },
-          audio: false
-        });
-      } catch (constraintErr) {
-        console.warn("Preferred webcam constraints failed, retrying with default camera:", constraintErr);
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      }
-
-      streamRef.current = stream;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+          frameRate: { ideal: 60, max: 60 },
+          facingMode: "user"
+        }
+      });
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadeddata = predictWebcam;
-        await videoRef.current.play();
+        videoRef.current.addEventListener("loadeddata", predictWebcam);
       }
       setLoading(false);
     } catch (err) {
       console.error("Webcam error:", err);
-      stopWebcam();
-      setError("无法访问摄像头，请允许权限并使用 HTTPS 或 localhost 打开");
+      setError("无法访问摄像头");
       setLoading(false);
     }
   };
@@ -177,20 +153,19 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
 
   const predictWebcam = () => {
     if (!videoRef.current || !handLandmarkerRef.current || !canvasRef.current) return;
-    if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (videoRef.current.readyState < videoRef.current.HAVE_CURRENT_DATA) {
       requestRef.current = requestAnimationFrame(predictWebcam);
       return;
     }
 
-    const startTimeMs = performance.now();
-    let result;
-    try {
-      result = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
-    } catch (err) {
-      console.error("Hand detection error:", err);
+    if (videoRef.current.currentTime === lastVideoTimeRef.current) {
       requestRef.current = requestAnimationFrame(predictWebcam);
       return;
     }
+    lastVideoTimeRef.current = videoRef.current.currentTime;
+
+    const startTimeMs = performance.now();
+    const result = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
 
     const ctx = canvasRef.current.getContext("2d");
     if (ctx) {
@@ -212,12 +187,13 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       let rightHandLandmarks: any[] | null = null;
 
       if (result.landmarks && result.landmarks.length > 0) {
-        const drawingUtils = new DrawingUtils(ctx);
+        const drawingUtils = drawingUtilsRef.current ?? new DrawingUtils(ctx);
+        drawingUtilsRef.current = drawingUtils;
 
         // 1. Identify Hands & Visuals
         for (let i = 0; i < result.landmarks.length; i++) {
           const landmarks = result.landmarks[i];
-          const handedness = result.handedness[i][0].categoryName;
+          const handedness = toUserFacingHandedness(result.handedness[i][0].categoryName);
 
           if (handedness === "Left") leftHandLandmarks = landmarks;
           if (handedness === "Right") rightHandLandmarks = landmarks;
@@ -264,27 +240,32 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
             const rawFingerCenterX = (indexTip.x + middleTip.x) / 2;
             const rawFingerCenterY = (indexTip.y + middleTip.y) / 2;
 
-            smoothRightFingerCenterRef.current.x = lerp(smoothRightFingerCenterRef.current.x, rawFingerCenterX, SMOOTHING_FACTOR_ROTATION);
-            smoothRightFingerCenterRef.current.y = lerp(smoothRightFingerCenterRef.current.y, rawFingerCenterY, SMOOTHING_FACTOR_ROTATION);
+            if (prevRotatePosRef.current) {
+              smoothRotateFingerCenterRef.current.x = lerp(smoothRotateFingerCenterRef.current.x, rawFingerCenterX, SMOOTHING_FACTOR_ROTATION);
+              smoothRotateFingerCenterRef.current.y = lerp(smoothRotateFingerCenterRef.current.y, rawFingerCenterY, SMOOTHING_FACTOR_ROTATION);
+            } else {
+              smoothRotateFingerCenterRef.current.x = rawFingerCenterX;
+              smoothRotateFingerCenterRef.current.y = rawFingerCenterY;
+            }
 
             // 1. 食指 + 中指并拢 → 旋转画面
             if (fingersDist < FINGER_CONTACT_THRESHOLD && isIndexUp && isMiddleUp) {
               newGesture = GestureType.RIGHT_TWO_FINGER_ROTATE;
 
-              if (prevRightPosRef.current) {
-                const deltaX = smoothRightFingerCenterRef.current.x - prevRightPosRef.current.x;
-                const deltaY = smoothRightFingerCenterRef.current.y - prevRightPosRef.current.y;
+              if (prevRotatePosRef.current) {
+                const deltaX = smoothRotateFingerCenterRef.current.x - prevRotatePosRef.current.x;
+                const deltaY = smoothRotateFingerCenterRef.current.y - prevRotatePosRef.current.y;
 
                 if (Math.abs(deltaX) > ROTATION_DEADZONE || Math.abs(deltaY) > ROTATION_DEADZONE) {
                   rotVelY = -deltaX * ROTATION_SENSITIVITY;
                   rotVelX = deltaY * ROTATION_SENSITIVITY;
                 }
               }
-              prevRightPosRef.current = { ...smoothRightFingerCenterRef.current };
+              prevRotatePosRef.current = { ...smoothRotateFingerCenterRef.current };
             }
             // 2. 食指 + 拇指捏合 → 拆解零件
             else {
-              prevRightPosRef.current = null;
+              prevRotatePosRef.current = null;
 
               const pinchDist = getPinchDistance(rightHandLandmarks);
               if (pinchDist < PINCH_THRESHOLD) {
@@ -295,20 +276,20 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
                 const rawX = (thumbTip.x + indexTip.x) / 2;
                 const rawY = (thumbTip.y + indexTip.y) / 2;
 
-                const dx = rawX - smoothRightPinchRef.current.x;
-                const dy = rawY - smoothRightPinchRef.current.y;
+                const dx = rawX - smoothDragPinchRef.current.x;
+                const dy = rawY - smoothDragPinchRef.current.y;
                 const movementDelta = Math.sqrt(dx * dx + dy * dy);
                 const adaptiveFactor = Math.min(0.85, Math.max(0.1, movementDelta * 15));
 
-                smoothRightPinchRef.current.x = lerp(smoothRightPinchRef.current.x, rawX, adaptiveFactor);
-                smoothRightPinchRef.current.y = lerp(smoothRightPinchRef.current.y, rawY, adaptiveFactor);
+                smoothDragPinchRef.current.x = lerp(smoothDragPinchRef.current.x, rawX, adaptiveFactor);
+                smoothDragPinchRef.current.y = lerp(smoothDragPinchRef.current.y, rawY, adaptiveFactor);
 
-                const targetX = (0.5 - smoothRightPinchRef.current.x) * DRAG_SCALE_X;
-                const targetY = (0.5 - smoothRightPinchRef.current.y) * DRAG_SCALE_Y;
+                const targetX = (0.5 - smoothDragPinchRef.current.x) * DRAG_SCALE_X;
+                const targetY = (0.5 - smoothDragPinchRef.current.y) * DRAG_SCALE_Y;
                 controlRef.current.panPosition = { x: targetX, y: targetY };
               } else {
                 const wrist = rightHandLandmarks[0];
-                smoothRightPinchRef.current = { x: wrist.x, y: wrist.y };
+                smoothDragPinchRef.current = { x: wrist.x, y: wrist.y };
               }
             }
           }
@@ -337,13 +318,15 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       // Smooth the rotation velocity with EMA to remove jitter
       smoothRotVelRef.current.x = lerp(smoothRotVelRef.current.x, rotVelX, ROTATION_VEL_SMOOTHING);
       smoothRotVelRef.current.y = lerp(smoothRotVelRef.current.y, rotVelY, ROTATION_VEL_SMOOTHING);
+      smoothZoomRef.current = lerp(smoothZoomRef.current, newZoomSpeed, ZOOM_VEL_SMOOTHING);
 
       // Apply deadzone on smoothed output
       const finalRotX = Math.abs(smoothRotVelRef.current.x) > 0.001 ? smoothRotVelRef.current.x : 0;
       const finalRotY = Math.abs(smoothRotVelRef.current.y) > 0.001 ? smoothRotVelRef.current.y : 0;
+      const finalZoomSpeed = Math.abs(smoothZoomRef.current) > 0.01 ? smoothZoomRef.current : 0;
 
       controlRef.current.rotationVelocity = { x: finalRotX, y: finalRotY };
-      controlRef.current.zoomSpeed = newZoomSpeed;
+      controlRef.current.zoomSpeed = finalZoomSpeed;
       controlRef.current.isDragging = isDragging;
 
       // 传递手部关节数据到3D场景
@@ -352,8 +335,19 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
         right: rightHandLandmarks ? rightHandLandmarks.map((lm: any) => ({ x: lm.x, y: lm.y, z: lm.z || 0 })) : null
       };
 
-      // Use ref to call the latest callback
-      if (onStateChangeRef.current) {
+      // Use ref to call the latest callback, only on state changes
+      const lastPublishedState = lastPublishedStateRef.current;
+      const shouldPublishState =
+        lastPublishedState.gesture !== newGesture ||
+        lastPublishedState.direction !== newDirection ||
+        lastPublishedState.isDragging !== isDragging;
+
+      if (shouldPublishState && onStateChangeRef.current) {
+        lastPublishedStateRef.current = {
+          gesture: newGesture,
+          direction: newDirection,
+          isDragging,
+        };
         onStateChangeRef.current(newGesture, newDirection, isDragging);
       }
 

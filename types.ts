@@ -1,5 +1,11 @@
 
 // 模型类型
+export interface HandLandmarkPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export type ModelType = 'glb' | 'gltf' | 'fbx';
 
 export enum GestureType {
