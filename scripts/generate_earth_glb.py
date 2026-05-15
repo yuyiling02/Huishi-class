@@ -1,835 +1,1015 @@
 #!/usr/bin/env python3
 """
-Generate earth-political.glb — Political globe GLB for classroom use.
-Uses PIL + numpy for texture generation, constructs GLB binary directly.
-No Blender dependency. Natural Earth coastline data is downloaded for realism.
+Generate earth-political.glb: a classroom political globe.
 
-Output: public/models/earth-political.glb (target 15–35 MB)
+The script builds a single self-contained GLB with:
+- 4K base map texture from Natural Earth country polygons
+- transparent political overlay with borders, graticule, and Chinese labels
+- tilted globe axis, metal meridian ring, and stand
+
+No Blender dependency. Requires Pillow and numpy.
 """
+
+from __future__ import annotations
+
+import io
+import json
+import math
+import os
+import struct
+import urllib.request
+from typing import Any, Iterable
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-import json
-import struct
-import io
-import os
-import sys
-import urllib.request
-import math
 
-# ── Config ────────────────────────────────────────────────────
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
 TEX_WIDTH = 4096
 TEX_HEIGHT = 2048
+
 EARTH_RADIUS = 1.0
-ATMOSPHERE_RADIUS = 1.02
-LAT_SEGMENTS = 120  # latitude rings
-LON_SEGMENTS = 240  # longitude segments
+OVERLAY_RADIUS = 1.006
+ATMOSPHERE_RADIUS = 1.035
+LAT_SEGMENTS = 144
+LON_SEGMENTS = 288
 AXIS_TILT_DEG = 23.5
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "public", "models", "earth-political.glb")
 
-# Natural Earth 110m coastline GeoJSON URL (CC0 / public domain)
-NE_COASTLINE_URL = (
-    "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/"
-    "geojson/ne_110m_coastline.geojson"
-)
-NE_COUNTRIES_URL = (
-    "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/"
-    "geojson/ne_110m_admin_0_countries.geojson"
-)
+# Put East Asia near the first camera-facing side of the demo viewer.
+FRONT_LONGITUDE_DEG = 104.0
+FRONT_AZIMUTH_DEG = 45.0
+SPHERE_PHASE = (FRONT_AZIMUTH_DEG - (FRONT_LONGITUDE_DEG + 180.0)) / 360.0
 
-# ── Helper: download with cache ──────────────────────────────
-def download_geojson(url, cache_dir=None):
-    """Download GeoJSON with local caching. Returns parsed dict or None."""
-    if cache_dir is None:
-        cache_dir = os.path.join(os.path.dirname(__file__), ".geo_cache")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_name = os.path.basename(url)
-    cache_path = os.path.join(cache_dir, cache_name)
+SCRIPT_DIR = os.path.dirname(__file__)
+CACHE_DIR = os.path.join(SCRIPT_DIR, ".geo_cache")
+OUTPUT_PATH = os.path.join(SCRIPT_DIR, "..", "public", "models", "earth-political.glb")
+
+NE_BASE = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson"
+NE_COUNTRIES_URL = f"{NE_BASE}/ne_50m_admin_0_countries.geojson"
+NE_BOUNDARY_URL = f"{NE_BASE}/ne_50m_admin_0_boundary_lines_land.geojson"
+NE_COASTLINE_URL = f"{NE_BASE}/ne_50m_coastline.geojson"
+
+
+COUNTRY_PALETTE = [
+    (195, 219, 151),
+    (244, 200, 116),
+    (222, 139, 116),
+    (158, 204, 196),
+    (171, 178, 221),
+    (231, 164, 185),
+    (184, 210, 126),
+    (236, 179, 107),
+    (142, 190, 221),
+    (207, 170, 215),
+    (147, 197, 153),
+    (225, 155, 135),
+    (218, 204, 145),
+]
+
+
+# ---------------------------------------------------------------------------
+# Natural Earth loading
+# ---------------------------------------------------------------------------
+
+
+def download_geojson(url: str) -> dict[str, Any] | None:
+    """Download a GeoJSON file with local caching."""
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    cache_path = os.path.join(CACHE_DIR, os.path.basename(url))
 
     if os.path.exists(cache_path):
         with open(cache_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     try:
-        print(f"  Downloading {url} ...")
-        req = urllib.request.Request(url, headers={"User-Agent": "earth-glb-generator/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        print(f"  Downloading {url}")
+        req = urllib.request.Request(url, headers={"User-Agent": "earth-glb-generator/2.0"})
+        with urllib.request.urlopen(req, timeout=45) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         with open(cache_path, "w", encoding="utf-8") as f:
-            json.dump(data, f)
+            json.dump(data, f, ensure_ascii=False)
         return data
-    except Exception as e:
-        print(f"  Download failed: {e}")
+    except Exception as exc:  # pragma: no cover - fallback path for offline use
+        print(f"  WARNING: download failed: {exc}")
         return None
 
 
-# ── GeoJSON rasterizer ───────────────────────────────────────
-def latlon_to_pixel(lon, lat, w=TEX_WIDTH, h=TEX_HEIGHT):
-    """Equirectangular projection: lon/lat → pixel (x, y)."""
-    x = (lon + 180) / 360.0 * w
-    y = (90 - lat) / 180.0 * h
-    return x % w, max(0, min(h - 1, y))
+# ---------------------------------------------------------------------------
+# Map projection and drawing helpers
+# ---------------------------------------------------------------------------
 
 
-def rasterize_geojson(geojson, w=TEX_WIDTH, h=TEX_HEIGHT, stroke_color=None, fill_color=None):
-    """Rasterize GeoJSON features onto a PIL Image.
-    Returns Image in RGBA mode suitable for compositing."""
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+def latlon_to_pixel(lon: float, lat: float, w: int = TEX_WIDTH, h: int = TEX_HEIGHT) -> tuple[float, float]:
+    x = (lon + 180.0) / 360.0 * w
+    y = (90.0 - lat) / 180.0 * h
+    return x, max(0.0, min(float(h - 1), y))
 
-    features = geojson.get("features", [])
-    total = len(features)
-    for idx, feature in enumerate(features):
-        if idx % max(1, total // 10) == 0:
-            pct = int(idx / max(1, total) * 100)
-            print(f"\r  Rasterizing features: {pct}%", end="", flush=True)
 
-        geom = feature.get("geometry", {})
-        geom_type = geom.get("type", "")
-        coords = geom.get("coordinates", [])
+def iter_polygon_rings(geometry: dict[str, Any]) -> Iterable[list[list[float]]]:
+    geom_type = geometry.get("type")
+    coords = geometry.get("coordinates") or []
 
-        if geom_type == "Polygon":
-            # coords = [outer_ring, hole1, hole2, ...]
-            # each ring = [[lon, lat], [lon, lat], ...]
-            rings = coords
-        elif geom_type == "MultiPolygon":
-            # coords = [[outer_ring, hole...], [outer_ring, hole...], ...]
-            rings = []
-            for poly in coords:
-                rings.extend(poly)
-        elif geom_type == "LineString":
-            # coords = [[lon, lat], [lon, lat], ...]
-            rings = [coords]
-        elif geom_type == "MultiLineString":
-            # coords = [[[lon, lat], ...], [[lon, lat], ...]]
-            rings = coords
-        else:
+    if geom_type == "Polygon":
+        for ring in coords:
+            yield ring
+    elif geom_type == "MultiPolygon":
+        for polygon in coords:
+            for ring in polygon:
+                yield ring
+
+
+def iter_line_rings(geometry: dict[str, Any]) -> Iterable[list[list[float]]]:
+    geom_type = geometry.get("type")
+    coords = geometry.get("coordinates") or []
+
+    if geom_type == "LineString":
+        yield coords
+    elif geom_type == "MultiLineString":
+        for line in coords:
+            yield line
+    elif geom_type in ("Polygon", "MultiPolygon"):
+        yield from iter_polygon_rings(geometry)
+
+
+def unwrap_ring(ring: list[list[float]]) -> list[tuple[float, float]]:
+    """Unwrap longitudes so antimeridian-crossing rings draw locally."""
+    clean: list[tuple[float, float]] = []
+    for point in ring:
+        if len(point) < 2:
             continue
+        lon = float(point[0])
+        lat = max(-89.999, min(89.999, float(point[1])))
+        if math.isfinite(lon) and math.isfinite(lat):
+            clean.append((lon, lat))
 
-        for ring in rings:
-            if len(ring) < 2:
-                continue
-            pixels = [latlon_to_pixel(lon, lat, w, h) for lon, lat in ring]
-            if len(pixels) < 3 and fill_color:
-                # Not enough for polygon fill, but can still stroke
-                pass
-            if fill_color and len(pixels) >= 3:
-                draw.polygon(pixels, fill=fill_color)
-            if stroke_color:
-                draw.line(pixels + [pixels[0]], fill=stroke_color, width=1)
+    if not clean:
+        return []
 
-    print(f"\r  Rasterizing features: done ({total} features){' ' * 20}")
-    return img
+    unwrapped = [clean[0]]
+    prev_lon = clean[0][0]
+    for raw_lon, lat in clean[1:]:
+        lon = raw_lon
+        while lon - prev_lon > 180.0:
+            lon -= 360.0
+        while lon - prev_lon < -180.0:
+            lon += 360.0
+        unwrapped.append((lon, lat))
+        prev_lon = lon
+    return unwrapped
 
 
-# ── Texture generation ───────────────────────────────────────
-def generate_earth_texture():
-    """Generate 4096x2048 equirectangular Earth texture with:
-    - Ocean background
-    - Landmasses from Natural Earth coastline
-    - Country borders
-    - Latitude/longitude grid
-    - Chinese labels for continents and key countries
-    """
-    print("Generating Earth texture (4096x2048)...")
+def ring_pixels(ring: list[list[float]], x_shift: float = 0.0) -> list[tuple[float, float]]:
+    points = []
+    for lon, lat in unwrap_ring(ring):
+        x, y = latlon_to_pixel(lon, lat)
+        points.append((x + x_shift, y))
+    return points
 
-    img = Image.new("RGB", (TEX_WIDTH, TEX_HEIGHT))
-    draw = ImageDraw.Draw(img)
 
-    # ── 1. Ocean gradient ──
+def bbox_intersects_canvas(points: list[tuple[float, float]]) -> bool:
+    if not points:
+        return False
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    return max(xs) >= 0 and min(xs) <= TEX_WIDTH and max(ys) >= 0 and min(ys) <= TEX_HEIGHT
+
+
+def draw_wrapped_polygon(draw: ImageDraw.ImageDraw, ring: list[list[float]], fill: tuple[int, int, int, int]) -> None:
+    if len(ring) < 3:
+        return
+    for shift in (-TEX_WIDTH, 0, TEX_WIDTH):
+        pts = ring_pixels(ring, shift)
+        if len(pts) >= 3 and bbox_intersects_canvas(pts):
+            draw.polygon(pts, fill=fill)
+
+
+def draw_wrapped_line(
+    draw: ImageDraw.ImageDraw,
+    ring: list[list[float]],
+    fill: tuple[int, int, int, int],
+    width: int = 1,
+    closed: bool = False,
+) -> None:
+    if len(ring) < 2:
+        return
+    for shift in (-TEX_WIDTH, 0, TEX_WIDTH):
+        pts = ring_pixels(ring, shift)
+        if len(pts) >= 2 and bbox_intersects_canvas(pts):
+            if closed:
+                pts = pts + [pts[0]]
+            draw.line(pts, fill=fill, width=width, joint="curve")
+
+
+def palette_color(properties: dict[str, Any]) -> tuple[int, int, int, int]:
+    idx = properties.get("MAPCOLOR13") or properties.get("MAPCOLOR9") or properties.get("MAPCOLOR7") or 1
+    try:
+        idx_i = int(idx) - 1
+    except Exception:
+        idx_i = 0
+
+    r, g, b = COUNTRY_PALETTE[idx_i % len(COUNTRY_PALETTE)]
+    continent = str(properties.get("CONTINENT") or "")
+    continent_bias = {
+        "Asia": (6, 4, -2),
+        "Europe": (2, 3, 8),
+        "Africa": (8, 3, -6),
+        "North America": (-4, 5, 8),
+        "South America": (0, 8, -4),
+        "Oceania": (5, 4, 4),
+        "Antarctica": (28, 30, 34),
+    }.get(continent, (0, 0, 0))
+    return (
+        max(0, min(255, r + continent_bias[0])),
+        max(0, min(255, g + continent_bias[1])),
+        max(0, min(255, b + continent_bias[2])),
+        255,
+    )
+
+
+def draw_country_fills(country_layer: Image.Image, countries_geo: dict[str, Any] | None) -> None:
+    draw = ImageDraw.Draw(country_layer, "RGBA")
+    if not countries_geo:
+        print("  WARNING: no country polygons; using fallback schematic land.")
+        fallback = [
+            [(-170, 72), (-55, 72), (-55, 10), (-100, 5), (-170, 25)],
+            [(-85, 12), (-34, 10), (-45, -55), (-80, -55)],
+            [(-20, 72), (160, 72), (150, 5), (60, -10), (-20, 35)],
+            [(-20, 35), (50, 35), (55, -35), (15, -35), (-18, 0)],
+            [(110, -10), (155, -10), (155, -45), (110, -45)],
+            [(-180, -65), (180, -65), (180, -89), (-180, -89)],
+        ]
+        for poly in fallback:
+            draw_wrapped_polygon(draw, [[lon, lat] for lon, lat in poly], (166, 204, 137, 255))
+        return
+
+    features = countries_geo.get("features", [])
+    for index, feature in enumerate(features):
+        if index % 40 == 0:
+            print(f"\r  Filling countries: {index}/{len(features)}", end="", flush=True)
+
+        geometry = feature.get("geometry") or {}
+        properties = feature.get("properties") or {}
+        color = palette_color(properties)
+
+        geom_type = geometry.get("type")
+        coords = geometry.get("coordinates") or []
+        polygons = [coords] if geom_type == "Polygon" else coords if geom_type == "MultiPolygon" else []
+        for polygon in polygons:
+            if polygon:
+                # First ring is the exterior. Holes are ignored intentionally:
+                # at globe scale, clean country color beats noisy lake cutouts.
+                draw_wrapped_polygon(draw, polygon[0], color)
+
+    print(f"\r  Filling countries: done ({len(features)} features)")
+
+
+def apply_land_shading(base: Image.Image, land_alpha: Image.Image) -> Image.Image:
+    print("  Adding subtle land shading...")
+    resampling = getattr(Image, "Resampling", Image)
+    rng = np.random.default_rng(12)
+    small_noise = rng.normal(0.0, 1.0, (TEX_HEIGHT // 16, TEX_WIDTH // 16))
+    small_noise = (small_noise - small_noise.min()) / max(1e-6, small_noise.max() - small_noise.min())
+    noise_img = Image.fromarray((small_noise * 255).astype(np.uint8), "L")
+    noise_img = noise_img.resize((TEX_WIDTH, TEX_HEIGHT), resample=resampling.BICUBIC)
+
+    arr = np.asarray(base).astype(np.float32)
+    mask = np.asarray(land_alpha).astype(np.float32) / 255.0
+    noise = (np.asarray(noise_img).astype(np.float32) - 128.0) / 128.0
+
+    lat = np.linspace(90.0, -90.0, TEX_HEIGHT, dtype=np.float32)
+    warm_equator = (np.cos(np.radians(lat)) * 0.03).reshape(TEX_HEIGHT, 1)
+    factor = 1.0 + noise * 0.055 + warm_equator
+    arr = arr * (1.0 - mask[:, :, None]) + np.clip(arr * factor[:, :, None], 0, 255) * mask[:, :, None]
+    return Image.fromarray(arr.astype(np.uint8), "RGB")
+
+
+def create_ocean_texture() -> Image.Image:
     print("  Drawing ocean background...")
-    for y in range(TEX_HEIGHT):
-        t = y / TEX_HEIGHT  # 0 at north pole, 1 at south pole
-        # Darker at poles, lighter at equator
-        r = int(30 + 20 * (1 - abs(t - 0.5) * 2))
-        g = int(80 + 40 * (1 - abs(t - 0.5) * 2))
-        b = int(140 + 40 * (1 - abs(t - 0.5) * 2))
-        draw.line([(0, y), (TEX_WIDTH, y)], fill=(r, g, b))
+    y = np.linspace(-1.0, 1.0, TEX_HEIGHT, dtype=np.float32).reshape(TEX_HEIGHT, 1)
+    x = np.linspace(0.0, 2.0 * math.pi, TEX_WIDTH, dtype=np.float32).reshape(1, TEX_WIDTH)
+    equator = 1.0 - np.abs(y)
+    bands = 0.5 + 0.5 * np.sin(x * 2.0 + y * 5.5)
 
-    # ── 2. Download and rasterize coastline ──
-    coastline_geo = download_geojson(NE_COASTLINE_URL)
-    countries_geo = download_geojson(NE_COUNTRIES_URL)
+    r = 30 + 22 * equator + 4 * bands
+    g = 82 + 48 * equator + 6 * bands
+    b = 142 + 58 * equator + 8 * bands
+    arr = np.dstack([r, g, b]).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
 
-    if coastline_geo:
-        print("  Rasterizing landmasses...")
-        land_mask = rasterize_geojson(coastline_geo, TEX_WIDTH, TEX_HEIGHT,
-                                       fill_color=(80, 160, 80, 255))
-        img.paste(land_mask, (0, 0), land_mask)
 
-        # Add subtle terrain variation
-        print("  Adding terrain shading...")
-        land_pixels = img.load()
-        land_alpha = land_mask.load()
-        for y in range(TEX_HEIGHT):
-            for x in range(TEX_WIDTH):
-                if land_alpha[x, y][3] > 0:
-                    r, g, b = land_pixels[x, y]
-                    # Slight random variation for terrain texture
-                    r = min(255, max(0, r + np.random.randint(-15, 15)))
-                    g = min(255, max(0, g + np.random.randint(-15, 15)))
-                    b = min(255, max(0, b + np.random.randint(-10, 10)))
-                    land_pixels[x, y] = (r, g, b)
+def draw_graticule(draw: ImageDraw.ImageDraw) -> None:
+    print("  Drawing graticule...")
 
-    if countries_geo:
-        print("  Drawing country borders...")
-        borders = rasterize_geojson(countries_geo, TEX_WIDTH, TEX_HEIGHT,
-                                     stroke_color=(60, 60, 60, 200))
-        img.paste(borders, (0, 0), borders)
-
-    # ── 3. Latitude / Longitude grid ──
-    print("  Drawing grid lines...")
-    # Longitude lines every 15°
     for lon in range(-180, 180, 15):
-        color = (200, 200, 200) if lon % 90 == 0 else (220, 220, 220)
-        width = 2 if lon % 90 == 0 else 1
-        for lat in range(-89, 90, 1):
-            x1, y1 = latlon_to_pixel(lon, lat)
-            x2, y2 = latlon_to_pixel(lon, lat + 1)
-            draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
+        major = lon % 90 == 0
+        color = (255, 255, 255, 90 if major else 55)
+        width = 2 if major else 1
+        x, _ = latlon_to_pixel(lon, 0)
+        draw.line([(x, 0), (x, TEX_HEIGHT)], fill=color, width=width)
 
-    # Latitude lines every 15°
     for lat in range(-75, 76, 15):
-        color = (200, 200, 200) if lat == 0 else (220, 220, 220)
-        width = 2 if lat == 0 else 1
-        for lon in range(-180, 179, 1):
-            x1, y1 = latlon_to_pixel(lon, lat)
-            x2, y2 = latlon_to_pixel(lon + 1, lat)
-            draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
+        major = lat == 0 or abs(lat) == 45
+        color = (255, 255, 255, 95 if major else 55)
+        width = 2 if major else 1
+        _, y = latlon_to_pixel(0, lat)
+        draw.line([(0, y), (TEX_WIDTH, y)], fill=color, width=width)
 
-    # Tropic and arctic lines (dashed)
-    for lat, name, color in [(23.5, "北回归线", (255, 180, 100)),
-                              (-23.5, "南回归线", (255, 180, 100)),
-                              (66.5, "北极圈", (150, 180, 220)),
-                              (-66.5, "南极圈", (150, 180, 220))]:
-        for lon in range(-180, 178, 3):
-            x1, y1 = latlon_to_pixel(lon, lat)
-            x2, y2 = latlon_to_pixel(lon + 2, lat)
-            draw.line([(x1, y1), (x2, y2)], fill=color, width=1)
+    for lat, color in [
+        (23.5, (255, 208, 116, 150)),
+        (-23.5, (255, 208, 116, 150)),
+        (66.5, (192, 225, 255, 135)),
+        (-66.5, (192, 225, 255, 135)),
+    ]:
+        _, y = latlon_to_pixel(0, lat)
+        dash = 34
+        gap = 20
+        x = 0
+        while x < TEX_WIDTH:
+            draw.line([(x, y), (min(TEX_WIDTH, x + dash), y)], fill=color, width=2)
+            x += dash + gap
 
-    # ── 4. Chinese labels ──
-    print("  Adding Chinese labels...")
-    # Try to load a CJK font
+
+def load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     font_paths = [
-        "C:/Windows/Fonts/msyh.ttc",       # Microsoft YaHei
-        "C:/Windows/Fonts/simsun.ttc",      # SimSun
-        "C:/Windows/Fonts/simhei.ttf",      # SimHei
-        "C:/Windows/Fonts/Deng.ttf",        # DengXian
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        "C:/Windows/Fonts/simsun.ttc",
+        "C:/Windows/Fonts/Deng.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
     ]
-    font = None
-    font_size_large = 48
-    font_size_small = 32
-    for fp in font_paths:
-        if os.path.exists(fp):
+    for path in font_paths:
+        if os.path.exists(path):
             try:
-                font = ImageFont.truetype(fp, font_size_large)
-                font_small = ImageFont.truetype(fp, font_size_small)
-                print(f"  Using font: {fp}")
-                break
+                return ImageFont.truetype(path, size)
             except Exception:
                 continue
+    print("  WARNING: no CJK font found; labels may not render correctly.")
+    return ImageFont.load_default()
 
-    if font is None:
-        font = ImageFont.load_default()
-        font_small = font
-        print("  WARNING: No CJK font found — labels may not display correctly")
 
-    # Continent labels
+def draw_label(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    lon: float,
+    lat: float,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    fill: tuple[int, int, int, int],
+    stroke: tuple[int, int, int, int],
+    stroke_width: int,
+) -> None:
+    x, y = latlon_to_pixel(lon, lat)
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+
+    for shift in (-TEX_WIDTH, 0, TEX_WIDTH):
+        px = x - tw / 2 + shift
+        if -tw <= px <= TEX_WIDTH:
+            draw.text(
+                (px, y - th / 2),
+                text,
+                font=font,
+                fill=fill,
+                stroke_fill=stroke,
+                stroke_width=stroke_width,
+            )
+
+
+def draw_labels(overlay: Image.Image) -> None:
+    print("  Adding Chinese labels...")
+    draw = ImageDraw.Draw(overlay, "RGBA")
+    continent_font = load_font(58)
+    ocean_font = load_font(48)
+    country_font = load_font(34)
+    line_font = load_font(26)
+
     continent_labels = [
-        ("亚  洲", 90, 45),
-        ("欧  洲", 10, 52),
-        ("非  洲", 20, 0),
-        ("北 美 洲", -98, 40),
-        ("南 美 洲", -60, -15),
-        ("大 洋 洲", 135, -22),
-        ("南 极 洲", 0, -82),
+        ("亚  洲", 88, 43),
+        ("欧  洲", 13, 52),
+        ("非  洲", 21, 2),
+        ("北 美 洲", -104, 45),
+        ("南 美 洲", -60, -18),
+        ("大 洋 洲", 135, -24),
+        ("南 极 洲", 40, -78),
     ]
     for text, lon, lat in continent_labels:
-        x, y = latlon_to_pixel(lon, lat)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        # Shadow
-        draw.text((x - tw // 2 + 2, y - th // 2 + 2), text, fill=(0, 0, 0), font=font)
-        # White text
-        draw.text((x - tw // 2, y - th // 2), text, fill=(255, 255, 255), font=font)
+        draw_label(draw, text, lon, lat, continent_font, (255, 255, 245, 235), (22, 47, 62, 205), 4)
 
-    # Ocean labels
     ocean_labels = [
-        ("太 平 洋", -140, -10),
-        ("大 西 洋", -25, -5),
-        ("印 度 洋", 70, -15),
-        ("北 冰 洋", 0, 80),
+        ("太 平 洋", -148, -12),
+        ("太 平 洋", 162, 4),
+        ("大 西 洋", -30, 2),
+        ("印 度 洋", 76, -18),
+        ("北 冰 洋", 20, 79),
     ]
     for text, lon, lat in ocean_labels:
-        x, y = latlon_to_pixel(lon, lat)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text((x - tw // 2 + 1, y - th // 2 + 1), text, fill=(30, 50, 120), font=font)
-        draw.text((x - tw // 2, y - th // 2), text, fill=(200, 220, 255), font=font)
+        draw_label(draw, text, lon, lat, ocean_font, (205, 229, 255, 210), (23, 58, 100, 180), 3)
 
-    # Key country labels
     country_labels = [
         ("中国", 104, 35),
-        ("俄罗斯", 90, 60),
-        ("美国", -100, 38),
-        ("巴西", -55, -8),
-        ("印度", 78, 22),
-        ("澳大利亚", 134, -25),
-        ("加拿大", -102, 58),
-        ("阿根廷", -64, -35),
-        ("日本", 138, 36),
+        ("俄罗斯", 92, 61),
+        ("美国", -100, 39),
+        ("加拿大", -103, 58),
+        ("巴西", -53, -10),
+        ("阿根廷", -64, -36),
         ("英国", -2, 54),
         ("法国", 2, 47),
         ("德国", 10, 51),
-        ("埃及", 31, 27),
-        ("南非", 25, -29),
+        ("埃及", 30, 27),
+        ("南非", 24, -29),
+        ("印度", 78, 22),
+        ("日本", 138, 37),
+        ("澳大利亚", 134, -25),
+        ("印度尼西亚", 117, -2),
     ]
     for text, lon, lat in country_labels:
-        x, y = latlon_to_pixel(lon, lat)
-        bbox = draw.textbbox((0, 0), text, font=font_small)
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text((x - tw // 2 + 1, y - th // 2 + 1), text, fill=(0, 0, 0), font=font_small)
-        draw.text((x - tw // 2, y - th // 2), text, fill=(255, 255, 200), font=font_small)
+        draw_label(draw, text, lon, lat, country_font, (255, 248, 204, 235), (35, 43, 47, 210), 3)
 
-    print("  Texture generation complete.")
-    return img
+    line_labels = [
+        ("北回归线", 153, 23.5),
+        ("南回归线", 153, -23.5),
+        ("赤道", 154, 0),
+        ("北极圈", 153, 66.5),
+        ("南极圈", 153, -66.5),
+    ]
+    for text, lon, lat in line_labels:
+        draw_label(draw, text, lon, lat, line_font, (255, 230, 166, 220), (23, 58, 85, 175), 2)
 
 
-# ── 3D Geometry generators ───────────────────────────────────
-def create_uv_sphere(radius, lat_segments, lon_segments, name="sphere"):
-    """Create UV sphere vertices, normals, texcoords, indices.
-    Returns dict with all arrays + metadata."""
-    verts = []
-    norms = []
-    uvs = []
-    indices = []
+def draw_geo_boundaries(
+    overlay: Image.Image,
+    countries_geo: dict[str, Any] | None,
+    boundary_geo: dict[str, Any] | None,
+    coastline_geo: dict[str, Any] | None,
+) -> None:
+    draw = ImageDraw.Draw(overlay, "RGBA")
+    print("  Drawing coastlines and borders...")
 
-    # Generate vertices row by row (pole to pole)
+    if countries_geo:
+        for feature in countries_geo.get("features", []):
+            geometry = feature.get("geometry") or {}
+            for ring in iter_polygon_rings(geometry):
+                draw_wrapped_line(draw, ring, (35, 48, 42, 120), width=1, closed=True)
+
+    if boundary_geo:
+        for feature in boundary_geo.get("features", []):
+            geometry = feature.get("geometry") or {}
+            for ring in iter_line_rings(geometry):
+                draw_wrapped_line(draw, ring, (33, 37, 34, 185), width=2, closed=False)
+
+    if coastline_geo:
+        for feature in coastline_geo.get("features", []):
+            geometry = feature.get("geometry") or {}
+            for ring in iter_line_rings(geometry):
+                draw_wrapped_line(draw, ring, (20, 82, 97, 175), width=2, closed=False)
+
+
+def generate_earth_textures() -> tuple[Image.Image, Image.Image]:
+    print(f"Generating {TEX_WIDTH}x{TEX_HEIGHT} Earth textures...")
+    countries_geo = download_geojson(NE_COUNTRIES_URL)
+    boundary_geo = download_geojson(NE_BOUNDARY_URL)
+    coastline_geo = download_geojson(NE_COASTLINE_URL)
+
+    base = create_ocean_texture()
+    country_layer = Image.new("RGBA", (TEX_WIDTH, TEX_HEIGHT), (0, 0, 0, 0))
+    draw_country_fills(country_layer, countries_geo)
+    base_rgba = base.convert("RGBA")
+    base_rgba.alpha_composite(country_layer)
+    base = apply_land_shading(base_rgba.convert("RGB"), country_layer.getchannel("A"))
+
+    overlay = Image.new("RGBA", (TEX_WIDTH, TEX_HEIGHT), (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay, "RGBA")
+    draw_graticule(overlay_draw)
+    draw_geo_boundaries(overlay, countries_geo, boundary_geo, coastline_geo)
+    draw_labels(overlay)
+    return base, overlay
+
+
+# ---------------------------------------------------------------------------
+# 3D geometry helpers
+# ---------------------------------------------------------------------------
+
+
+def geometry_dict(
+    name: str,
+    vertices: np.ndarray,
+    normals: np.ndarray,
+    texcoords: np.ndarray,
+    indices: np.ndarray,
+) -> dict[str, Any]:
+    vertices = vertices.astype(np.float32)
+    normals = normals.astype(np.float32)
+    texcoords = texcoords.astype(np.float32)
+    indices = indices.astype(np.uint32)
+    return {
+        "name": name,
+        "vertices": vertices,
+        "normals": normals,
+        "texcoords": texcoords,
+        "indices": indices,
+        "vertex_count": int(vertices.shape[0]),
+        "index_count": int(indices.size),
+        "min": vertices.min(axis=0).tolist(),
+        "max": vertices.max(axis=0).tolist(),
+    }
+
+
+def create_uv_sphere(
+    radius: float,
+    lat_segments: int,
+    lon_segments: int,
+    name: str,
+    phase: float = SPHERE_PHASE,
+) -> dict[str, Any]:
+    verts: list[tuple[float, float, float]] = []
+    norms: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    indices: list[tuple[int, int, int]] = []
+
     for lat_i in range(lat_segments + 1):
-        phi = math.pi * lat_i / lat_segments  # 0 at north pole, pi at south pole
+        phi = math.pi * lat_i / lat_segments
         y = math.cos(phi) * radius
         ring_radius = math.sin(phi) * radius
 
         for lon_i in range(lon_segments + 1):
-            theta = 2 * math.pi * lon_i / lon_segments
+            u = lon_i / lon_segments
+            theta = 2.0 * math.pi * (u + phase)
             x = math.cos(theta) * ring_radius
             z = math.sin(theta) * ring_radius
-
             verts.append((x, y, z))
-            # Normal = normalized position for a sphere
-            n_len = math.sqrt(x * x + y * y + z * z)
-            norms.append((x / n_len, y / n_len, z / n_len) if n_len > 0 else (0, 1, 0))
-            # UV: u from 0 to 1, v from 0 to 1
-            u = lon_i / lon_segments
-            v = lat_i / lat_segments
-            uvs.append((u, v))
+            length = max(1e-9, math.sqrt(x * x + y * y + z * z))
+            norms.append((x / length, y / length, z / length))
+            uvs.append((u, lat_i / lat_segments))
 
-    # Generate triangle indices (two per quad)
     for lat_i in range(lat_segments):
         for lon_i in range(lon_segments):
             a = lat_i * (lon_segments + 1) + lon_i
             b = a + lon_segments + 1
             c = a + 1
             d = b + 1
-
             indices.append((a, b, c))
             indices.append((c, b, d))
 
-    # Pad UV seam at lon=360° to avoid texture wrap artifacts
-    # (vertices at lon_i=lon_segments have u=1.0 which is correct for equirectangular)
-
-    verts_arr = np.array(verts, dtype=np.float32)
-    norms_arr = np.array(norms, dtype=np.float32)
-    uvs_arr = np.array(uvs, dtype=np.float32)
-    indices_arr = np.array(indices, dtype=np.uint32)
-
-    return {
-        "name": name,
-        "vertices": verts_arr,
-        "normals": norms_arr,
-        "texcoords": uvs_arr,
-        "indices": indices_arr,
-        "vertex_count": len(verts),
-        "index_count": len(indices) * 3,  # triangles * 3
-        "min": verts_arr.min(axis=0).tolist(),
-        "max": verts_arr.max(axis=0).tolist(),
-    }
+    return geometry_dict(name, np.array(verts), np.array(norms), np.array(uvs), np.array(indices))
 
 
-def create_cylinder(radius_bottom, radius_top, height, segments, name="cylinder"):
-    """Create cylinder (or truncated cone) geometry."""
-    verts = []
-    norms = []
-    uvs = []
-    indices = []
+def create_cylinder(
+    radius_bottom: float,
+    radius_top: float,
+    height: float,
+    segments: int,
+    name: str,
+) -> dict[str, Any]:
+    verts: list[tuple[float, float, float]] = []
+    norms: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    indices: list[tuple[int, int, int]] = []
+    half_h = height / 2.0
 
-    half_h = height / 2
-
-    # Side vertices
     for i in range(segments + 1):
-        angle = 2 * math.pi * i / segments
+        angle = 2.0 * math.pi * i / segments
         nx = math.cos(angle)
         nz = math.sin(angle)
-        x_bottom = nx * radius_bottom
-        z_bottom = nz * radius_bottom
-        x_top = nx * radius_top
-        z_top = nz * radius_top
-        u = i / segments
+        verts.append((nx * radius_bottom, -half_h, nz * radius_bottom))
+        norms.append((nx, 0.0, nz))
+        uvs.append((i / segments, 0.0))
+        verts.append((nx * radius_top, half_h, nz * radius_top))
+        norms.append((nx, 0.0, nz))
+        uvs.append((i / segments, 1.0))
 
-        # Bottom ring vertex
-        verts.append((x_bottom, -half_h, z_bottom))
-        norms.append((nx, 0, nz))
-        uvs.append((u, 0))
-
-        # Top ring vertex
-        verts.append((x_top, half_h, z_top))
-        norms.append((nx, 0, nz))
-        uvs.append((u, 1))
-
-    # Side triangles
     for i in range(segments):
-        b0 = i * 2       # bottom
-        t0 = i * 2 + 1   # top
+        b0 = i * 2
+        t0 = b0 + 1
         b1 = (i + 1) * 2
-        t1 = (i + 1) * 2 + 1
+        t1 = b1 + 1
         indices.append((b0, b1, t0))
         indices.append((t0, b1, t1))
 
-    # Top cap
     top_center = len(verts)
-    verts.append((0, half_h, 0))
-    norms.append((0, 1, 0))
+    verts.append((0.0, half_h, 0.0))
+    norms.append((0.0, 1.0, 0.0))
     uvs.append((0.5, 0.5))
+    bottom_center = len(verts)
+    verts.append((0.0, -half_h, 0.0))
+    norms.append((0.0, -1.0, 0.0))
+    uvs.append((0.5, 0.5))
+
     for i in range(segments):
         t0 = i * 2 + 1
         t1 = (i + 1) * 2 + 1
-        indices.append((top_center, t0, t1))
-
-    # Bottom cap
-    bottom_center = len(verts)
-    verts.append((0, -half_h, 0))
-    norms.append((0, -1, 0))
-    uvs.append((0.5, 0.5))
-    for i in range(segments):
         b0 = i * 2
         b1 = (i + 1) * 2
+        indices.append((top_center, t0, t1))
         indices.append((bottom_center, b1, b0))
 
-    verts_arr = np.array(verts, dtype=np.float32)
-    norms_arr = np.array(norms, dtype=np.float32)
-    uvs_arr = np.array(uvs, dtype=np.float32)
-    indices_arr = np.array(indices, dtype=np.uint32)
-
-    return {
-        "name": name,
-        "vertices": verts_arr,
-        "normals": norms_arr,
-        "texcoords": uvs_arr,
-        "indices": indices_arr,
-        "vertex_count": len(verts),
-        "index_count": len(indices) * 3,
-        "min": verts_arr.min(axis=0).tolist(),
-        "max": verts_arr.max(axis=0).tolist(),
-    }
+    return geometry_dict(name, np.array(verts), np.array(norms), np.array(uvs), np.array(indices))
 
 
-def create_disc(radius, segments, y_position=0, name="disc"):
-    """Create a flat disc at a given y position."""
-    verts = []
-    norms = []
-    uvs = []
-    indices = []
+def rotation_matrix_from_y(direction: np.ndarray) -> np.ndarray:
+    b = direction.astype(np.float64)
+    b = b / np.linalg.norm(b)
+    a = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    v = np.cross(a, b)
+    c = float(np.dot(a, b))
 
-    center = len(verts)
-    verts.append((0, y_position, 0))
-    norms.append((0, 1, 0))
-    uvs.append((0.5, 0.5))
+    if np.linalg.norm(v) < 1e-9:
+        if c > 0:
+            return np.eye(3)
+        return np.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
 
-    for i in range(segments + 1):
-        angle = 2 * math.pi * i / segments
-        x = math.cos(angle) * radius
-        z = math.sin(angle) * radius
-        verts.append((x, y_position, z))
-        norms.append((0, 1, 0))
-        uvs.append((0.5 + math.cos(angle) * 0.5, 0.5 + math.sin(angle) * 0.5))
-
-    for i in range(segments):
-        indices.append((center, center + 1 + i, center + 1 + i + 1))
-
-    verts_arr = np.array(verts, dtype=np.float32)
-    norms_arr = np.array(norms, dtype=np.float32)
-    uvs_arr = np.array(uvs, dtype=np.float32)
-    indices_arr = np.array(indices, dtype=np.uint32)
-
-    return {
-        "name": name,
-        "vertices": verts_arr,
-        "normals": norms_arr,
-        "texcoords": uvs_arr,
-        "indices": indices_arr,
-        "vertex_count": len(verts),
-        "index_count": len(indices) * 3,
-        "min": verts_arr.min(axis=0).tolist(),
-        "max": verts_arr.max(axis=0).tolist(),
-    }
+    vx = np.array(
+        [
+            [0.0, -v[2], v[1]],
+            [v[2], 0.0, -v[0]],
+            [-v[1], v[0], 0.0],
+        ],
+        dtype=np.float64,
+    )
+    return np.eye(3) + vx + vx @ vx * (1.0 / (1.0 + c))
 
 
-# ── GLB binary construction ──────────────────────────────────
-def build_glb(earth_geo, atmosphere_geo, axis_geo, stand_geos, texture_img):
-    """Build a complete GLB binary file from geometry and texture data.
-    Returns bytes of the GLB file."""
+def transform_geometry(geo: dict[str, Any], matrix: np.ndarray, translation: np.ndarray | None = None) -> dict[str, Any]:
+    if translation is None:
+        translation = np.zeros(3, dtype=np.float32)
+    vertices = (geo["vertices"] @ matrix.T).astype(np.float32) + translation.astype(np.float32)
+    normals = (geo["normals"] @ matrix.T).astype(np.float32)
+    norms = np.linalg.norm(normals, axis=1, keepdims=True)
+    normals = normals / np.maximum(norms, 1e-9)
+    return geometry_dict(geo["name"], vertices, normals, geo["texcoords"], geo["indices"])
 
+
+def translate_geometry(geo: dict[str, Any], offset: tuple[float, float, float]) -> dict[str, Any]:
+    return geometry_dict(
+        geo["name"],
+        geo["vertices"] + np.array(offset, dtype=np.float32),
+        geo["normals"],
+        geo["texcoords"],
+        geo["indices"],
+    )
+
+
+def create_cylinder_between(
+    start: tuple[float, float, float],
+    end: tuple[float, float, float],
+    radius: float,
+    segments: int,
+    name: str,
+) -> dict[str, Any]:
+    start_np = np.array(start, dtype=np.float32)
+    end_np = np.array(end, dtype=np.float32)
+    direction = end_np - start_np
+    length = float(np.linalg.norm(direction))
+    if length <= 1e-6:
+        raise ValueError("Cylinder endpoints are too close.")
+
+    geo = create_cylinder(radius, radius, length, segments, name)
+    matrix = rotation_matrix_from_y(direction)
+    midpoint = (start_np + end_np) / 2.0
+    return transform_geometry(geo, matrix.astype(np.float32), midpoint)
+
+
+def create_meridian_ring(
+    radius: float,
+    tube_radius: float,
+    major_segments: int,
+    tube_segments: int,
+    name: str,
+) -> dict[str, Any]:
+    verts: list[tuple[float, float, float]] = []
+    norms: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    indices: list[tuple[int, int, int]] = []
+
+    for i in range(major_segments + 1):
+        t = 2.0 * math.pi * i / major_segments
+        center = np.array([math.sin(t) * radius, math.cos(t) * radius, 0.0], dtype=np.float32)
+        radial = np.array([math.sin(t), math.cos(t), 0.0], dtype=np.float32)
+        side = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+
+        for j in range(tube_segments + 1):
+            a = 2.0 * math.pi * j / tube_segments
+            normal = math.cos(a) * radial + math.sin(a) * side
+            point = center + tube_radius * normal
+            verts.append(tuple(float(v) for v in point))
+            norms.append(tuple(float(v) for v in normal))
+            uvs.append((i / major_segments, j / tube_segments))
+
+    stride = tube_segments + 1
+    for i in range(major_segments):
+        for j in range(tube_segments):
+            a = i * stride + j
+            b = (i + 1) * stride + j
+            c = a + 1
+            d = b + 1
+            indices.append((a, b, c))
+            indices.append((c, b, d))
+
+    return geometry_dict(name, np.array(verts), np.array(norms), np.array(uvs), np.array(indices))
+
+
+def rotate_z(point: tuple[float, float, float], degrees: float) -> tuple[float, float, float]:
+    x, y, z = point
+    angle = math.radians(degrees)
+    c = math.cos(angle)
+    s = math.sin(angle)
+    return (x * c - y * s, x * s + y * c, z)
+
+
+# ---------------------------------------------------------------------------
+# GLB binary construction
+# ---------------------------------------------------------------------------
+
+
+def build_glb(base_texture: Image.Image, overlay_texture: Image.Image, geometries: list[dict[str, Any]]) -> bytes:
     print("Building GLB binary...")
 
-    # ── Prepare binary buffer ──
-    buffers_parts = []
-    buffer_view_list = []
-    accessor_list = []
+    buffer_parts: list[bytes] = []
+    buffer_views: list[dict[str, Any]] = []
+    accessors: list[dict[str, Any]] = []
 
-    def pack_float32_array(arr):
-        """Pack numpy float32 array into bytes, return (offset, length)."""
-        offset = sum(len(b) for b in buffers_parts)
-        data = arr.tobytes()
-        # Pad to 4-byte alignment
-        if len(data) % 4:
-            data += b'\x00' * (4 - len(data) % 4)
-        buffers_parts.append(data)
-        length = len(arr.tobytes())
+    def current_offset() -> int:
+        return sum(len(part) for part in buffer_parts)
+
+    def append_aligned(data: bytes, pad_byte: bytes = b"\x00") -> tuple[int, int]:
+        offset = current_offset()
+        if offset % 4:
+            pad = 4 - offset % 4
+            buffer_parts.append(pad_byte * pad)
+            offset += pad
+        length = len(data)
+        if length % 4:
+            data += pad_byte * (4 - length % 4)
+        buffer_parts.append(data)
         return offset, length
 
-    def pack_uint32_array(arr):
-        """Pack numpy uint32 array into bytes."""
-        offset = sum(len(b) for b in buffers_parts)
-        data = arr.tobytes()
-        if len(data) % 4:
-            data += b'\x00' * (4 - len(data) % 4)
-        buffers_parts.append(data)
-        length = len(arr.tobytes())
-        return offset, length
+    def make_buffer_view(byte_offset: int, byte_length: int, target: int | None = None) -> int:
+        view = {"buffer": 0, "byteOffset": byte_offset, "byteLength": byte_length}
+        if target is not None:
+            view["target"] = target
+        buffer_views.append(view)
+        return len(buffer_views) - 1
 
-    def make_buffer_view(byte_offset, byte_length, target=None):
-        idx = len(buffer_view_list)
-        bv = {"buffer": 0, "byteOffset": byte_offset, "byteLength": byte_length}
-        if target:
-            bv["target"] = target
-        buffer_view_list.append(bv)
-        return idx
-
-    def make_accessor(view_idx, count, component_type, accessor_type, min_vals, max_vals):
-        idx = len(accessor_list)
-        acc = {
+    def make_accessor(
+        view_idx: int,
+        count: int,
+        component_type: int,
+        accessor_type: str,
+        min_vals: list[float] | None = None,
+        max_vals: list[float] | None = None,
+    ) -> int:
+        accessor: dict[str, Any] = {
             "bufferView": view_idx,
             "componentType": component_type,
             "count": count,
             "type": accessor_type,
         }
-        if min_vals is not None:
-            acc["min"] = min_vals
-            acc["max"] = max_vals
-        accessor_list.append(acc)
-        return idx
+        if min_vals is not None and max_vals is not None:
+            accessor["min"] = min_vals
+            accessor["max"] = max_vals
+        accessors.append(accessor)
+        return len(accessors) - 1
 
-    # ── Pack all geometry into binary buffer ──
-    all_geos = [earth_geo]
-    if atmosphere_geo:
-        all_geos.append(atmosphere_geo)
-    all_geos.append(axis_geo)
-    all_geos.extend(stand_geos)
+    mesh_records: list[dict[str, Any]] = []
+    for geo in geometries:
+        vo, vl = append_aligned(geo["vertices"].astype(np.float32).tobytes())
+        no, nl = append_aligned(geo["normals"].astype(np.float32).tobytes())
+        uo, ul = append_aligned(geo["texcoords"].astype(np.float32).tobytes())
+        io_, il = append_aligned(geo["indices"].astype(np.uint32).reshape(-1).tobytes())
 
-    mesh_data = []  # per-mesh: {name, accessors dict}
+        pos_view = make_buffer_view(vo, vl, 34962)
+        norm_view = make_buffer_view(no, nl, 34962)
+        uv_view = make_buffer_view(uo, ul, 34962)
+        idx_view = make_buffer_view(io_, il, 34963)
 
-    for geo in all_geos:
-        vo, vl = pack_float32_array(geo["vertices"].flatten())
-        no, nl = pack_float32_array(geo["normals"].flatten())
-        uo, ul = pack_float32_array(geo["texcoords"].flatten())
-        idx_off, idx_len = pack_uint32_array(geo["indices"].flatten())
+        mesh_records.append(
+            {
+                "name": geo["name"],
+                "material": geo["material"],
+                "position": make_accessor(pos_view, geo["vertex_count"], 5126, "VEC3", geo["min"], geo["max"]),
+                "normal": make_accessor(norm_view, geo["vertex_count"], 5126, "VEC3"),
+                "uv": make_accessor(uv_view, geo["vertex_count"], 5126, "VEC2"),
+                "indices": make_accessor(idx_view, geo["index_count"], 5125, "SCALAR"),
+            }
+        )
 
-        vv = make_buffer_view(vo, vl, 34962)  # ARRAY_BUFFER
-        nv = make_buffer_view(no, nl, 34962)
-        uv = make_buffer_view(uo, ul, 34962)
-        iv = make_buffer_view(idx_off, idx_len, 34963)  # ELEMENT_ARRAY_BUFFER
+    images: list[dict[str, Any]] = []
+    textures: list[dict[str, Any]] = []
 
-        va = make_accessor(vv, geo["vertex_count"], 5126, "VEC3", geo["min"], geo["max"])
-        na = make_accessor(nv, geo["vertex_count"], 5126, "VEC3", None, None)
-        ua = make_accessor(uv, geo["vertex_count"], 5126, "VEC2", None, None)
-        ia = make_accessor(iv, geo["index_count"], 5125, "SCALAR", None, None)
+    for image in (base_texture, overlay_texture):
+        image_bytes_io = io.BytesIO()
+        image.save(image_bytes_io, format="PNG", optimize=True)
+        png_bytes = image_bytes_io.getvalue()
+        print(f"  Embedded PNG: {len(png_bytes) / 1024 / 1024:.1f} MB")
 
-        mesh_data.append({
-            "name": geo["name"],
-            "position_accessor": va,
-            "normal_accessor": na,
-            "texcoord_accessor": ua,
-            "index_accessor": ia,
-        })
-
-    # ── Embed texture PNG ──
-    tex_bytes_io = io.BytesIO()
-    texture_img.save(tex_bytes_io, format="PNG", optimize=True)
-    tex_bytes = tex_bytes_io.getvalue()
-    print(f"  Texture PNG size: {len(tex_bytes) / 1024 / 1024:.1f} MB")
-
-    # Pad texture to 4-byte alignment
-    tex_offset = sum(len(b) for b in buffers_parts)
-    if tex_offset % 4:
-        buffers_parts.append(b'\x00' * (4 - tex_offset % 4))
-        tex_offset = sum(len(b) for b in buffers_parts)
-
-    buffers_parts.append(tex_bytes)
-    tex_length = len(tex_bytes)
-
-    # Create buffer view for texture
-    tex_bv_idx = len(buffer_view_list)
-    buffer_view_list.append({"buffer": 0, "byteOffset": tex_offset, "byteLength": tex_length})
-
-    # ── Build JSON ──
-    # Images
-    image_idx = 0
-    images = [{"bufferView": tex_bv_idx, "mimeType": "image/png"}]
-
-    # Textures
-    texture_idx = 0
-    textures = [{"sampler": 0, "source": image_idx}]
-
-    # Samplers
-    samplers = [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}]
-
-    # Materials
-    # Earth material (opaque, textured)
-    earth_material_idx = 0
-    # Atmosphere material (transparent blue, no texture)
-    atmosphere_material_idx = 1
-    # Axis/Stand material (dark gray metallic)
-    stand_material_idx = 2
+        offset, length = append_aligned(png_bytes)
+        view_idx = make_buffer_view(offset, length)
+        images.append({"bufferView": view_idx, "mimeType": "image/png"})
+        textures.append({"sampler": 0, "source": len(images) - 1})
 
     materials = [
-        {  # Earth
+        {
+            "name": "Earth_Surface",
             "pbrMetallicRoughness": {
-                "baseColorTexture": {"index": texture_idx},
+                "baseColorTexture": {"index": 0},
+                "metallicFactor": 0.0,
+                "roughnessFactor": 0.9,
+            },
+            "doubleSided": False,
+        },
+        {
+            "name": "Political_Overlay_CN",
+            "pbrMetallicRoughness": {
+                "baseColorTexture": {"index": 1},
+                "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
                 "metallicFactor": 0.0,
                 "roughnessFactor": 0.85,
             },
-            "name": "Earth_Surface",
-            "doubleSided": False,
-        },
-        {  # Atmosphere
-            "pbrMetallicRoughness": {
-                "baseColorFactor": [0.53, 0.81, 0.98, 0.15],
-                "metallicFactor": 0.0,
-                "roughnessFactor": 0.3,
-            },
-            "name": "Atmosphere",
             "alphaMode": "BLEND",
             "doubleSided": False,
         },
-        {  # Stand
+        {
+            "name": "Atmosphere",
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.25, 0.28, 0.32, 1.0],
-                "metallicFactor": 0.6,
-                "roughnessFactor": 0.3,
+                "baseColorFactor": [0.45, 0.75, 1.0, 0.18],
+                "metallicFactor": 0.0,
+                "roughnessFactor": 0.2,
             },
+            "alphaMode": "BLEND",
+            "doubleSided": False,
+        },
+        {
             "name": "Stand_Material",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.22, 0.24, 0.27, 1.0],
+                "metallicFactor": 0.65,
+                "roughnessFactor": 0.32,
+            },
             "doubleSided": False,
         },
     ]
 
-    # Meshes
     meshes = []
-    for i, md in enumerate(mesh_data):
-        mat_idx = 0  # default: Earth
-        if "Atmosphere" in md["name"]:
-            mat_idx = atmosphere_material_idx
-        elif md["name"] not in ("Earth_Surface",):
-            mat_idx = stand_material_idx
+    for record in mesh_records:
+        meshes.append(
+            {
+                "name": record["name"],
+                "primitives": [
+                    {
+                        "attributes": {
+                            "POSITION": record["position"],
+                            "NORMAL": record["normal"],
+                            "TEXCOORD_0": record["uv"],
+                        },
+                        "indices": record["indices"],
+                        "material": record["material"],
+                    }
+                ],
+            }
+        )
 
-        prim = {
-            "attributes": {
-                "POSITION": md["position_accessor"],
-                "NORMAL": md["normal_accessor"],
-                "TEXCOORD_0": md["texcoord_accessor"],
-            },
-            "indices": md["index_accessor"],
-            "material": mat_idx,
-        }
-        meshes.append({"name": md["name"], "primitives": [prim]})
+    mesh_index = {record["name"]: index for index, record in enumerate(mesh_records)}
 
-    # Nodes — build the hierarchy
-    nodes = []
-
-    # Earth node
-    earth_node_idx = len(nodes)
-    nodes.append({
-        "name": "Earth_Surface",
-        "mesh": 0,  # earth_geo
-    })
-
-    # Atmosphere node (same position as Earth, no rotation)
-    atmo_node_idx = len(nodes)
-    nodes.append({
-        "name": "Atmosphere",
-        "mesh": 1,  # atmosphere_geo
-    })
-
-    # Earth group (Earth + Atmosphere together)
-    earth_group_idx = len(nodes)
-    nodes.append({
-        "name": "Earth_Group",
-        "children": [earth_node_idx, atmo_node_idx],
-    })
-
-    # Axis tilt quaternion: rotate 23.5° around Z axis
     half_angle = math.radians(AXIS_TILT_DEG) / 2.0
     qz = math.sin(half_angle)
     qw = math.cos(half_angle)
 
-    # The axis line itself — a thin marker line that is NOT tilted
-    # (it shows the rotation axis visually)
-    axis_node_idx = len(nodes)
-    nodes.append({
-        "name": "Axis_23_5",
-        "mesh": 2,  # axis_geo (tilted together with Earth)
-    })
+    nodes: list[dict[str, Any]] = []
 
-    # Tilted group — Earth + Atmosphere + Axis all tilted together
-    tilted_group_idx = len(nodes)
-    nodes.append({
-        "name": "Tilted_Group",
-        "rotation": [0, 0, qz, qw],  # quaternion [x, y, z, w]
-        "children": [earth_group_idx, axis_node_idx],
-    })
+    def mesh_node(name: str) -> int:
+        nodes.append({"name": name, "mesh": mesh_index[name]})
+        return len(nodes) - 1
 
-    # Stand nodes — children of root, alongside the tilted group
-    stand_indices = []
-    for si, sg in enumerate(stand_geos):
-        mesh_idx_base = 3 + si  # meshes 3, 4, 5 for stand parts
-        stand_node_idx = len(nodes)
-        nodes.append({
-            "name": sg["name"],
-            "mesh": mesh_idx_base,
-        })
-        stand_indices.append(stand_node_idx)
+    earth_node = mesh_node("Earth_Surface")
+    overlay_node = mesh_node("Political_Overlay_CN")
+    atmosphere_node = mesh_node("Atmosphere")
+    nodes.append({"name": "Earth_Group", "children": [earth_node, overlay_node, atmosphere_node]})
+    earth_group = len(nodes) - 1
 
-    # Scene root: tilted group + stand parts
-    scene_nodes = [tilted_group_idx] + stand_indices
+    tilted_children = [
+        earth_group,
+        mesh_node("Axis_23_5"),
+        mesh_node("Meridian_Ring"),
+        mesh_node("Axis_NorthHub"),
+        mesh_node("Axis_SouthHub"),
+    ]
+    nodes.append(
+        {
+            "name": "Tilted_Globe_23_5",
+            "rotation": [0.0, 0.0, qz, qw],
+            "children": tilted_children,
+        }
+    )
+    tilted_group = len(nodes) - 1
 
-    # ── Assemble JSON ──
+    stand_children = [
+        mesh_node("Stand_Base"),
+        mesh_node("Stand_Post"),
+        mesh_node("Stand_SupportArm"),
+    ]
+    nodes.append({"name": "Stand", "children": stand_children})
+    stand_group = len(nodes) - 1
+
     gltf_json = {
-        "asset": {"version": "2.0", "generator": "earth-glb-generator"},
+        "asset": {"version": "2.0", "generator": "earth-political-glb-generator"},
         "scene": 0,
-        "scenes": [{"name": "PoliticalGlobe", "nodes": scene_nodes}],
+        "scenes": [{"name": "PoliticalGlobe", "nodes": [tilted_group, stand_group]}],
         "nodes": nodes,
         "meshes": meshes,
         "materials": materials,
         "textures": textures,
         "images": images,
-        "samplers": samplers,
-        "accessors": accessor_list,
-        "bufferViews": buffer_view_list,
-        "buffers": [{"byteLength": sum(len(b) for b in buffers_parts)}],
+        "samplers": [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}],
+        "accessors": accessors,
+        "bufferViews": buffer_views,
+        "buffers": [{"byteLength": current_offset()}],
     }
 
-    json_str = json.dumps(gltf_json, separators=(",", ":"), ensure_ascii=False)
-    # Pad JSON with spaces to 4-byte alignment
-    while len(json_str) % 4 != 0:
-        json_str += " "
-    json_bytes = json_str.encode("utf-8")
+    json_bytes = json.dumps(gltf_json, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    if len(json_bytes) % 4:
+        json_bytes += b" " * (4 - len(json_bytes) % 4)
 
-    # ── Assemble GLB binary ──
-    # Pad JSON chunk body to 4-byte boundary
-    json_body_padded = json_bytes
-    if len(json_body_padded) % 4:
-        json_body_padded += b' ' * (4 - len(json_body_padded) % 4)
-
-    # Combine all binary buffers
-    bin_body = b''.join(buffers_parts)
+    bin_body = b"".join(buffer_parts)
     if len(bin_body) % 4:
-        bin_body += b'\x00' * (4 - len(bin_body) % 4)
+        bin_body += b"\x00" * (4 - len(bin_body) % 4)
 
-    # GLB header
-    total_length = 12  # header
-    total_length += 8 + len(json_body_padded)  # JSON chunk
-    total_length += 8 + len(bin_body)  # BIN chunk
-
-    header = struct.pack('<I', 0x46546C67)  # magic "glTF"
-    header += struct.pack('<I', 2)           # version
-    header += struct.pack('<I', total_length)
-
-    # JSON chunk
-    json_chunk = struct.pack('<I', len(json_body_padded))
-    json_chunk += struct.pack('<I', 0x4E4F534A)  # "JSON"
-    json_chunk += json_body_padded
-
-    # BIN chunk
-    bin_chunk = struct.pack('<I', len(bin_body))
-    bin_chunk += struct.pack('<I', 0x004E4942)  # "BIN\0"
-    bin_chunk += bin_body
-
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(bin_body)
+    header = struct.pack("<III", 0x46546C67, 2, total_length)
+    json_chunk = struct.pack("<II", len(json_bytes), 0x4E4F534A) + json_bytes
+    bin_chunk = struct.pack("<II", len(bin_body), 0x004E4942) + bin_body
     glb_data = header + json_chunk + bin_chunk
 
     print(f"  GLB total size: {len(glb_data) / 1024 / 1024:.1f} MB")
-    print(f"  JSON chunk: {len(json_body_padded) / 1024:.1f} KB")
+    print(f"  JSON chunk: {len(json_bytes) / 1024:.1f} KB")
     print(f"  BIN chunk: {len(bin_body) / 1024 / 1024:.1f} MB")
-
     return glb_data
 
 
-# ── Main ──────────────────────────────────────────────────────
-def main():
-    print("=" * 60)
+def attach_material(geo: dict[str, Any], material: int) -> dict[str, Any]:
+    geo = dict(geo)
+    geo["material"] = material
+    return geo
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    print("=" * 72)
     print("Earth Political Globe GLB Generator")
-    print("=" * 60)
+    print("=" * 72)
 
-    # 1. Generate texture
-    texture = generate_earth_texture()
+    base_texture, overlay_texture = generate_earth_textures()
 
-    # 2. Create geometry
     print("\nCreating 3D geometry...")
     earth_geo = create_uv_sphere(EARTH_RADIUS, LAT_SEGMENTS, LON_SEGMENTS, "Earth_Surface")
-    print(f"  Earth sphere: {earth_geo['vertex_count']} verts, {earth_geo['index_count']} indices")
+    overlay_geo = create_uv_sphere(OVERLAY_RADIUS, LAT_SEGMENTS, LON_SEGMENTS, "Political_Overlay_CN")
+    atmosphere_geo = create_uv_sphere(ATMOSPHERE_RADIUS, 72, 144, "Atmosphere")
 
-    atmosphere_geo = create_uv_sphere(ATMOSPHERE_RADIUS, 60, 120, "Atmosphere")
-    print(f"  Atmosphere sphere: {atmosphere_geo['vertex_count']} verts")
+    axis_geo = create_cylinder(0.018, 0.018, 2.42, 20, "Axis_23_5")
+    meridian_ring = create_meridian_ring(1.09, 0.014, 192, 10, "Meridian_Ring")
 
-    # Axis: thin cylinder through Earth center
-    axis_length = EARTH_RADIUS * 2.6  # extend beyond poles
-    axis_geo = create_cylinder(0.02, 0.02, axis_length, 12, "Axis_23_5")
-    # Center the axis vertically
-    axis_geo["vertices"] = axis_geo["vertices"]  # already centered at origin
-    print(f"  Axis: {axis_geo['vertex_count']} verts")
+    north_hub = translate_geometry(create_uv_sphere(0.055, 16, 32, "Axis_NorthHub", 0.0), (0.0, 1.21, 0.0))
+    south_hub = translate_geometry(create_uv_sphere(0.055, 16, 32, "Axis_SouthHub", 0.0), (0.0, -1.21, 0.0))
 
-    # Stand: base disc + post
-    stand_parts = []
-    base_disc = create_disc(0.3, 32, y_position=-1.15, name="Stand_Base")
-    stand_parts.append(base_disc)
+    south_axis_world = rotate_z((0.0, -1.21, 0.0), AXIS_TILT_DEG)
+    base_center_x = 0.28
+    base_y = -1.57
+    base = translate_geometry(create_cylinder(0.56, 0.50, 0.12, 64, "Stand_Base"), (base_center_x, base_y, 0.0))
+    post = create_cylinder_between((base_center_x, base_y + 0.06, 0.0), (south_axis_world[0], -1.22, 0.0), 0.036, 20, "Stand_Post")
+    support = create_cylinder_between((south_axis_world[0], -1.22, 0.0), south_axis_world, 0.042, 20, "Stand_SupportArm")
 
-    # Base cylinder
-    base_cyl = create_cylinder(0.28, 0.25, 0.12, 32, "Stand_BaseRing")
-    base_cyl["vertices"][:, 1] -= 1.09  # shift down
-    stand_parts.append(base_cyl)
+    geometries = [
+        attach_material(earth_geo, 0),
+        attach_material(overlay_geo, 1),
+        attach_material(atmosphere_geo, 2),
+        attach_material(axis_geo, 3),
+        attach_material(meridian_ring, 3),
+        attach_material(north_hub, 3),
+        attach_material(south_hub, 3),
+        attach_material(base, 3),
+        attach_material(post, 3),
+        attach_material(support, 3),
+    ]
 
-    # Post
-    post = create_cylinder(0.04, 0.04, 0.45, 16, "Stand_Post")
-    post["vertices"][:, 1] -= 0.9  # shift down
-    stand_parts.append(post)
+    for geo in geometries:
+        print(f"  {geo['name']}: {geo['vertex_count']} verts, {geo['index_count']} indices")
 
-    for sp in stand_parts:
-        sp_name = sp["name"]
-        print(f"  {sp_name}: {sp['vertex_count']} verts")
+    glb_data = build_glb(base_texture, overlay_texture, geometries)
 
-    # 3. Build GLB
-    print("")
-    glb_data = build_glb(earth_geo, atmosphere_geo, axis_geo, stand_parts, texture)
-
-    # 4. Write output
     output_dir = os.path.dirname(OUTPUT_PATH)
     os.makedirs(output_dir, exist_ok=True)
     with open(OUTPUT_PATH, "wb") as f:
         f.write(glb_data)
 
-    file_size_mb = len(glb_data) / 1024 / 1024
-    print(f"\n[OK] Written: {OUTPUT_PATH}")
-    print(f"  File size: {file_size_mb:.1f} MB")
-    print("Done!")
+    print(f"\n[OK] Written: {os.path.abspath(OUTPUT_PATH)}")
+    print(f"  File size: {len(glb_data) / 1024 / 1024:.1f} MB")
+    print("Done.")
 
 
 if __name__ == "__main__":

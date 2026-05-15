@@ -8,6 +8,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { ControlRefs, ModelType } from '../types';
+import { ProceduralEarthLayers } from './ProceduralEarth';
+import { ProceduralTerrain } from './ProceduralTerrain';
 
 // Fix for TypeScript errors regarding R3F intrinsic elements and missing HTML elements
 declare global {
@@ -35,6 +37,8 @@ interface ModelViewerProps {
 
 const TABLE_TOP_Y = 0.03;
 const MODEL_TARGET_SIZE = 1.5;
+const EARTH_LAYERS_TARGET_SIZE = 3.8;
+const EARTH_POLITICAL_TARGET_SIZE = 3.5;
 
 type GrabbablePart = THREE.Object3D;
 
@@ -99,7 +103,7 @@ const isDescendantOf = (object: THREE.Object3D, ancestor: THREE.Object3D): boole
   return false;
 };
 
-const configureModel = (root: THREE.Object3D) => {
+const configureModel = (root: THREE.Object3D, targetSize = MODEL_TARGET_SIZE) => {
   root.scale.set(1, 1, 1);
   root.position.set(0, 0, 0);
 
@@ -108,7 +112,7 @@ const configureModel = (root: THREE.Object3D) => {
   const maxDim = Math.max(size.x, size.y, size.z);
 
   if (maxDim > 0 && Number.isFinite(maxDim)) {
-    root.scale.setScalar(MODEL_TARGET_SIZE / maxDim);
+    root.scale.setScalar(targetSize / maxDim);
   }
 
   box = new THREE.Box3().setFromObject(root);
@@ -124,6 +128,16 @@ const configureModel = (root: THREE.Object3D) => {
       materials.forEach((material: any) => {
         if (material) {
           material.envMapIntensity = 1.2;
+          material.side = THREE.DoubleSide;
+          // Ensure solid rendering: force depth writes and disable transparency
+          // for base earth surfaces so the globe appears solid, not see-through.
+          material.depthWrite = true;
+          if (material.transparent && material.opacity !== undefined && material.opacity < 0.9) {
+            // Keep atmosphere glow transparent, but boost its base color for visibility
+            if (material.opacity < 0.5) {
+              material.opacity = Math.max(material.opacity, 0.25);
+            }
+          }
         }
       });
     }
@@ -237,7 +251,13 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     const handleLoadedModel = (root: THREE.Object3D) => {
       if (disposed) return;
 
-      configureModel(root);
+      const lowerUrl = url.toLowerCase();
+      const isEarthLayers = lowerUrl.includes('earth-layers');
+      const isEarthPolitical = lowerUrl.includes('earth-political') || lowerUrl.includes('earth_political');
+      let targetSize = MODEL_TARGET_SIZE;
+      if (isEarthLayers) targetSize = EARTH_LAYERS_TARGET_SIZE;
+      else if (isEarthPolitical) targetSize = EARTH_POLITICAL_TARGET_SIZE;
+      configureModel(root, targetSize);
 
       const parts = findLayerRoots(root);
       parts.forEach((part) => {
@@ -726,9 +746,21 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
+  const [showLabels, setShowLabels] = useState(true);
 
   return (
-    <div className="w-full h-full bg-[#fcfcfd]">
+    <div className="w-full h-full bg-[#fcfcfd] relative">
+      {(modelUrl.toLowerCase().includes('earth-layers') || modelUrl.toLowerCase().includes('terrain-topography')) && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50">
+          <button
+            onClick={() => setShowLabels(!showLabels)}
+            className="px-5 py-2.5 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg border border-gray-200/50 text-xs font-black tracking-widest uppercase text-gray-600 hover:text-[#86e3ce] hover:border-[#86e3ce]/50 transition-all flex items-center gap-2"
+          >
+            <div className={`w-2 h-2 rounded-full ${showLabels ? 'bg-[#86e3ce] shadow-[0_0_8px_#86e3ce]' : 'bg-gray-300'}`}></div>
+            {showLabels ? '关闭教学辅导标签' : '开启教学辅导标签'}
+          </button>
+        </div>
+      )}
       <Canvas
         shadows
         dpr={[1, 2]}
@@ -766,13 +798,19 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           <fog attach="fog" args={['#f0f4f8', 15, 35]} />
 
           {/* ---- Workbench (table) ---- */}
-          <Workbench />
+          {!(modelUrl.toLowerCase().includes('earth-layers') || modelUrl.toLowerCase().includes('terrain-topography')) && <Workbench />}
 
           {/* ---- Grid Floor ---- */}
           <GridFloor />
 
           {/* ---- Uploaded Model ---- */}
-          <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} />
+          {modelUrl.toLowerCase().includes('earth-layers') ? (
+            <ProceduralEarthLayers controlRef={controlRef} showLabels={showLabels} />
+          ) : modelUrl.toLowerCase().includes('terrain-topography') ? (
+            <ProceduralTerrain controlRef={controlRef} showLabels={showLabels} />
+          ) : (
+            <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} />
+          )}
 
           {/* 3D虚拟手骨架可视化 */}
           <VirtualHand controlRef={controlRef} />
