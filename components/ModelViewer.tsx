@@ -28,6 +28,8 @@ declare global {
   }
 }
 
+type CameraTarget = [number, number, number];
+
 interface ModelViewerProps {
   modelUrl: string;
   modelType: ModelType;
@@ -41,6 +43,8 @@ const EARTH_LAYERS_TARGET_SIZE = 3.8;
 const EARTH_POLITICAL_TARGET_SIZE = 3.5;
 
 type GrabbablePart = THREE.Object3D;
+
+const vectorFromTarget = (target: CameraTarget) => new THREE.Vector3(target[0], target[1], target[2]);
 
 const isMeshObject = (object: THREE.Object3D): object is THREE.Mesh => {
   return Boolean((object as THREE.Mesh).isMesh);
@@ -200,11 +204,12 @@ const LocalEnvironment: React.FC = () => {
 };
 
 // Unified model component. FBX / GLB / GLTF all use the same layer-based disassembly path.
-const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs> }> = ({ url, modelType, assetUrls, controlRef }) => {
+const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget }> = ({ url, modelType, assetUrls, controlRef, cameraTarget }) => {
   const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
   const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
   const groupRef = useRef<THREE.Group>(null);
   const { camera, raycaster, scene } = useThree();
+  const orbitTarget = useMemo(() => vectorFromTarget(cameraTarget), [cameraTarget]);
 
   // ========== 一比一复刻第一版变量 ==========
   const isGrabbingRef = useRef(false);
@@ -233,6 +238,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   // Persistent spherical coords for smooth camera orbit (avoids zoom+rotation conflict)
   const sphericalRef = useRef<THREE.Spherical | null>(null);
   const cameraInitialized = useRef(false);
+  const wasCameraGestureActiveRef = useRef(false);
 
   // Load model and detect whether the file contains detachable internal layers.
   useEffect(() => {
@@ -247,6 +253,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     grabbedPartRef.current = null;
     isGrabbingRef.current = false;
     cameraInitialized.current = false;
+    wasCameraGestureActiveRef.current = false;
 
     const handleLoadedModel = (root: THREE.Object3D) => {
       if (disposed) return;
@@ -396,9 +403,13 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     const { rotationVelocity, zoomSpeed, handLandmarks } = controlRef.current;
 
-    // Initialize spherical coords from camera on first frame
-    if (!cameraInitialized.current) {
-      const offset = new THREE.Vector3().subVectors(camera.position, new THREE.Vector3(0, 0, 0));
+    const hasCameraGestureInput =
+      Math.abs(rotationVelocity.x) > 0.0001 ||
+      Math.abs(rotationVelocity.y) > 0.0001 ||
+      zoomSpeed !== 0;
+
+    const offset = new THREE.Vector3().subVectors(camera.position, orbitTarget);
+    if (!cameraInitialized.current || !wasCameraGestureActiveRef.current) {
       sphericalRef.current = new THREE.Spherical().setFromVector3(offset);
       cameraInitialized.current = true;
     }
@@ -406,7 +417,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     const sph = sphericalRef.current!;
 
     // 旋转 — modify angles on persistent spherical
-    if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001) {
+    if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
       const sensitivity = 5.0;
       sph.theta -= rotationVelocity.y * sensitivity;
       sph.phi -= rotationVelocity.x * sensitivity;
@@ -415,15 +426,18 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     }
 
     // 缩放 — modify radius on persistent spherical (no conflict with rotation)
-    if (zoomSpeed !== 0) {
+    if (hasCameraGestureInput && zoomSpeed !== 0) {
       sph.radius = Math.max(2, Math.min(15, sph.radius - zoomSpeed * 0.15));
     }
 
     // Apply spherical to camera
-    if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001 || zoomSpeed !== 0) {
-      camera.position.setFromSpherical(sph);
-      camera.lookAt(0, 0, 0);
+    if (hasCameraGestureInput) {
+      camera.position.setFromSpherical(sph).add(orbitTarget);
+      camera.lookAt(orbitTarget);
+    } else {
+      sphericalRef.current.setFromVector3(offset);
     }
+    wasCameraGestureActiveRef.current = hasCameraGestureInput;
 
     // ========== 一比一复刻第一版手部交互 ==========
     const rightLandmarks = handLandmarks?.right;
@@ -747,10 +761,16 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
 const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const [showLabels, setShowLabels] = useState(true);
+  const lowerModelUrl = modelUrl.toLowerCase();
+  const cameraTarget = useMemo<CameraTarget>(() => {
+    if (lowerModelUrl.includes('earth-layers')) return [0, 1.0, 0];
+    if (lowerModelUrl.includes('terrain-topography')) return [0, 0.5, 0];
+    return [0, 0.3, 0];
+  }, [lowerModelUrl]);
 
   return (
     <div className="w-full h-full bg-[#fcfcfd] relative">
-      {(modelUrl.toLowerCase().includes('earth-layers') || modelUrl.toLowerCase().includes('terrain-topography')) && (
+      {(lowerModelUrl.includes('earth-layers') || lowerModelUrl.includes('terrain-topography')) && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50">
           <button
             onClick={() => setShowLabels(!showLabels)}
@@ -798,18 +818,18 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           <fog attach="fog" args={['#f0f4f8', 15, 35]} />
 
           {/* ---- Workbench (table) ---- */}
-          {!(modelUrl.toLowerCase().includes('earth-layers') || modelUrl.toLowerCase().includes('terrain-topography')) && <Workbench />}
+          {!(lowerModelUrl.includes('earth-layers') || lowerModelUrl.includes('terrain-topography')) && <Workbench />}
 
           {/* ---- Grid Floor ---- */}
           <GridFloor />
 
           {/* ---- Uploaded Model ---- */}
-          {modelUrl.toLowerCase().includes('earth-layers') ? (
-            <ProceduralEarthLayers controlRef={controlRef} showLabels={showLabels} />
-          ) : modelUrl.toLowerCase().includes('terrain-topography') ? (
-            <ProceduralTerrain controlRef={controlRef} showLabels={showLabels} />
+          {lowerModelUrl.includes('earth-layers') ? (
+            <ProceduralEarthLayers controlRef={controlRef} showLabels={showLabels} cameraTarget={cameraTarget} />
+          ) : lowerModelUrl.includes('terrain-topography') ? (
+            <ProceduralTerrain controlRef={controlRef} showLabels={showLabels} cameraTarget={cameraTarget} />
           ) : (
-            <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} />
+            <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} cameraTarget={cameraTarget} />
           )}
 
           {/* 3D虚拟手骨架可视化 */}
@@ -828,7 +848,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           {/* ---- Camera controls ---- */}
           <OrbitControls
             makeDefault
-            target={[0, 0.3, 0]}
+            target={cameraTarget}
             enablePan={false}
             enableZoom={true}
             minPolarAngle={Math.PI / 6}

@@ -1,24 +1,23 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { GestureType, MoveDirection, ControlRefs } from './types';
+import { GestureType, MoveDirection, ControlRefs, InteractionMode } from './types';
 import { ProcessingOverlay } from './components/UIComponents';
 import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
-import OpenGlobusEarth from './components/OpenGlobusEarth';
 import VoiceController from './components/VoiceController';
-import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Layers, Mountain, Maximize2, Minimize2, FlaskConical, Heart } from 'lucide-react';
+import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart } from 'lucide-react';
 import { ModelType } from './types';
 
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
 const BIODIGITAL_HEART_URL = 'https://human.biodigital.com/view?id=7F0a&lang=zh&ref=share';
 const BUILT_IN_MODELS = {
-  heart: '/models/human-heart.glb',
+  heart: '/models/心脏模型.glb',
   hiv: '/models/hiv-virus.glb',
   diamond: '/models/diamond.glb',
 } as const;
-type ActiveContent = 'model' | 'biodigital' | 'openglobus';
+type ActiveContent = 'model' | 'biodigital';
 
 const RECONSTRUCTION_STEPS = [
   "正在提取教具视觉特征...",
@@ -36,6 +35,7 @@ const App: React.FC = () => {
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [cameraActive, setCameraActive] = useState(false);
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('dual');
   const [activeContent, setActiveContent] = useState<ActiveContent>('model');
   const [isStageFullscreen, setIsStageFullscreen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -100,14 +100,6 @@ const App: React.FC = () => {
     setCameraActive(false);
     resetControls();
     setAiAnalysis('正在加载心脏模型2：URL 交互展示页面。');
-  };
-
-  const showOpenGlobusStage = () => {
-    setActiveContent('openglobus');
-    setIsVideoMode(false);
-    setCameraActive(false);
-    resetControls();
-    setAiAnalysis('高清卫星地球已开启：基于 ESRI 卫星影像 + OpenStreetMap 数据，支持手势旋转缩放。');
   };
 
   const clearLocalModel = () => {
@@ -256,6 +248,16 @@ const App: React.FC = () => {
     });
   }, [videoUrl]);
 
+  const handleInteractionModeChange = (mode: InteractionMode) => {
+    setInteractionMode(mode);
+    setIsVideoMode(false);
+    resetControls();
+    setAiAnalysis(mode === 'dual'
+      ? '已切换为双手模式：左手缩放，右手旋转/拖拽，双手接触播放视频。'
+      : '已切换为单手模式：张开放大，握拳缩小，食指和中指并拢滑动旋转。'
+    );
+  };
+
   // Video playback effect
   useEffect(() => {
     if (videoRef.current) {
@@ -365,10 +367,10 @@ const App: React.FC = () => {
                 <div className="h-px w-6 bg-white/40" />
                 <button
                   type="button"
-                  onClick={showOpenGlobusStage}
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition hover:bg-emerald-50/60 ${activeContent === 'openglobus' ? 'bg-white/80 text-emerald-600 shadow-sm' : 'text-emerald-500'}`}
+                  onClick={() => { showModelStage(); loadDemoModel('/models/earth-political.glb', '国家标注教学地球仪', 'glb'); setCameraActive(true); }}
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition hover:bg-emerald-50/60 ${modelUrl === '/models/earth-political.glb' ? 'bg-white/80 text-emerald-600 shadow-sm' : 'text-emerald-500'}`}
                   aria-label="地理"
-                  title="地理 · 卫星地球/地球仪/地质构造/地形地貌"
+                  title="地理 · 国家标注地球仪/地球内部结构/地形地貌"
                 >
                   <Globe size={19} />
                 </button>
@@ -522,45 +524,15 @@ const App: React.FC = () => {
                       <ChevronDown size={13} className={`text-emerald-300 transition-transform duration-200 ${expandedCategories.has('地理') ? 'rotate-180' : ''}`} />
                     </button>
                     {expandedCategories.has('地理') && (
-                      <div className="px-2 pb-2 space-y-2.5">
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1 pl-1">
-                            <Globe size={11} className="text-emerald-500" />
-                            <span className="text-[10px] font-black text-emerald-500/70 uppercase tracking-wider">地球仪</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-political.glb', '地理政区地球仪', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-political.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-political.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>政区地球仪
-                            </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>分层结构地球仪
-                            </div>
-                            <div onClick={showOpenGlobusStage} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${activeContent === 'openglobus' ? 'bg-sky-100/60 text-sky-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${activeContent === 'openglobus' ? 'bg-sky-500 animate-pulse' : 'bg-sky-300'}`}></span>高清卫星地球
-                            </div>
-                          </div>
+                      <div className="px-2 pb-2 space-y-0.5">
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-political.glb', '国家标注教学地球仪', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-political.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-political.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>国家标注地球仪
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1 pl-1">
-                            <Layers size={11} className="text-orange-400" />
-                            <span className="text-[10px] font-black text-orange-400/70 uppercase tracking-wider">地质构造</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-orange-300'}`}></span>地球内部圈层
-                            </div>
-                          </div>
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>地球内部结构
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1 pl-1">
-                            <Mountain size={11} className="text-amber-500" />
-                            <span className="text-[10px] font-black text-amber-500/70 uppercase tracking-wider">地形地貌</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-300'}`}></span>地形地貌总览
-                            </div>
-                          </div>
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-300'}`}></span>地形地貌总览
                         </div>
                       </div>
                     )}
@@ -572,6 +544,75 @@ const App: React.FC = () => {
                 <h3 className="font-black text-xs text-gray-400 uppercase tracking-[0.2em] mb-4 border-l-4 border-pink-300 pl-3">全息指令表</h3>
                 <div className="space-y-4">
                   <div className="p-4 rounded-2xl bg-white/40 border border-white/50 space-y-3">
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => handleInteractionModeChange('dual')}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'text-gray-400 hover:bg-white/60'}`}
+                      >
+                        <Move3d size={13} /> 双手模式
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInteractionModeChange('single')}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-[#86e3ce]/25 text-emerald-600 shadow-sm' : 'text-gray-400 hover:bg-white/60'}`}
+                      >
+                        <Hand size={13} /> 单手模式
+                      </button>
+                    </div>
+
+                    {interactionMode === 'dual' ? (
+                      <>
+                        <div className="flex items-center gap-2 pb-2 border-b border-white/30">
+                          <div className="p-1.5 bg-indigo-100 rounded-lg"><Move3d size={14} className="text-indigo-400" /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-500 uppercase">双手接触</span>
+                            <span className="text-[9px] text-indigo-500 font-bold">保持接触 → 视频展示</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-500 uppercase">左手缩放</span>
+                            <span className="text-[9px] text-gray-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-500 uppercase">右手交互</span>
+                            <span className="text-[9px] text-purple-400 font-bold">捏合 → 拖拽零件</span>
+                            <span className="text-[9px] text-gray-400 font-bold">食指+中指并拢滑动 → 旋转画面</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 pb-2 border-b border-white/30">
+                          <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-500 uppercase">张开手掌</span>
+                            <span className="text-[9px] text-emerald-500 font-bold">放大画面</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-amber-100 rounded-lg"><Hand size={14} className="text-amber-500" /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-500 uppercase">握拳</span>
+                            <span className="text-[9px] text-gray-400 font-bold">缩小画面</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-500 uppercase">食指+中指并拢</span>
+                            <span className="text-[9px] text-purple-400 font-bold">保持并滑动 → 旋转画面</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="hidden">
 
                     {/* 组合指令 */}
                     <div className="flex items-center gap-2 pb-2 border-b border-white/30">
@@ -597,6 +638,7 @@ const App: React.FC = () => {
                         <span className="text-[9px] text-gray-400 font-bold">双指并拢 (食+中) → 旋转画面</span>
                       </div>
                     </div>
+                  </div>
                   </div>
 
                   <button
@@ -662,7 +704,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {(activeContent === 'model' || activeContent === 'openglobus') && (
+          {activeContent === 'model' && (
             <div className="absolute bottom-6 left-6 z-50">
               <VoiceController
                 controlRef={controlRef}
@@ -672,7 +714,7 @@ const App: React.FC = () => {
           )}
 
           <div className="absolute top-6 right-6 flex gap-2 z-40">
-            {(activeContent === 'model' || activeContent === 'openglobus') && (
+            {activeContent === 'model' && (
               <div className={`px-4 py-2 rounded-xl bg-white/80 backdrop-blur-md text-[10px] font-bold shadow-sm flex items-center gap-2 ${cameraActive ? 'text-emerald-500' : 'text-gray-400'}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${cameraActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></div>
                 {cameraActive ? 'AI 动势追踪' : '手势已关闭'}
@@ -691,9 +733,7 @@ const App: React.FC = () => {
 
           {/* 3D 模型层 */}
           <div className={`w-full h-full transition-opacity duration-300 ${isVideoMode ? 'opacity-0' : 'opacity-100'}`}>
-            {activeContent === 'openglobus' ? (
-              <OpenGlobusEarth controlRef={controlRef} />
-            ) : activeContent === 'biodigital' ? (
+            {activeContent === 'biodigital' ? (
               <BioDigitalViewer src={BIODIGITAL_HEART_URL} onFallback={loadHeartFallbackModel} />
             ) : modelUrl ? (
               <ModelViewer modelUrl={modelUrl} modelType={modelType} assetUrls={modelAssetUrls} controlRef={controlRef} />
@@ -718,9 +758,9 @@ const App: React.FC = () => {
           </div>
 
           {/* 摄像头预览区 */}
-          {(activeContent === 'model' || activeContent === 'openglobus') && cameraActive && (
+          {activeContent === 'model' && cameraActive && (
             <div className="absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-black z-30 transition-all hover:scale-105">
-              <HandController controlRef={controlRef} onStateChange={handleGestureUpdate} />
+              <HandController controlRef={controlRef} onStateChange={handleGestureUpdate} interactionMode={interactionMode} />
               <div className="absolute top-3 left-3 flex items-center gap-2">
                 <div className="bg-[#86e3ce] w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_#86e3ce]"></div>
                 <span className="text-[8px] font-black text-white/70 uppercase tracking-widest">Vision Sensor</span>

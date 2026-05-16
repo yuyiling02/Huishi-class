@@ -7,6 +7,7 @@ import { ControlRefs } from '../types';
 interface ProceduralEarthProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   showLabels?: boolean;
+  cameraTarget?: [number, number, number];
 }
 
 // 教学标签组件：悬浮显示各图层信息
@@ -36,13 +37,15 @@ const LayerLabel = ({ labelPos, title, subtitle, dotColor, visible }: {
   );
 };
 
-export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlRef, showLabels = true }) => {
+export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlRef, showLabels = true, cameraTarget = [0, 1.0, 0] }) => {
   const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
+  const orbitTarget = React.useMemo(() => new THREE.Vector3(cameraTarget[0], cameraTarget[1], cameraTarget[2]), [cameraTarget]);
   
   // Persistent spherical coords for smooth camera orbit
   const sphericalRef = useRef<THREE.Spherical | null>(null);
   const cameraInitialized = useRef(false);
+  const wasCameraGestureActiveRef = useRef(false);
   
   // Load textures using TextureLoader
   const colorMap = useLoader(THREE.TextureLoader, '/textures/earth_atmos_2048.jpg');
@@ -58,15 +61,20 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
     // 2. Camera Controls
     const { rotationVelocity, zoomSpeed } = controlRef.current;
     
-    if (!cameraInitialized.current) {
-      const offset = new THREE.Vector3().subVectors(camera.position, new THREE.Vector3(0, 0, 0));
+    const hasCameraGestureInput =
+      Math.abs(rotationVelocity.x) > 0.0001 ||
+      Math.abs(rotationVelocity.y) > 0.0001 ||
+      zoomSpeed !== 0;
+
+    const offset = new THREE.Vector3().subVectors(camera.position, orbitTarget);
+    if (!cameraInitialized.current || !wasCameraGestureActiveRef.current) {
       sphericalRef.current = new THREE.Spherical().setFromVector3(offset);
       cameraInitialized.current = true;
     }
 
     const sph = sphericalRef.current!;
 
-    if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001) {
+    if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
       const sensitivity = 5.0;
       sph.theta -= rotationVelocity.y * sensitivity;
       sph.phi -= rotationVelocity.x * sensitivity;
@@ -74,14 +82,17 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
       sph.makeSafe();
     }
 
-    if (zoomSpeed !== 0) {
+    if (hasCameraGestureInput && zoomSpeed !== 0) {
       sph.radius = Math.max(2, Math.min(15, sph.radius - zoomSpeed * 0.15));
     }
 
-    if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001 || zoomSpeed !== 0) {
-      camera.position.setFromSpherical(sph);
-      camera.lookAt(0, 0, 0);
+    if (hasCameraGestureInput) {
+      camera.position.setFromSpherical(sph).add(orbitTarget);
+      camera.lookAt(orbitTarget);
+    } else {
+      sphericalRef.current.setFromVector3(offset);
     }
+    wasCameraGestureActiveRef.current = hasCameraGestureInput;
   });
 
   const phiStart = 0;

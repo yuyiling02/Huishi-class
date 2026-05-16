@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FilesetResolver, HandLandmarker, DrawingUtils } from '@mediapipe/tasks-vision';
-import { ControlRefs, GestureType, HandLandmarkPoint, MoveDirection } from '../types';
+import { ControlRefs, GestureType, HandLandmarkPoint, InteractionMode, MoveDirection } from '../types';
 
 interface HandControllerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   onStateChange: (gesture: GestureType, direction: MoveDirection, isDragging: boolean) => void;
+  interactionMode: InteractionMode;
 }
 
 // Simple Low-Pass Filter for smoothing coordinates
@@ -20,7 +21,7 @@ const toUserFacingHandedness = (categoryName: string) => (
   categoryName === 'Left' ? 'Right' : 'Left'
 );
 
-const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChange }) => {
+const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChange, interactionMode }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,17 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
+  const interactionModeRef = useRef(interactionMode);
+  useEffect(() => {
+    interactionModeRef.current = interactionMode;
+    prevRotatePosRef.current = null;
+    smoothRotVelRef.current = { x: 0, y: 0 };
+    smoothZoomRef.current = 0;
+    wasContactingRef.current = false;
+    controlRef.current.rotationVelocity = { x: 0, y: 0 };
+    controlRef.current.zoomSpeed = 0;
+    controlRef.current.isDragging = false;
+  }, [controlRef, interactionMode]);
 
   // Smoothing refs
   const smoothDragPinchRef = useRef({ x: 0.5, y: 0.5 });
@@ -61,15 +73,15 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   const CONTACT_THRESHOLD = 0.12;
 
   // INCREASED SENSITIVITY: 0.15 -> 0.35
-  const ZOOM_SENSITIVITY = 0.35;
+  const ZOOM_SENSITIVITY = 0.12;
 
   // Adjusted for better range of motion
   const DRAG_SCALE_X = 7.0;
   const DRAG_SCALE_Y = 5.5;
-  const ROTATION_SENSITIVITY = 4.6;
+  const ROTATION_SENSITIVITY = 0.8;
 
   const SMOOTHING_FACTOR_ROTATION = 0.28;
-  const ROTATION_DEADZONE = 0.0015;
+  const ROTATION_DEADZONE = 0.008;
   const ROTATION_VEL_SMOOTHING = 0.34;
   const ZOOM_VEL_SMOOTHING = 0.22;
 
@@ -207,6 +219,77 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
           });
         }
 
+        const applySingleHandRotation = (landmarks: any[]) => {
+          const indexTip = landmarks[8];
+          const middleTip = landmarks[12];
+          const fingersDist = getDistance(indexTip, middleTip);
+          const isIndexUp = isFingerExtended(landmarks, 8, 6);
+          const isMiddleUp = isFingerExtended(landmarks, 12, 10);
+
+          const rawFingerCenterX = (indexTip.x + middleTip.x) / 2;
+          const rawFingerCenterY = (indexTip.y + middleTip.y) / 2;
+
+          if (prevRotatePosRef.current) {
+            smoothRotateFingerCenterRef.current.x = lerp(smoothRotateFingerCenterRef.current.x, rawFingerCenterX, SMOOTHING_FACTOR_ROTATION);
+            smoothRotateFingerCenterRef.current.y = lerp(smoothRotateFingerCenterRef.current.y, rawFingerCenterY, SMOOTHING_FACTOR_ROTATION);
+          } else {
+            smoothRotateFingerCenterRef.current.x = rawFingerCenterX;
+            smoothRotateFingerCenterRef.current.y = rawFingerCenterY;
+          }
+
+          if (fingersDist >= FINGER_CONTACT_THRESHOLD || !isIndexUp || !isMiddleUp) {
+            prevRotatePosRef.current = null;
+            return false;
+          }
+
+          newGesture = GestureType.RIGHT_TWO_FINGER_ROTATE;
+
+          if (prevRotatePosRef.current) {
+            const deltaX = smoothRotateFingerCenterRef.current.x - prevRotatePosRef.current.x;
+            const deltaY = smoothRotateFingerCenterRef.current.y - prevRotatePosRef.current.y;
+
+            if (Math.abs(deltaX) > ROTATION_DEADZONE || Math.abs(deltaY) > ROTATION_DEADZONE) {
+              rotVelY = -deltaX * ROTATION_SENSITIVITY;
+              rotVelX = deltaY * ROTATION_SENSITIVITY;
+            }
+          }
+          prevRotatePosRef.current = { ...smoothRotateFingerCenterRef.current };
+          return true;
+        };
+
+        const applySingleHandZoom = (landmarks: any[]) => {
+          const isIndexUp = isFingerExtended(landmarks, 8, 6);
+          const isMiddleUp = isFingerExtended(landmarks, 12, 10);
+          const isRingUp = isFingerExtended(landmarks, 16, 14);
+          const isPinkyUp = isFingerExtended(landmarks, 20, 18);
+
+          if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
+            newGesture = GestureType.ZOOM_IN_PALM;
+            newZoomSpeed = ZOOM_SENSITIVITY;
+            return true;
+          }
+
+          if (!isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
+            newGesture = GestureType.ZOOM_OUT_FIST;
+            newZoomSpeed = -ZOOM_SENSITIVITY;
+            return true;
+          }
+
+          return false;
+        };
+
+        if (interactionModeRef.current === 'single') {
+          wasContactingRef.current = false;
+          const activeHandLandmarks = rightHandLandmarks || leftHandLandmarks;
+
+          if (activeHandLandmarks) {
+            const isRotating = applySingleHandRotation(activeHandLandmarks);
+            if (!isRotating) {
+              applySingleHandZoom(activeHandLandmarks);
+            }
+          }
+        } else {
+
         // 2. DUAL HAND LOGIC: Contact Detection with Hysteresis
         let isContacting = false;
         if (leftHandLandmarks && rightHandLandmarks) {
@@ -312,6 +395,7 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
               newZoomSpeed = -ZOOM_SENSITIVITY;
             }
           }
+        }
         }
       }
 

@@ -7,6 +7,7 @@ export interface HandLandmarkPoint {
 }
 
 export type ModelType = 'glb' | 'gltf' | 'fbx';
+export type InteractionMode = 'dual' | 'single';
 
 export enum GestureType {
   NONE = 'NONE',

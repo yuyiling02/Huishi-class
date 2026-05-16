@@ -28,8 +28,8 @@ from PIL import Image, ImageDraw, ImageFont
 # Configuration
 # ---------------------------------------------------------------------------
 
-TEX_WIDTH = 4096
-TEX_HEIGHT = 2048
+TEX_WIDTH = 8192
+TEX_HEIGHT = 4096
 
 EARTH_RADIUS = 1.0
 OVERLAY_RADIUS = 1.006
@@ -379,12 +379,83 @@ def draw_label(
             )
 
 
-def draw_labels(overlay: Image.Image) -> None:
+def country_label_text(properties: dict[str, Any]) -> str:
+    return (
+        properties.get("NAME_ZH")
+        or properties.get("NAME")
+        or properties.get("ADMIN")
+        or ""
+    ).strip()
+
+
+def country_label_font_size(properties: dict[str, Any], text: str) -> int:
+    pop = float(properties.get("POP_EST") or 0)
+    rank = int(properties.get("LABELRANK") or 6)
+
+    if pop >= 100_000_000 or rank <= 2:
+        size = 48
+    elif pop >= 40_000_000 or rank <= 3:
+        size = 40
+    elif pop >= 10_000_000 or rank <= 4:
+        size = 32
+    elif pop >= 2_000_000 or rank <= 5:
+        size = 26
+    else:
+        size = 21
+
+    if len(text) >= 7:
+        size -= 5
+    elif len(text) >= 5:
+        size -= 3
+    return max(18, size)
+
+
+def draw_country_labels(overlay: Image.Image, countries_geo: dict[str, Any] | None) -> None:
+    if not countries_geo:
+        return
+
+    print("  Adding country labels from Natural Earth...")
+    draw = ImageDraw.Draw(overlay, "RGBA")
+    features = sorted(
+        countries_geo.get("features", []),
+        key=lambda item: (
+            int((item.get("properties") or {}).get("LABELRANK") or 99),
+            -float((item.get("properties") or {}).get("POP_EST") or 0),
+        ),
+    )
+
+    label_count = 0
+    for feature in features:
+        properties = feature.get("properties") or {}
+        text = country_label_text(properties)
+        lon = properties.get("LABEL_X")
+        lat = properties.get("LABEL_Y")
+
+        if not text or lon is None or lat is None:
+            continue
+
+        try:
+            lon_f = float(lon)
+            lat_f = float(lat)
+        except (TypeError, ValueError):
+            continue
+
+        size = country_label_font_size(properties, text)
+        font = load_font(size)
+        stroke_width = 3 if size >= 30 else 2
+        fill = (255, 250, 210, 240) if size >= 30 else (255, 252, 225, 220)
+        stroke = (27, 36, 40, 220) if size >= 30 else (27, 36, 40, 190)
+        draw_label(draw, text, lon_f, lat_f, font, fill, stroke, stroke_width)
+        label_count += 1
+
+    print(f"  Country labels: {label_count}")
+
+
+def draw_labels(overlay: Image.Image, countries_geo: dict[str, Any] | None) -> None:
     print("  Adding Chinese labels...")
     draw = ImageDraw.Draw(overlay, "RGBA")
     continent_font = load_font(58)
     ocean_font = load_font(48)
-    country_font = load_font(34)
     line_font = load_font(26)
 
     continent_labels = [
@@ -409,25 +480,7 @@ def draw_labels(overlay: Image.Image) -> None:
     for text, lon, lat in ocean_labels:
         draw_label(draw, text, lon, lat, ocean_font, (205, 229, 255, 210), (23, 58, 100, 180), 3)
 
-    country_labels = [
-        ("中国", 104, 35),
-        ("俄罗斯", 92, 61),
-        ("美国", -100, 39),
-        ("加拿大", -103, 58),
-        ("巴西", -53, -10),
-        ("阿根廷", -64, -36),
-        ("英国", -2, 54),
-        ("法国", 2, 47),
-        ("德国", 10, 51),
-        ("埃及", 30, 27),
-        ("南非", 24, -29),
-        ("印度", 78, 22),
-        ("日本", 138, 37),
-        ("澳大利亚", 134, -25),
-        ("印度尼西亚", 117, -2),
-    ]
-    for text, lon, lat in country_labels:
-        draw_label(draw, text, lon, lat, country_font, (255, 248, 204, 235), (35, 43, 47, 210), 3)
+    draw_country_labels(overlay, countries_geo)
 
     line_labels = [
         ("北回归线", 153, 23.5),
@@ -485,7 +538,7 @@ def generate_earth_textures() -> tuple[Image.Image, Image.Image]:
     overlay_draw = ImageDraw.Draw(overlay, "RGBA")
     draw_graticule(overlay_draw)
     draw_geo_boundaries(overlay, countries_geo, boundary_geo, coastline_geo)
-    draw_labels(overlay)
+    draw_labels(overlay, countries_geo)
     return base, overlay
 
 
