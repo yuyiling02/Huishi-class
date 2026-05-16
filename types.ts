@@ -32,6 +32,11 @@ export interface ControlState {
   isConnected: boolean;
 }
 
+export interface InteractionSettings {
+  zoomSpeed: number;     // 0.1 - 5.0, default 1.0
+  rotationSpeed: number; // 0.1 - 5.0, default 1.0
+}
+
 // Shared ref object to communicate between React components without re-renders
 export interface ControlRefs {
   rotationVelocity: { x: number; y: number }; // x = pitch (up/down), y = yaw (left/right)
@@ -43,4 +48,5 @@ export interface ControlRefs {
     left: { x: number; y: number; z: number }[] | null;
     right: { x: number; y: number; z: number }[] | null;
   };
+  interactionSettings: InteractionSettings;
 }

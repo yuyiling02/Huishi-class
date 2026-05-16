@@ -75,7 +75,7 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
     const sph = sphericalRef.current!;
 
     if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
-      const sensitivity = 5.0;
+      const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
       sph.theta -= rotationVelocity.y * sensitivity;
       sph.phi -= rotationVelocity.x * sensitivity;
       sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
@@ -83,7 +83,7 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
     }
 
     if (hasCameraGestureInput && zoomSpeed !== 0) {
-      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15);
+      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15 * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
     }
 
     if (hasCameraGestureInput) {

@@ -7,7 +7,7 @@ import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
-import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart } from 'lucide-react';
+import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X } from 'lucide-react';
 import { ModelType } from './types';
 
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
@@ -51,6 +51,11 @@ const App: React.FC = () => {
   const [directionStatus, setDirectionStatus] = useState<MoveDirection>(MoveDirection.CENTER);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Interaction speed settings
+  const [showSettings, setShowSettings] = useState(false);
+  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(1.0);
+  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(1.0);
+
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -60,7 +65,8 @@ const App: React.FC = () => {
     zoomSpeed: 0,
     panPosition: { x: 0, y: 0 },
     isDragging: false,
-    handLandmarks: { left: null, right: null }
+    handLandmarks: { left: null, right: null },
+    interactionSettings: { zoomSpeed: 1.0, rotationSpeed: 1.0 }
   });
 
   const resetControls = () => {
@@ -258,7 +264,13 @@ const App: React.FC = () => {
     );
   };
 
-  // Video playback effect
+  // Sync interaction speed settings to controlRef
+  useEffect(() => {
+    controlRef.current.interactionSettings = {
+      zoomSpeed: zoomSpeedMultiplier,
+      rotationSpeed: rotationSpeedMultiplier,
+    };
+  }, [zoomSpeedMultiplier, rotationSpeedMultiplier]);
   useEffect(() => {
     if (videoRef.current) {
       if (isVideoMode) {
@@ -367,10 +379,10 @@ const App: React.FC = () => {
                 <div className="h-px w-6 bg-white/40" />
                 <button
                   type="button"
-                  onClick={() => { showModelStage(); loadDemoModel('/models/earth-political.glb', '国家标注教学地球仪', 'glb'); setCameraActive(true); }}
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition hover:bg-emerald-50/60 ${modelUrl === '/models/earth-political.glb' ? 'bg-white/80 text-emerald-600 shadow-sm' : 'text-emerald-500'}`}
+                  onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }}
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition hover:bg-emerald-50/60 ${modelUrl === '/models/earth-layers.glb' ? 'bg-white/80 text-emerald-600 shadow-sm' : 'text-emerald-500'}`}
                   aria-label="地理"
-                  title="地理 · 国家标注地球仪/地球内部结构/地形地貌"
+                  title="地理 · 地球内部结构/地形地貌"
                 >
                   <Globe size={19} />
                 </button>
@@ -525,9 +537,6 @@ const App: React.FC = () => {
                     </button>
                     {expandedCategories.has('地理') && (
                       <div className="px-2 pb-2 space-y-0.5">
-                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-political.glb', '国家标注教学地球仪', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-political.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-political.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>国家标注地球仪
-                        </div>
                         <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>地球内部结构
                         </div>
@@ -705,11 +714,68 @@ const App: React.FC = () => {
           </div>
 
           {activeContent === 'model' && (
-            <div className="absolute bottom-6 left-6 z-50">
+            <div className="absolute bottom-6 left-6 z-50 flex items-center gap-2">
               <VoiceController
                 controlRef={controlRef}
                 onStatusChange={(msg) => setAiAnalysis(msg)}
               />
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${showSettings ? 'bg-gray-800 text-white' : 'bg-white/80 text-gray-400 hover:text-gray-600'}`}
+                aria-label="交互速度设置"
+                title="交互速度设置"
+              >
+                <Settings size={20} />
+              </button>
+
+              {showSettings && (
+                <div className="absolute bottom-16 left-0 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/50 p-5 w-64">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-black text-gray-600 uppercase tracking-wider">交互速度设置</h4>
+                    <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 transition">
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-gray-500">缩放速度</label>
+                        <span className="text-xs font-black text-[#86e3ce]">{zoomSpeedMultiplier.toFixed(1)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="5.0"
+                        step="0.1"
+                        value={zoomSpeedMultiplier}
+                        onChange={(e) => setZoomSpeedMultiplier(parseFloat(e.target.value))}
+                        className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[#86e3ce]"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-gray-500">旋转速度</label>
+                        <span className="text-xs font-black text-[#86e3ce]">{rotationSpeedMultiplier.toFixed(1)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="5.0"
+                        step="0.1"
+                        value={rotationSpeedMultiplier}
+                        onChange={(e) => setRotationSpeedMultiplier(parseFloat(e.target.value))}
+                        className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[#86e3ce]"
+                      />
+                    </div>
+                    <button
+                      onClick={() => { setZoomSpeedMultiplier(1.0); setRotationSpeedMultiplier(1.0); }}
+                      className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-500 text-xs font-black uppercase tracking-wider hover:bg-gray-200 transition"
+                    >
+                      重置默认
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
