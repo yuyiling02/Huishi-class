@@ -261,7 +261,7 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
     }
 
     if (hasCameraGestureInput && zoomSpeed !== 0) {
-      sph.radius = Math.max(2, Math.min(15, sph.radius - zoomSpeed * 0.15));
+      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15);
     }
 
     if (hasCameraGestureInput) {

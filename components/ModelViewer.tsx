@@ -37,7 +37,7 @@ interface ModelViewerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
 }
 
-const TABLE_TOP_Y = 0.03;
+const MODEL_BASE_Y = -0.49;
 const MODEL_TARGET_SIZE = 1.5;
 const EARTH_LAYERS_TARGET_SIZE = 3.8;
 const EARTH_POLITICAL_TARGET_SIZE = 3.5;
@@ -121,7 +121,7 @@ const configureModel = (root: THREE.Object3D, targetSize = MODEL_TARGET_SIZE) =>
 
   box = new THREE.Box3().setFromObject(root);
   const center = box.getCenter(new THREE.Vector3());
-  root.position.set(-center.x, TABLE_TOP_Y - box.min.y, -center.z);
+  root.position.set(-center.x, MODEL_BASE_Y - box.min.y, -center.z);
 
   root.traverse((child) => {
     if (isMeshObject(child)) {
@@ -427,7 +427,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     // 缩放 — modify radius on persistent spherical (no conflict with rotation)
     if (hasCameraGestureInput && zoomSpeed !== 0) {
-      sph.radius = Math.max(2, Math.min(15, sph.radius - zoomSpeed * 0.15));
+      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15);
     }
 
     // Apply spherical to camera
@@ -817,9 +817,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           {/* ---- Soft depth fog ---- */}
           <fog attach="fog" args={['#f0f4f8', 15, 35]} />
 
-          {/* ---- Workbench (table) ---- */}
-          {!(lowerModelUrl.includes('earth-layers') || lowerModelUrl.includes('terrain-topography')) && <Workbench />}
-
           {/* ---- Grid Floor ---- */}
           <GridFloor />
 
@@ -853,8 +850,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
             enableZoom={true}
             minPolarAngle={Math.PI / 6}
             maxPolarAngle={Math.PI / 2.2}
-            minDistance={3}
-            maxDistance={12}
             enableDamping
             dampingFactor={0.06}
           />

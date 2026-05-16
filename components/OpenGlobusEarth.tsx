@@ -94,7 +94,7 @@ const OpenGlobusEarth: React.FC<OpenGlobusEarthProps> = ({ controlRef }) => {
       // Zoom
       if (zoomSpeed !== 0) {
         const alt = cam.getAltitude();
-        const newAlt = Math.max(50000, Math.min(20000000, alt * (1 - zoomSpeed * 0.3)));
+        const newAlt = Math.max(1, alt * (1 - zoomSpeed * 0.3));
         cam.setAltitude(newAlt);
       }
 
