@@ -2,9 +2,9 @@
 """
 Generate public/models/earth-layers.glb.
 
-This version is a complete, four-layer classroom Earth. Each internal layer is
-a top-level GLB node so the app can grab and peel layers with the existing
-right-hand pinch workflow.
+The model is a complete four-layer Earth. The crust uses the project's real
+Earth texture assets, while the internal layers use generated rock/metal
+textures and subtle geometry relief so they do not read as flat plastic.
 """
 
 from __future__ import annotations
@@ -14,46 +14,49 @@ import json
 import math
 import os
 import struct
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageFilter
 
 
-SCRIPT_DIR = os.path.dirname(__file__)
-OUTPUT_PATH = os.path.join(SCRIPT_DIR, "..", "public", "models", "earth-layers.glb")
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+OUTPUT_PATH = PROJECT_ROOT / "public" / "models" / "earth-layers.glb"
+TEXTURE_DIR = PROJECT_ROOT / "public" / "textures"
 
-LAT_SEGMENTS = 96
-LON_SEGMENTS = 192
+LAT_SEGMENTS = 112
+LON_SEGMENTS = 224
 
 LAYER_SPECS = [
     {
         "key": "Crust",
-        "label": "地壳",
         "radius": 2.20,
         "material": "CrustSurface",
-        "extras": {"label": "地壳", "teachingRole": "earth-internal-layer"},
+        "children": ["Crust_Surface", "Atmosphere_Glow"],
+        "extras": {"label": "Crust", "teachingRole": "earth-internal-layer"},
     },
     {
         "key": "Mantle",
-        "label": "地幔",
         "radius": 1.72,
         "material": "MantleSurface",
-        "extras": {"label": "地幔", "teachingRole": "earth-internal-layer"},
+        "children": ["Mantle_Surface"],
+        "extras": {"label": "Mantle", "teachingRole": "earth-internal-layer"},
     },
     {
         "key": "OuterCore",
-        "label": "外核",
         "radius": 1.02,
         "material": "OuterCoreSurface",
-        "extras": {"label": "外核", "teachingRole": "earth-internal-layer"},
+        "children": ["OuterCore_Surface"],
+        "extras": {"label": "Outer Core", "teachingRole": "earth-internal-layer"},
     },
     {
         "key": "InnerCore",
-        "label": "内核",
         "radius": 0.50,
         "material": "InnerCoreSurface",
-        "extras": {"label": "内核", "teachingRole": "earth-internal-layer"},
+        "children": ["InnerCore_Surface"],
+        "extras": {"label": "Inner Core", "teachingRole": "earth-internal-layer"},
     },
 ]
 
@@ -64,70 +67,62 @@ def pad4(data: bytes, pad_byte: bytes = b"\x00") -> bytes:
     return data
 
 
-def create_earth_texture(width: int = 1536, height: int = 768) -> Image.Image:
-    """Create a compact classroom-style Earth texture without external assets."""
-    img = Image.new("RGB", (width, height))
-    draw = ImageDraw.Draw(img)
-    rng = np.random.default_rng(18)
-
-    for y in range(height):
-        latitude = abs((y / (height - 1)) * 2.0 - 1.0)
-        polar = max(0.0, (latitude - 0.72) / 0.28)
-        ocean = (
-            int(18 + 38 * (1.0 - latitude)),
-            int(73 + 72 * (1.0 - latitude)),
-            int(118 + 70 * (1.0 - latitude)),
-        )
-        ice = (235, 243, 247)
-        color = tuple(int(ocean[i] * (1.0 - polar) + ice[i] * polar) for i in range(3))
-        draw.line([(0, y), (width, y)], fill=color)
-
-    land = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    land_draw = ImageDraw.Draw(land)
-    continents = [
-        (0.16, 0.30, 0.18, 0.13, 46),
-        (0.24, 0.58, 0.10, 0.20, 34),
-        (0.50, 0.49, 0.13, 0.22, 56),
-        (0.60, 0.29, 0.24, 0.13, 72),
-        (0.74, 0.57, 0.10, 0.08, 28),
-        (0.40, 0.92, 0.36, 0.06, 32),
-        (0.31, 0.19, 0.06, 0.06, 12),
-    ]
-    for cx, cy, rx, ry, count in continents:
-        for _ in range(count):
-            ox = rng.normal(0, rx * width * 0.34)
-            oy = rng.normal(0, ry * height * 0.30)
-            rw = abs(rng.normal(rx * width * 0.20, rx * width * 0.07))
-            rh = abs(rng.normal(ry * height * 0.22, ry * height * 0.08))
-            x0 = int(max(0, cx * width + ox - rw))
-            y0 = int(max(0, cy * height + oy - rh))
-            x1 = int(min(width, cx * width + ox + rw))
-            y1 = int(min(height, cy * height + oy + rh))
-            if x1 <= x0 or y1 <= y0:
-                continue
-            color = (
-                int(np.clip(rng.normal(76, 18), 34, 126)),
-                int(np.clip(rng.normal(136, 22), 78, 188)),
-                int(np.clip(rng.normal(72, 18), 38, 130)),
-                255,
-            )
-            land_draw.ellipse([x0, y0, x1, y1], fill=color)
-
-    land = land.filter(ImageFilter.GaussianBlur(radius=1.15))
-    img.paste(land, (0, 0), land)
-
-    draw = ImageDraw.Draw(img)
-    for lon in range(-180, 181, 30):
-        x = int((lon + 180) / 360.0 * width)
-        draw.line([(x, 0), (x, height)], fill=(180, 214, 226), width=1)
-    for lat in range(-60, 61, 30):
-        y = int((90 - lat) / 180.0 * height)
-        draw.line([(0, y), (width, y)], fill=(180, 214, 226), width=1)
-
+def load_texture(path: Path, size: tuple[int, int] | None = None) -> Image.Image:
+    img = Image.open(path).convert("RGB")
+    if size and img.size != size:
+        img = img.resize(size, Image.Resampling.LANCZOS)
     return img
 
 
-def create_uv_sphere(name: str, radius: float, material: str) -> dict[str, Any]:
+def smooth_noise(width: int, height: int, seed: int, blur: float) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    raw = (rng.random((height, width)) * 255).astype(np.uint8)
+    img = Image.fromarray(raw, mode="L").filter(ImageFilter.GaussianBlur(radius=blur))
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    return (arr - arr.min()) / max(float(arr.max() - arr.min()), 1e-6)
+
+
+def create_layer_texture(
+    width: int,
+    height: int,
+    palette: tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]],
+    seed: int,
+    flow_strength: float,
+    vein_strength: float,
+) -> Image.Image:
+    y = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None]
+    x = np.linspace(0.0, 1.0, width, dtype=np.float32)[None, :]
+    n1 = smooth_noise(width, height, seed, 18.0)
+    n2 = smooth_noise(width, height, seed + 17, 7.0)
+    n3 = smooth_noise(width, height, seed + 31, 3.0)
+
+    flow = (
+        np.sin((x * 8.0 + y * 2.2 + n1 * 1.7) * math.tau)
+        + 0.55 * np.sin((x * 17.0 - y * 3.6 + n2 * 1.3) * math.tau)
+    ) * 0.5 + 0.5
+    veins = np.clip(1.0 - np.abs(flow - 0.52) * 8.0, 0.0, 1.0) ** 2.4
+    grain = np.clip(n1 * 0.52 + n2 * 0.33 + n3 * 0.15, 0.0, 1.0)
+    mix = np.clip(grain * (1.0 - flow_strength) + flow * flow_strength, 0.0, 1.0)
+
+    low = np.array(palette[0], dtype=np.float32)
+    mid = np.array(palette[1], dtype=np.float32)
+    high = np.array(palette[2], dtype=np.float32)
+    base = np.where(mix[..., None] < 0.55, low + (mid - low) * (mix[..., None] / 0.55), mid + (high - mid) * ((mix[..., None] - 0.55) / 0.45))
+    base = base + veins[..., None] * vein_strength
+    base = base * (0.86 + n3[..., None] * 0.24)
+    return Image.fromarray(np.clip(base, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def relief_value(theta: float, phi: float, seed: int) -> float:
+    return (
+        0.46 * math.sin(theta * 4.0 + seed * 0.37) * math.sin(phi * 3.0)
+        + 0.28 * math.sin(theta * 9.0 - phi * 2.0 + seed)
+        + 0.18 * math.cos(theta * 15.0 + phi * 5.0 + seed * 0.19)
+        + 0.08 * math.sin(theta * 31.0 + phi * 11.0)
+    )
+
+
+def create_uv_sphere(name: str, radius: float, material: str, relief: float = 0.0, seed: int = 0) -> dict[str, Any]:
     vertices: list[list[float]] = []
     normals: list[list[float]] = []
     texcoords: list[list[float]] = []
@@ -137,12 +132,14 @@ def create_uv_sphere(name: str, radius: float, material: str) -> dict[str, Any]:
         phi = math.pi * lat_i / LAT_SEGMENTS
         sin_phi = math.sin(phi)
         cos_phi = math.cos(phi)
+        polar_fade = min(1.0, max(0.0, sin_phi * 1.8))
         for lon_i in range(LON_SEGMENTS + 1):
             theta = math.tau * lon_i / LON_SEGMENTS
             sin_theta = math.sin(theta)
             cos_theta = math.cos(theta)
             normal = [sin_phi * cos_theta, cos_phi, sin_phi * sin_theta]
-            vertices.append([radius * normal[0], radius * normal[1], radius * normal[2]])
+            local_radius = radius + relief * relief_value(theta, phi, seed) * polar_fade
+            vertices.append([local_radius * normal[0], local_radius * normal[1], local_radius * normal[2]])
             normals.append(normal)
             texcoords.append([lon_i / LON_SEGMENTS, lat_i / LAT_SEGMENTS])
 
@@ -174,74 +171,85 @@ def create_uv_sphere(name: str, radius: float, material: str) -> dict[str, Any]:
     }
 
 
-def material_color(rgb: tuple[float, float, float], alpha: float = 1.0) -> list[float]:
-    return [float(rgb[0]), float(rgb[1]), float(rgb[2]), float(alpha)]
-
-
-def build_glb() -> bytes:
-    images = [create_earth_texture()]
-    materials: list[dict[str, Any]] = [
+def make_materials() -> list[dict[str, Any]]:
+    return [
         {
             "name": "CrustSurface",
             "pbrMetallicRoughness": {
                 "baseColorTexture": {"index": 0},
                 "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
                 "metallicFactor": 0.0,
-                "roughnessFactor": 0.68,
+                "roughnessFactor": 0.86,
             },
-            "doubleSided": True,
-        },
-        {
-            "name": "MantleSurface",
-            "pbrMetallicRoughness": {
-                "baseColorFactor": material_color((0.92, 0.30, 0.10)),
-                "metallicFactor": 0.0,
-                "roughnessFactor": 0.44,
-            },
-            "emissiveFactor": [0.14, 0.035, 0.012],
-            "doubleSided": True,
-        },
-        {
-            "name": "OuterCoreSurface",
-            "pbrMetallicRoughness": {
-                "baseColorFactor": material_color((1.00, 0.63, 0.08)),
-                "metallicFactor": 0.05,
-                "roughnessFactor": 0.35,
-            },
-            "emissiveFactor": [0.18, 0.075, 0.01],
-            "doubleSided": True,
-        },
-        {
-            "name": "InnerCoreSurface",
-            "pbrMetallicRoughness": {
-                "baseColorFactor": material_color((1.00, 0.92, 0.28)),
-                "metallicFactor": 0.08,
-                "roughnessFactor": 0.30,
-            },
-            "emissiveFactor": [0.20, 0.16, 0.04],
+            "normalTexture": {"index": 1, "scale": 0.5},
             "doubleSided": True,
         },
         {
             "name": "Atmosphere",
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.36, 0.72, 1.0, 0.22],
+                "baseColorFactor": [0.46, 0.76, 1.0, 0.18],
                 "metallicFactor": 0.0,
-                "roughnessFactor": 0.2,
+                "roughnessFactor": 0.55,
             },
-            "emissiveFactor": [0.04, 0.16, 0.28],
+            "emissiveFactor": [0.035, 0.11, 0.18],
             "alphaMode": "BLEND",
             "doubleSided": True,
         },
+        {
+            "name": "MantleSurface",
+            "pbrMetallicRoughness": {
+                "baseColorTexture": {"index": 2},
+                "baseColorFactor": [1.0, 0.96, 0.92, 1.0],
+                "metallicFactor": 0.0,
+                "roughnessFactor": 0.88,
+            },
+            "emissiveFactor": [0.035, 0.012, 0.004],
+            "doubleSided": True,
+        },
+        {
+            "name": "OuterCoreSurface",
+            "pbrMetallicRoughness": {
+                "baseColorTexture": {"index": 3},
+                "baseColorFactor": [1.0, 0.96, 0.90, 1.0],
+                "metallicFactor": 0.18,
+                "roughnessFactor": 0.64,
+            },
+            "emissiveFactor": [0.05, 0.025, 0.005],
+            "doubleSided": True,
+        },
+        {
+            "name": "InnerCoreSurface",
+            "pbrMetallicRoughness": {
+                "baseColorTexture": {"index": 4},
+                "baseColorFactor": [1.0, 0.98, 0.92, 1.0],
+                "metallicFactor": 0.24,
+                "roughnessFactor": 0.58,
+            },
+            "emissiveFactor": [0.045, 0.035, 0.012],
+            "doubleSided": True,
+        },
     ]
+
+
+def build_glb() -> bytes:
+    images = [
+        load_texture(TEXTURE_DIR / "earth_atmos_2048.jpg"),
+        load_texture(TEXTURE_DIR / "earth_normal_2048.jpg"),
+        create_layer_texture(1024, 512, ((48, 19, 12), (145, 57, 26), (231, 122, 53)), 101, 0.42, 30.0),
+        create_layer_texture(1024, 512, ((68, 39, 17), (178, 98, 28), (255, 189, 77)), 207, 0.55, 42.0),
+        create_layer_texture(1024, 512, ((92, 77, 39), (205, 164, 70), (255, 233, 145)), 313, 0.30, 24.0),
+    ]
+    materials = make_materials()
     material_index = {material["name"]: idx for idx, material in enumerate(materials)}
 
     geometries = [
-        create_uv_sphere("Crust_Surface", 2.20, "CrustSurface"),
-        create_uv_sphere("Atmosphere_Glow", 2.245, "Atmosphere"),
-        create_uv_sphere("Mantle_Surface", 1.72, "MantleSurface"),
-        create_uv_sphere("OuterCore_Surface", 1.02, "OuterCoreSurface"),
-        create_uv_sphere("InnerCore_Surface", 0.50, "InnerCoreSurface"),
+        create_uv_sphere("Crust_Surface", 2.20, "CrustSurface", relief=0.0),
+        create_uv_sphere("Atmosphere_Glow", 2.255, "Atmosphere", relief=0.0),
+        create_uv_sphere("Mantle_Surface", 1.72, "MantleSurface", relief=0.032, seed=4),
+        create_uv_sphere("OuterCore_Surface", 1.02, "OuterCoreSurface", relief=0.018, seed=9),
+        create_uv_sphere("InnerCore_Surface", 0.50, "InnerCoreSurface", relief=0.010, seed=15),
     ]
+    mesh_index_by_name = {geo["name"]: idx for idx, geo in enumerate(geometries)}
 
     binary = bytearray()
     buffer_views: list[dict[str, Any]] = []
@@ -311,32 +319,23 @@ def build_glb() -> bytes:
     textures: list[dict[str, Any]] = []
     for img in images:
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format="PNG", optimize=True)
+        img.save(image_bytes, format="JPEG", quality=88, optimize=True)
         image_view = append_bytes(image_bytes.getvalue())
-        image_defs.append({"bufferView": image_view, "mimeType": "image/png"})
+        image_defs.append({"bufferView": image_view, "mimeType": "image/jpeg"})
         textures.append({"sampler": 0, "source": len(image_defs) - 1})
 
-    nodes: list[dict[str, Any]] = [
-        {"name": "Crust_Surface", "mesh": 0},
-        {"name": "Atmosphere_Glow", "mesh": 1},
-        {"name": "Mantle_Surface", "mesh": 2},
-        {"name": "OuterCore_Surface", "mesh": 3},
-        {"name": "InnerCore_Surface", "mesh": 4},
-    ]
+    nodes: list[dict[str, Any]] = []
+    for geo in geometries:
+        nodes.append({"name": geo["name"], "mesh": mesh_index_by_name[geo["name"]]})
 
-    layer_nodes = []
-    mesh_children = {
-        "Crust": [0, 1],
-        "Mantle": [2],
-        "OuterCore": [3],
-        "InnerCore": [4],
-    }
+    layer_nodes: list[int] = []
     for spec in LAYER_SPECS:
+        child_indices = [mesh_index_by_name[name] for name in spec["children"]]
         node_idx = len(nodes)
         nodes.append(
             {
                 "name": spec["key"],
-                "children": mesh_children[spec["key"]],
+                "children": child_indices,
                 "extras": spec["extras"],
             }
         )
@@ -355,7 +354,7 @@ def build_glb() -> bytes:
     )
 
     gltf_json = {
-        "asset": {"version": "2.0", "generator": "earth-layers-complete-generator"},
+        "asset": {"version": "2.0", "generator": "earth-layers-realistic-generator"},
         "scene": 0,
         "scenes": [{"name": "EarthInternalLayers", "nodes": [root_idx]}],
         "nodes": nodes,
@@ -381,10 +380,9 @@ def build_glb() -> bytes:
 
 def main() -> None:
     glb_data = build_glb()
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    with open(OUTPUT_PATH, "wb") as output_file:
-        output_file.write(glb_data)
-    print(f"[OK] Written: {os.path.abspath(OUTPUT_PATH)}")
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_bytes(glb_data)
+    print(f"[OK] Written: {OUTPUT_PATH}")
     print(f"[OK] Size: {len(glb_data) / 1024 / 1024:.2f} MB")
 
 
