@@ -1,12 +1,14 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { GestureType, MoveDirection, ControlRefs, InteractionMode } from './types';
+import { AgentRole, AgentStatus, AgentTimelineItem, AgentToolCall, GestureType, MoveDirection, ControlRefs, InteractionMode, TeachingModelId } from './types';
 import { ProcessingOverlay } from './components/UIComponents';
 import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
+import MultiAgentPanel from './components/MultiAgentPanel';
+import { buildClassroomSummary, buildTeachingPlan } from './services/agentRuntime';
 import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X } from 'lucide-react';
 import { ModelType } from './types';
 
@@ -18,6 +20,14 @@ const BUILT_IN_MODELS = {
   diamond: '/models/diamond.glb',
 } as const;
 type ActiveContent = 'model' | 'biodigital';
+
+const AGENT_STATUS_IDLE: Record<AgentRole, AgentStatus> = {
+  planner: 'idle',
+  executor: 'idle',
+  evaluator: 'idle',
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const RECONSTRUCTION_STEPS = [
   "正在提取教具视觉特征...",
@@ -55,6 +65,10 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(1.0);
   const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(1.0);
+  const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
+  const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
+  const [agentSummary, setAgentSummary] = useState('');
+  const [isAgentRunning, setIsAgentRunning] = useState(false);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,16 +80,37 @@ const App: React.FC = () => {
     panPosition: { x: 0, y: 0 },
     isDragging: false,
     handLandmarks: { left: null, right: null },
-    interactionSettings: { zoomSpeed: 1.0, rotationSpeed: 1.0 }
+    interactionSettings: { zoomSpeed: 1.0, rotationSpeed: 1.0 },
+    agentDisassembly: {
+      enabled: false,
+      strength: 0,
+      spacing: 1.1,
+      avoidOverlap: true,
+      actionId: 0,
+      label: ''
+    }
   });
 
   const resetControls = () => {
+    const nextActionId = (controlRef.current.agentDisassembly?.actionId ?? 0) + 1;
     controlRef.current = {
       rotationVelocity: { x: 0, y: 0 },
       zoomSpeed: 0,
       panPosition: { x: 0, y: 0 },
       isDragging: false,
-      handLandmarks: { left: null, right: null }
+      handLandmarks: { left: null, right: null },
+      interactionSettings: {
+        zoomSpeed: zoomSpeedMultiplier,
+        rotationSpeed: rotationSpeedMultiplier,
+      },
+      agentDisassembly: {
+        enabled: false,
+        strength: 0,
+        spacing: 1.1,
+        avoidOverlap: true,
+        actionId: nextActionId,
+        label: ''
+      }
     };
   };
 
@@ -185,6 +220,199 @@ const App: React.FC = () => {
   const loadHeartFallbackModel = () => {
     loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb');
     setCameraActive(true);
+  };
+
+  const loadTeachingModel = (modelId: TeachingModelId) => {
+    switch (modelId) {
+      case 'heart':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb');
+        setCameraActive(true);
+        return;
+      case 'biodigital_heart':
+        showBioDigitalStage();
+        return;
+      case 'hiv':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.hiv, 'HIV 病毒模型', 'glb');
+        setCameraActive(true);
+        return;
+      case 'diamond':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb');
+        setCameraActive(true);
+        return;
+      case 'terrain':
+        showModelStage();
+        loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb');
+        setCameraActive(true);
+        return;
+      case 'earth_layers':
+      default:
+        showModelStage();
+        loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb');
+        setCameraActive(true);
+    }
+  };
+
+  const setTimelineStatus = (id: string, status: AgentTimelineItem['status']) => {
+    setAgentTimeline((items) => items.map((item) => item.id === id ? { ...item, status } : item));
+  };
+
+  const appendTimeline = (item: AgentTimelineItem) => {
+    setAgentTimeline((items) => [...items, item]);
+  };
+
+  const runAgentTool = async (call: AgentToolCall): Promise<string> => {
+    const timelineId = `${call.id}-${Date.now()}`;
+    appendTimeline({
+      id: timelineId,
+      agent: 'executor',
+      title: call.label,
+      detail: `工具调用：${call.name}`,
+      status: 'running',
+    });
+
+    try {
+      switch (call.name) {
+        case 'load_model': {
+          const modelId = (call.args.modelId || 'earth_layers') as TeachingModelId;
+          loadTeachingModel(modelId);
+          await sleep(700);
+          break;
+        }
+        case 'auto_rotate': {
+          const speed = Number(call.args.speed ?? 0.016);
+          const durationMs = Number(call.args.durationMs ?? 2200);
+          controlRef.current.rotationVelocity = { x: 0, y: speed };
+          await sleep(Math.max(100, durationMs));
+          if (speed !== 0) {
+            controlRef.current.rotationVelocity = { x: 0, y: 0 };
+          }
+          break;
+        }
+        case 'auto_zoom': {
+          const direction = String(call.args.direction || 'in');
+          const durationMs = Number(call.args.durationMs ?? 1200);
+          controlRef.current.zoomSpeed = direction === 'out' ? -0.018 : 0.018;
+          await sleep(Math.max(100, durationMs));
+          controlRef.current.zoomSpeed = 0;
+          break;
+        }
+        case 'explode_model': {
+          controlRef.current.agentDisassembly = {
+            enabled: true,
+            strength: Math.max(0, Math.min(1.4, Number(call.args.strength ?? 0.95))),
+            spacing: Math.max(0.6, Number(call.args.spacing ?? 1.15)),
+            avoidOverlap: true,
+            actionId: (controlRef.current.agentDisassembly?.actionId ?? 0) + 1,
+            label: call.label,
+          };
+          await sleep(Number(call.args.durationMs ?? 1600));
+          break;
+        }
+        case 'reset_model_layout': {
+          controlRef.current.agentDisassembly = {
+            enabled: false,
+            strength: 0,
+            spacing: 1.1,
+            avoidOverlap: true,
+            actionId: (controlRef.current.agentDisassembly?.actionId ?? 0) + 1,
+            label: '恢复模型布局',
+          };
+          await sleep(900);
+          break;
+        }
+        case 'enable_gesture':
+          if (activeContent === 'model') {
+            setCameraActive(true);
+          }
+          await sleep(300);
+          break;
+        case 'set_teacher_log':
+          setAiAnalysis(String(call.args.text || call.label));
+          await sleep(250);
+          break;
+        default:
+          await sleep(200);
+      }
+
+      setTimelineStatus(timelineId, 'done');
+      return call.label;
+    } catch (error) {
+      console.error('Agent tool failed:', error);
+      setTimelineStatus(timelineId, 'error');
+      return `${call.label}失败`;
+    }
+  };
+
+  const handleAgentStart = async (request: string) => {
+    if (isAgentRunning) return;
+
+    setIsAgentRunning(true);
+    setAgentSummary('');
+    setAgentTimeline([]);
+    setAgentStatuses({ planner: 'thinking', executor: 'idle', evaluator: 'idle' });
+    setAiAnalysis('理解规划Agent正在分析教学需求...');
+
+    const executedLogs: string[] = [];
+
+    try {
+      appendTimeline({
+        id: `planner-${Date.now()}`,
+        agent: 'planner',
+        title: '理解教学需求',
+        detail: request,
+        status: 'running',
+      });
+
+      const plan = await buildTeachingPlan(request);
+      executedLogs.push(`生成${plan.steps.length}个演示步骤：${plan.topic}`);
+      setAgentStatuses({ planner: 'done', executor: 'running', evaluator: 'idle' });
+      setAgentTimeline((items) => items.map((item) => item.agent === 'planner' ? { ...item, status: 'done', detail: `规划完成：${plan.topic}` } : item));
+      setAiAnalysis(`规划完成：${plan.topic}`);
+
+      for (const step of plan.steps) {
+        appendTimeline({
+          id: step.id,
+          agent: 'executor',
+          title: step.title,
+          detail: step.narration,
+          status: 'running',
+        });
+        setAiAnalysis(step.narration);
+        executedLogs.push(step.title);
+
+        for (const call of step.toolCalls) {
+          const log = await runAgentTool(call);
+          executedLogs.push(log);
+        }
+
+        setTimelineStatus(step.id, 'done');
+      }
+
+      setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'thinking' });
+      setAiAnalysis('学情评估Agent正在生成课堂小结...');
+      appendTimeline({
+        id: `evaluator-${Date.now()}`,
+        agent: 'evaluator',
+        title: '生成课堂小结',
+        detail: '根据规划步骤和工具调用记录总结本次演示。',
+        status: 'running',
+      });
+
+      const summary = await buildClassroomSummary(request, plan, executedLogs);
+      setAgentSummary(summary);
+      setAiAnalysis(summary);
+      setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'done' });
+      setAgentTimeline((items) => items.map((item) => item.agent === 'evaluator' ? { ...item, status: 'done', detail: summary } : item));
+    } catch (error) {
+      console.error('Agent run failed:', error);
+      setAiAnalysis('多智能体演示失败，请检查 DeepSeek 配置或网络。');
+      setAgentStatuses({ planner: 'error', executor: 'error', evaluator: 'idle' });
+    } finally {
+      setIsAgentRunning(false);
+    }
   };
 
   const handleImageTo3D = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -687,6 +915,14 @@ const App: React.FC = () => {
 
         {/* 视口展示区 */}
         <section ref={stageRef} className={`flex-1 glass-panel relative overflow-hidden group bg-white ${isStageFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-[32px]'}`}>
+          <MultiAgentPanel
+            statuses={agentStatuses}
+            timeline={agentTimeline}
+            summary={agentSummary}
+            isRunning={isAgentRunning}
+            onStart={handleAgentStart}
+          />
+
           {isProcessing && (
             <ProcessingOverlay
               steps={RECONSTRUCTION_STEPS}

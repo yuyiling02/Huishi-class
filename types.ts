@@ -37,6 +37,15 @@ export interface InteractionSettings {
   rotationSpeed: number; // 0.1 - 5.0, default 1.0
 }
 
+export interface AgentDisassemblyControl {
+  enabled: boolean;
+  strength: number;      // 0 - 1, how far parts spread from the center
+  spacing: number;       // minimum visual spacing between targets
+  avoidOverlap: boolean;
+  actionId: number;      // increment to force recalculating target positions
+  label: string;
+}
+
 // Shared ref object to communicate between React components without re-renders
 export interface ControlRefs {
   rotationVelocity: { x: number; y: number }; // x = pitch (up/down), y = yaw (left/right)
@@ -49,4 +58,47 @@ export interface ControlRefs {
     right: { x: number; y: number; z: number }[] | null;
   };
   interactionSettings: InteractionSettings;
+  agentDisassembly: AgentDisassemblyControl;
+}
+
+export type TeachingModelId = 'heart' | 'biodigital_heart' | 'hiv' | 'diamond' | 'earth_layers' | 'terrain';
+export type AgentRole = 'planner' | 'executor' | 'evaluator';
+export type AgentStatus = 'idle' | 'thinking' | 'running' | 'done' | 'error';
+
+export type AgentToolName =
+  | 'load_model'
+  | 'auto_rotate'
+  | 'auto_zoom'
+  | 'explode_model'
+  | 'reset_model_layout'
+  | 'enable_gesture'
+  | 'set_teacher_log';
+
+export interface AgentToolCall {
+  id: string;
+  name: AgentToolName;
+  label: string;
+  args: Record<string, unknown>;
+}
+
+export interface AgentPlanStep {
+  id: string;
+  title: string;
+  narration: string;
+  toolCalls: AgentToolCall[];
+}
+
+export interface AgentPlan {
+  topic: string;
+  modelId: TeachingModelId;
+  steps: AgentPlanStep[];
+  summaryFocus: string[];
+}
+
+export interface AgentTimelineItem {
+  id: string;
+  agent: AgentRole;
+  title: string;
+  detail: string;
+  status: 'pending' | 'running' | 'done' | 'error';
 }

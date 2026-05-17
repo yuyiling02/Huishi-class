@@ -42,6 +42,10 @@ const EduLabel = ({ targetPosition, labelPosition, title, subtitle, colorClass, 
 
 export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef, showLabels = true, cameraTarget = [0, 0.5, 0] }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const bedrockRef = useRef<THREE.Mesh>(null);
+  const soilRef = useRef<THREE.Mesh>(null);
+  const surfaceRef = useRef<THREE.Mesh>(null);
+  const waterRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   const orbitTarget = useMemo(() => new THREE.Vector3(cameraTarget[0], cameraTarget[1], cameraTarget[2]), [cameraTarget]);
   
@@ -271,16 +275,32 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
       sphericalRef.current.setFromVector3(offset);
     }
     wasCameraGestureActiveRef.current = hasCameraGestureInput;
+
+    const disassembly = controlRef.current.agentDisassembly;
+    const strength = disassembly?.enabled ? Math.max(0, disassembly.strength) : 0;
+    const moveMesh = (
+      ref: React.RefObject<THREE.Mesh>,
+      original: THREE.Vector3,
+      offset: THREE.Vector3,
+    ) => {
+      if (!ref.current) return;
+      ref.current.position.lerp(original.clone().addScaledVector(offset, strength), strength > 0 ? 0.075 : 0.09);
+    };
+
+    moveMesh(bedrockRef, new THREE.Vector3(0, -0.6, 0), new THREE.Vector3(-1.0, -0.35, -0.95));
+    moveMesh(soilRef, new THREE.Vector3(0, -0.2, 0), new THREE.Vector3(1.0, -0.05, -0.75));
+    moveMesh(surfaceRef, new THREE.Vector3(0, 0, 0), new THREE.Vector3(-0.35, 0.3, 0.9));
+    moveMesh(waterRef, new THREE.Vector3(0, -0.05, 0), new THREE.Vector3(1.1, 0.18, 0.9));
   });
 
   return (
     <group ref={groupRef} position={[0, 0.5, 0]}>
       {/* 1. 地质剖面底座 (Bedrock & Soil) */}
-      <mesh position={[0, -0.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={bedrockRef} position={[0, -0.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <boxGeometry args={[4, 4, 0.6]} />
         <meshStandardMaterial color="#4a3b32" roughness={0.9} />
       </mesh>
-      <mesh position={[0, -0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={soilRef} position={[0, -0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <boxGeometry args={[4, 4, 0.2]} />
         <meshStandardMaterial color="#7a5230" roughness={1} />
         <Html distanceFactor={12} position={[-2.1, 0, 0]}>
@@ -289,7 +309,7 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
       </mesh>
 
       {/* 2. 真实地表 (Surface & Contour Lines) */}
-      <mesh geometry={terrainGeo} position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow castShadow material={terrainMaterial}>
+      <mesh ref={surfaceRef} geometry={terrainGeo} position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow castShadow material={terrainMaterial}>
         {/* 等高线数值标注 (Elevation Numbers) */}
         {showLabels && (
           <group>
@@ -331,7 +351,7 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
       </mesh>
 
       {/* 4. 水体 (Water & Ocean) */}
-      <mesh position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={waterRef} position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[4, 4]} />
         <meshStandardMaterial color="#00bcd4" transparent opacity={0.7} roughness={0.1} />
       </mesh>

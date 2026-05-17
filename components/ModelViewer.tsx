@@ -183,6 +183,60 @@ const getAssetKey = (url: string): string => {
   return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1).toLowerCase();
 };
 
+const getOriginalPosition = (part: GrabbablePart): THREE.Vector3 => {
+  const original = part.userData.originalPosition;
+  return original?.isVector3 ? original.clone() : part.position.clone();
+};
+
+const calculateDisassemblyTargets = (
+  parts: GrabbablePart[],
+  strength: number,
+  spacing: number,
+): Map<string, THREE.Vector3> => {
+  const targets = new Map<string, THREE.Vector3>();
+  if (parts.length === 0) return targets;
+
+  const rootBox = new THREE.Box3();
+  parts.forEach((part) => rootBox.expandByObject(part));
+  const rootCenter = rootBox.getCenter(new THREE.Vector3());
+  const placed: THREE.Vector3[] = [];
+  const spreadDistance = spacing * (1.2 + strength * 2.2);
+
+  parts.forEach((part, index) => {
+    const original = getOriginalPosition(part);
+    const partBox = new THREE.Box3().setFromObject(part);
+    const partCenter = partBox.getCenter(new THREE.Vector3());
+    const angle = (index / Math.max(1, parts.length)) * Math.PI * 2;
+    const fallbackDirection = new THREE.Vector3(
+      Math.cos(angle),
+      ((index % 3) - 1) * 0.32,
+      Math.sin(angle),
+    ).normalize();
+
+    const direction = partCenter.sub(rootCenter);
+    if (direction.lengthSq() < 0.0001) {
+      direction.copy(fallbackDirection);
+    } else {
+      direction.normalize();
+      direction.addScaledVector(fallbackDirection, 0.35).normalize();
+    }
+
+    const target = original.clone().addScaledVector(direction, spreadDistance + index * spacing * 0.08);
+
+    let guard = 0;
+    while (placed.some((point) => point.distanceTo(target) < spacing) && guard < 10) {
+      const adjustAngle = angle + guard * 0.77;
+      target.add(new THREE.Vector3(Math.cos(adjustAngle), 0.18, Math.sin(adjustAngle)).multiplyScalar(spacing * 0.45));
+      guard++;
+    }
+
+    placed.push(target.clone());
+    targets.set(part.uuid, target);
+  });
+
+  return targets;
+};
+
 const createLocalLoadingManager = (assetUrls?: Record<string, string>) => {
   const manager = new THREE.LoadingManager();
   manager.setURLModifier((requestedUrl) => {
@@ -255,6 +309,8 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const sphericalRef = useRef<THREE.Spherical | null>(null);
   const cameraInitialized = useRef(false);
   const wasCameraGestureActiveRef = useRef(false);
+  const disassemblyTargetsRef = useRef<Map<string, THREE.Vector3>>(new Map());
+  const lastDisassemblyActionRef = useRef(-1);
 
   // Load model and detect whether the file contains detachable internal layers.
   useEffect(() => {
@@ -270,6 +326,8 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     isGrabbingRef.current = false;
     cameraInitialized.current = false;
     wasCameraGestureActiveRef.current = false;
+    disassemblyTargetsRef.current.clear();
+    lastDisassemblyActionRef.current = -1;
 
     const handleLoadedModel = (root: THREE.Object3D) => {
       if (disposed) return;
@@ -454,6 +512,24 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       sphericalRef.current.setFromVector3(offset);
     }
     wasCameraGestureActiveRef.current = hasCameraGestureInput;
+
+    const disassembly = controlRef.current.agentDisassembly;
+    if (disassembly && disassembly.actionId !== lastDisassemblyActionRef.current) {
+      disassemblyTargetsRef.current = disassembly.enabled
+        ? calculateDisassemblyTargets(modelParts, disassembly.strength, disassembly.spacing)
+        : new Map();
+      lastDisassemblyActionRef.current = disassembly.actionId;
+    }
+
+    if (modelParts.length > 0 && !isGrabbingRef.current) {
+      modelParts.forEach((part) => {
+        if (part === grabbedPartRef.current) return;
+        const target = disassembly?.enabled
+          ? disassemblyTargetsRef.current.get(part.uuid) || getOriginalPosition(part)
+          : getOriginalPosition(part);
+        part.position.lerp(target, disassembly?.enabled ? 0.075 : 0.09);
+      });
+    }
 
     // ========== 一比一复刻第一版手部交互 ==========
     const rightLandmarks = handLandmarks?.right;
