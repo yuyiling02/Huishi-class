@@ -1,14 +1,13 @@
 
 import React, { useRef, Suspense, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, ContactShadows } from '@react-three/drei';
+import { OrbitControls, ContactShadows, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { ControlRefs, ModelType } from '../types';
-import { ProceduralEarthLayers } from './ProceduralEarth';
 import { ProceduralTerrain } from './ProceduralTerrain';
 
 // Fix for TypeScript errors regarding R3F intrinsic elements and missing HTML elements
@@ -71,6 +70,23 @@ const collectMeshes = (object: THREE.Object3D): THREE.Mesh[] => {
 };
 
 const findLayerRoots = (root: THREE.Object3D): GrabbablePart[] => {
+  const explicitLayerRoots: GrabbablePart[] = [];
+  root.traverse((node) => {
+    if (node.userData?.teachingRole === 'earth-internal-layer' && hasRenderableMesh(node)) {
+      explicitLayerRoots.push(node);
+    }
+  });
+
+  if (explicitLayerRoots.length > 1) {
+    const layerOrder = new Map([
+      ['Crust', 0],
+      ['Mantle', 1],
+      ['OuterCore', 2],
+      ['InnerCore', 3],
+    ]);
+    return explicitLayerRoots.sort((a, b) => (layerOrder.get(a.name) ?? 99) - (layerOrder.get(b.name) ?? 99));
+  }
+
   const walk = (node: THREE.Object3D): GrabbablePart[] => {
     const childrenWithMeshes = node.children.filter(hasRenderableMesh);
 
@@ -560,6 +576,33 @@ const Workbench: React.FC = () => {
   );
 };
 
+const EarthLayerLabels: React.FC<{ visible: boolean }> = ({ visible }) => {
+  if (!visible) return null;
+
+  const labels = [
+    { title: '地壳 Crust', detail: '5-70 km · 固态岩石圈', color: '#2f8f5b', position: [2.95, 2.55, 0] },
+    { title: '地幔 Mantle', detail: '~2900 km · 高温固态', color: '#e85a24', position: [3.05, 1.55, 0] },
+    { title: '外核 Outer Core', detail: '~2200 km · 液态金属', color: '#f5a623', position: [3.05, 0.55, 0] },
+    { title: '内核 Inner Core', detail: '~1220 km · 固态铁镍', color: '#f6d84a', position: [2.95, -0.45, 0] },
+  ] as const;
+
+  return (
+    <group position={[0, 0.2, 0]}>
+      {labels.map((label) => (
+        <Html key={label.title} distanceFactor={10} position={label.position as unknown as [number, number, number]} center>
+          <div className="bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl text-slate-800 text-[10px] whitespace-nowrap border shadow-lg font-bold" style={{ borderColor: label.color }}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: label.color }} />
+              <span style={{ color: label.color }} className="text-[11px] font-extrabold">{label.title}</span>
+            </div>
+            <div className="font-medium text-slate-500 leading-relaxed text-[9px]">{label.detail}</div>
+          </div>
+        </Html>
+      ))}
+    </group>
+  );
+};
+
 /* ── Floor — soft neutral ground plane with grid texture ── */
 const GridFloor: React.FC = () => {
   const gridTexture = useMemo(() => {
@@ -821,12 +864,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           <GridFloor />
 
           {/* ---- Uploaded Model ---- */}
-          {lowerModelUrl.includes('earth-layers') ? (
-            <ProceduralEarthLayers controlRef={controlRef} showLabels={showLabels} cameraTarget={cameraTarget} />
-          ) : lowerModelUrl.includes('terrain-topography') ? (
+          {lowerModelUrl.includes('terrain-topography') ? (
             <ProceduralTerrain controlRef={controlRef} showLabels={showLabels} cameraTarget={cameraTarget} />
           ) : (
-            <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} cameraTarget={cameraTarget} />
+            <>
+              <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} cameraTarget={cameraTarget} />
+              {lowerModelUrl.includes('earth-layers') && <EarthLayerLabels visible={showLabels} />}
+            </>
           )}
 
           {/* 3D虚拟手骨架可视化 */}
