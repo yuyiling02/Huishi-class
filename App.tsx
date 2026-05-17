@@ -48,7 +48,7 @@ const App: React.FC = () => {
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('dual');
   const [activeContent, setActiveContent] = useState<ActiveContent>('model');
   const [isStageFullscreen, setIsStageFullscreen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['地理']));
 
   // Processing state
@@ -279,6 +279,9 @@ const App: React.FC = () => {
           const modelId = (call.args.modelId || 'earth_layers') as TeachingModelId;
           loadTeachingModel(modelId);
           await sleep(700);
+          controlRef.current.zoomSpeed = -0.026;
+          await sleep(900);
+          controlRef.current.zoomSpeed = 0;
           break;
         }
         case 'auto_rotate': {
@@ -312,14 +315,18 @@ const App: React.FC = () => {
           break;
         }
         case 'reset_model_layout': {
-          controlRef.current.agentDisassembly = {
-            enabled: false,
-            strength: 0,
-            spacing: 1.1,
-            avoidOverlap: true,
-            actionId: (controlRef.current.agentDisassembly?.actionId ?? 0) + 1,
-            label: '恢复模型布局',
-          };
+          if (modelUrl?.includes('earth-layers')) {
+            setAiAnalysis('地球内部结构保持四层拆解展示，便于观众观察。');
+          } else {
+            controlRef.current.agentDisassembly = {
+              enabled: false,
+              strength: 0,
+              spacing: 1.1,
+              avoidOverlap: true,
+              actionId: (controlRef.current.agentDisassembly?.actionId ?? 0) + 1,
+              label: '恢复模型布局',
+            };
+          }
           await sleep(900);
           break;
         }
@@ -348,6 +355,15 @@ const App: React.FC = () => {
 
   const handleAgentStart = async (request: string) => {
     if (isAgentRunning) return;
+
+    setIsSidebarCollapsed(true);
+    try {
+      if (!document.fullscreenElement) {
+        await stageRef.current?.requestFullscreen();
+      }
+    } catch (error) {
+      console.error('Agent fullscreen failed:', error);
+    }
 
     setIsAgentRunning(true);
     setAgentSummary('');

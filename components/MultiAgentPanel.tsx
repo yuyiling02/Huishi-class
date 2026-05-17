@@ -28,7 +28,7 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
   const [request, setRequest] = useState('讲解地球内部结构，展示地壳、地幔、外核和内核的关系');
 
   return (
-    <div className="absolute top-6 left-6 z-50 w-[360px] max-w-[calc(100%-3rem)] rounded-3xl border border-white/70 bg-white/90 p-4 shadow-2xl backdrop-blur-xl">
+    <div className={`absolute top-6 left-6 z-50 max-w-[calc(100%-3rem)] rounded-3xl border border-white/70 bg-white/90 shadow-2xl backdrop-blur-xl transition-all ${isRunning || timeline.length > 0 ? 'w-[310px] p-3' : 'w-[360px] p-4'}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-black text-gray-700">
@@ -53,7 +53,7 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
         value={request}
         disabled={isRunning}
         onChange={(event) => setRequest(event.target.value)}
-        className="mb-3 h-20 w-full resize-none rounded-2xl border border-gray-200/70 bg-white/80 px-3 py-2 text-xs font-medium leading-relaxed text-gray-700 outline-none transition focus:border-[#86e3ce] focus:ring-2 focus:ring-[#86e3ce]/20 disabled:opacity-60"
+        className={`mb-3 w-full resize-none rounded-2xl border border-gray-200/70 bg-white/80 px-3 py-2 text-xs font-medium leading-relaxed text-gray-700 outline-none transition focus:border-[#86e3ce] focus:ring-2 focus:ring-[#86e3ce]/20 disabled:opacity-60 ${isRunning || timeline.length > 0 ? 'h-12' : 'h-20'}`}
         placeholder="输入教学需求，例如：讲解地形地貌的山地、高原、盆地和平原"
       />
 
@@ -72,7 +72,7 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
         ))}
       </div>
 
-      <div className="mt-3 max-h-36 space-y-1.5 overflow-y-auto pr-1">
+      <div className={`mt-3 space-y-1.5 overflow-y-auto pr-1 ${isRunning || timeline.length > 0 ? 'max-h-24' : 'max-h-36'}`}>
         {timeline.length === 0 ? (
           <div className="rounded-2xl bg-gray-50 px-3 py-3 text-[11px] font-medium text-gray-400">
             等待输入教学需求，智能体会生成演示步骤并调用3D工具。

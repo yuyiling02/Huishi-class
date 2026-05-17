@@ -253,6 +253,71 @@ const createLocalLoadingManager = (assetUrls?: Record<string, string>) => {
   return manager;
 };
 
+const earthLayerMeta = [
+  { key: 'crust', title: '地壳 Crust', detail: '5-70 km · 固态岩石圈', color: '#2f8f5b' },
+  { key: 'mantle', title: '地幔 Mantle', detail: '~2900 km · 高温固态', color: '#e85a24' },
+  { key: 'outercore', title: '外核 Outer Core', detail: '~2200 km · 液态金属', color: '#f5a623' },
+  { key: 'innercore', title: '内核 Inner Core', detail: '~1220 km · 固态铁镍', color: '#f6d84a' },
+] as const;
+
+const getEarthLayerMeta = (part: GrabbablePart, index: number) => {
+  const normalizedName = part.name.toLowerCase().replace(/[^a-z]/g, '');
+  return earthLayerMeta.find((meta) => normalizedName.includes(meta.key)) || earthLayerMeta[index % earthLayerMeta.length];
+};
+
+const EarthLayerFollowLabels: React.FC<{
+  parts: GrabbablePart[];
+  rootGroupRef: React.RefObject<THREE.Group>;
+  visible: boolean;
+}> = ({ parts, rootGroupRef, visible }) => {
+  const labelRefs = useRef<THREE.Group[]>([]);
+
+  useFrame(() => {
+    if (!visible || !rootGroupRef.current) return;
+
+    parts.slice(0, 4).forEach((part, index) => {
+      const label = labelRefs.current[index];
+      if (!label) return;
+
+      const box = new THREE.Box3().setFromObject(part);
+      const worldPosition = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      worldPosition.y += Math.max(0.35, size.y * 0.58);
+      const localPosition = rootGroupRef.current!.worldToLocal(worldPosition);
+      label.position.lerp(localPosition, 0.18);
+      label.visible = true;
+    });
+  });
+
+  if (!visible || parts.length === 0) return null;
+
+  return (
+    <>
+      {parts.slice(0, 4).map((part, index) => {
+        const meta = getEarthLayerMeta(part, index);
+        return (
+          <group
+            key={part.uuid}
+            ref={(node: THREE.Group | null) => {
+              if (node) labelRefs.current[index] = node;
+            }}
+          >
+            <Html distanceFactor={10} center>
+              <div className="bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl text-slate-800 text-[10px] whitespace-nowrap border shadow-lg font-bold" style={{ borderColor: meta.color }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: meta.color }} />
+                  <span style={{ color: meta.color }} className="text-[11px] font-extrabold">{meta.title}</span>
+                </div>
+                <div className="font-medium text-slate-500 leading-relaxed text-[9px]">{meta.detail}</div>
+              </div>
+            </Html>
+          </group>
+        );
+      })}
+    </>
+  );
+};
+
 const LocalEnvironment: React.FC = () => {
   const { gl, scene } = useThree();
 
@@ -274,7 +339,7 @@ const LocalEnvironment: React.FC = () => {
 };
 
 // Unified model component. FBX / GLB / GLTF all use the same layer-based disassembly path.
-const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget }> = ({ url, modelType, assetUrls, controlRef, cameraTarget }) => {
+const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget; showEarthLabels?: boolean }> = ({ url, modelType, assetUrls, controlRef, cameraTarget, showEarthLabels = false }) => {
   const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
   const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
   const groupRef = useRef<THREE.Group>(null);
@@ -623,6 +688,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
       <primitive object={modelScene} />
+      <EarthLayerFollowLabels parts={modelParts} rootGroupRef={groupRef} visible={showEarthLabels} />
     </group>
   );
 };
@@ -944,8 +1010,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
             <ProceduralTerrain controlRef={controlRef} showLabels={showLabels} cameraTarget={cameraTarget} />
           ) : (
             <>
-              <LayeredModel url={modelUrl} modelType={modelType} assetUrls={assetUrls} controlRef={controlRef} cameraTarget={cameraTarget} />
-              {lowerModelUrl.includes('earth-layers') && <EarthLayerLabels visible={showLabels} />}
+              <LayeredModel
+                url={modelUrl}
+                modelType={modelType}
+                assetUrls={assetUrls}
+                controlRef={controlRef}
+                cameraTarget={cameraTarget}
+                showEarthLabels={lowerModelUrl.includes('earth-layers') && showLabels}
+              />
             </>
           )}
 
