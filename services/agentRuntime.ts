@@ -30,15 +30,21 @@ const createStep = (id: string, title: string, narration: string, toolCalls: Age
   toolCalls,
 });
 
-const pickModel = (request: string): TeachingModelId => {
+const detectRequestedModel = (request: string): TeachingModelId | null => {
+  if (/心脏2|BioDigital|网页/i.test(request)) return 'biodigital_heart';
+  if (/心脏|心房|心室|瓣膜|主动脉|静脉|动脉|心肌|冠状|血液|循环|人体|生物/.test(request)) return 'heart';
   if (/地形|地貌|高原|山地|盆地|平原|丘陵|河流|三角洲/.test(request)) return 'terrain';
   if (/地球|地壳|地幔|外核|内核|板块/.test(request)) return 'earth_layers';
-  if (/病毒|HIV|免疫/.test(request)) return 'hiv';
+  if (/病毒|HIV|免疫/i.test(request)) return 'hiv';
   if (/金刚石|晶体|化学|碳原子|分子/.test(request)) return 'diamond';
-  if (/心脏2|BioDigital|网页/.test(request)) return 'biodigital_heart';
-  if (/心脏|血液|循环|人体|生物/.test(request)) return 'heart';
-  return 'earth_layers';
+  return null;
 };
+
+const pickModel = (request: string): TeachingModelId => detectRequestedModel(request) ?? 'earth_layers';
+
+export const inferTeachingModel = (request: string): TeachingModelId => pickModel(request);
+
+export const getTeachingModelName = (modelId: TeachingModelId): string => modelNames[modelId];
 
 const createFallbackPlan = (request: string): AgentPlan => {
   const modelId = pickModel(request);
@@ -98,11 +104,14 @@ const createFallbackPlan = (request: string): AgentPlan => {
 
 const normalizePlan = (raw: any, request: string): AgentPlan => {
   const fallback = createFallbackPlan(request);
-  const modelId = (raw?.modelId && modelNames[raw.modelId as TeachingModelId])
+  const requestedModelId = detectRequestedModel(request);
+  const rawModelId = (raw?.modelId && modelNames[raw.modelId as TeachingModelId])
     ? raw.modelId as TeachingModelId
-    : fallback.modelId;
+    : null;
+  const modelId = requestedModelId ?? rawModelId ?? fallback.modelId;
+  const shouldUseFallbackSteps = Boolean(requestedModelId && rawModelId && requestedModelId !== rawModelId);
 
-  const rawSteps = Array.isArray(raw?.steps) ? raw.steps : [];
+  const rawSteps = !shouldUseFallbackSteps && Array.isArray(raw?.steps) ? raw.steps : [];
   const steps = rawSteps.slice(0, 5).map((step: any, stepIndex: number) => {
     const toolCalls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
     const normalizedTools = toolCalls
@@ -112,7 +121,9 @@ const normalizePlan = (raw: any, request: string): AgentPlan => {
         String(call.id || `ai-tool-${stepIndex}-${callIndex}`),
         call.name,
         String(call.label || call.name),
-        typeof call.args === 'object' && call.args ? call.args : {},
+        call.name === 'load_model'
+          ? { ...(typeof call.args === 'object' && call.args ? call.args : {}), modelId }
+          : (typeof call.args === 'object' && call.args ? call.args : {}),
       ));
 
     return createStep(
@@ -123,10 +134,49 @@ const normalizePlan = (raw: any, request: string): AgentPlan => {
     );
   });
 
+  const normalizedSteps = steps.length > 0 ? steps : fallback.steps;
+  const hasModelLoad = normalizedSteps.some((step) =>
+    step.toolCalls.some((call) => call.name === 'load_model')
+  );
+  const shouldDisassemble = modelId !== 'biodigital_heart';
+  const hasDisassembly = normalizedSteps.some((step) =>
+    step.toolCalls.some((call) => call.name === 'explode_model')
+  );
+
+  let finalSteps = hasModelLoad
+    ? normalizedSteps
+    : [
+        createStep(
+          'step-auto-load',
+          `自动匹配${modelNames[modelId]}`,
+          `理解规划Agent已根据教学需求匹配到${modelNames[modelId]}，先载入对应教具。`,
+          [
+            tool('auto-load-model', 'load_model', `加载${modelNames[modelId]}`, { modelId }),
+            tool('auto-enable-gesture', 'enable_gesture', '开启手势捕捉'),
+          ],
+        ),
+        ...normalizedSteps,
+      ];
+
+  if (shouldDisassemble && !hasDisassembly) {
+    finalSteps = [
+      ...finalSteps,
+      createStep(
+        'step-auto-disassemble',
+        `自主拆解${modelNames[modelId]}`,
+        `演示执行Agent将${modelNames[modelId]}自动拆解散开，突出内部结构和空间层次。`,
+        [
+          tool('auto-explode', 'explode_model', `拆解${modelNames[modelId]}`, { strength: 0.95, spacing: 1.15, durationMs: 1800 }),
+          tool('auto-rotate-after-explode', 'auto_rotate', '拆解后慢速旋转观察', { speed: 0.01, durationMs: 2600 }),
+        ],
+      ),
+    ];
+  }
+
   return {
     topic: String(raw?.topic || fallback.topic),
     modelId,
-    steps: steps.length > 0 ? steps : fallback.steps,
+    steps: finalSteps,
     summaryFocus: Array.isArray(raw?.summaryFocus) ? raw.summaryFocus.map(String).slice(0, 4) : fallback.summaryFocus,
   };
 };

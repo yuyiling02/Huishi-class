@@ -8,7 +8,7 @@ import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
 import MultiAgentPanel from './components/MultiAgentPanel';
-import { buildClassroomSummary, buildTeachingPlan } from './services/agentRuntime';
+import { buildClassroomSummary, buildTeachingPlan, getTeachingModelName, inferTeachingModel } from './services/agentRuntime';
 import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X } from 'lucide-react';
 import { ModelType } from './types';
 
@@ -68,6 +68,7 @@ const App: React.FC = () => {
   const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
   const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
   const [agentSummary, setAgentSummary] = useState('');
+  const [agentThinking, setAgentThinking] = useState('');
   const [isAgentRunning, setIsAgentRunning] = useState(false);
 
   // Refs
@@ -367,9 +368,18 @@ const App: React.FC = () => {
 
     setIsAgentRunning(true);
     setAgentSummary('');
+    setAgentThinking('');
     setAgentTimeline([]);
     setAgentStatuses({ planner: 'thinking', executor: 'idle', evaluator: 'idle' });
-    setAiAnalysis('理解规划Agent正在分析教学需求...');
+    const matchedModel = inferTeachingModel(request);
+    const matchedModelName = getTeachingModelName(matchedModel);
+    const initialThinking = `我正在理解教学需求，先识别关键词并匹配教具：当前判断适合使用“${matchedModelName}”。随后会生成演示步骤并调用工具。`;
+    setAgentThinking(initialThinking);
+    setAiAnalysis(initialThinking);
+    loadTeachingModel(matchedModel);
+    controlRef.current.zoomSpeed = -0.026;
+    await sleep(900);
+    controlRef.current.zoomSpeed = 0;
 
     const executedLogs: string[] = [];
 
@@ -377,12 +387,13 @@ const App: React.FC = () => {
       appendTimeline({
         id: `planner-${Date.now()}`,
         agent: 'planner',
-        title: '理解教学需求',
-        detail: request,
+        title: `自动匹配${matchedModelName}`,
+        detail: `教学需求：${request}`,
         status: 'running',
       });
 
       const plan = await buildTeachingPlan(request);
+      setAgentThinking(`规划完成：已选择“${getTeachingModelName(plan.modelId)}”，准备执行 ${plan.steps.length} 个演示步骤。`);
       executedLogs.push(`生成${plan.steps.length}个演示步骤：${plan.topic}`);
       setAgentStatuses({ planner: 'done', executor: 'running', evaluator: 'idle' });
       setAgentTimeline((items) => items.map((item) => item.agent === 'planner' ? { ...item, status: 'done', detail: `规划完成：${plan.topic}` } : item));
@@ -408,6 +419,7 @@ const App: React.FC = () => {
       }
 
       setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'thinking' });
+      setAgentThinking('学情评估Agent正在回看演示步骤和工具调用记录，生成课堂小结。');
       setAiAnalysis('学情评估Agent正在生成课堂小结...');
       appendTimeline({
         id: `evaluator-${Date.now()}`,
@@ -419,11 +431,13 @@ const App: React.FC = () => {
 
       const summary = await buildClassroomSummary(request, plan, executedLogs);
       setAgentSummary(summary);
+      setAgentThinking('');
       setAiAnalysis(summary);
       setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'done' });
       setAgentTimeline((items) => items.map((item) => item.agent === 'evaluator' ? { ...item, status: 'done', detail: summary } : item));
     } catch (error) {
       console.error('Agent run failed:', error);
+      setAgentThinking('智能体流程异常：请检查网络或 DeepSeek 配置，系统仍可使用本地模型手动演示。');
       setAiAnalysis('多智能体演示失败，请检查 DeepSeek 配置或网络。');
       setAgentStatuses({ planner: 'error', executor: 'error', evaluator: 'idle' });
     } finally {
@@ -935,6 +949,7 @@ const App: React.FC = () => {
             statuses={agentStatuses}
             timeline={agentTimeline}
             summary={agentSummary}
+            thinking={agentThinking}
             isRunning={isAgentRunning}
             onStart={handleAgentStart}
           />

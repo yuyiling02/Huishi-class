@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Brain, ClipboardCheck, Loader2, Play, Route, Settings2 } from 'lucide-react';
+import { Brain, ClipboardCheck, Eye, EyeOff, Loader2, Play, Route, Settings2 } from 'lucide-react';
 import { AgentRole, AgentStatus, AgentTimelineItem } from '../types';
 
 interface MultiAgentPanelProps {
   statuses: Record<AgentRole, AgentStatus>;
   timeline: AgentTimelineItem[];
   summary: string;
+  thinking: string;
   isRunning: boolean;
   onStart: (request: string) => void;
 }
@@ -24,8 +25,25 @@ const statusText: Record<AgentStatus, string> = {
   error: '异常',
 };
 
-const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, summary, isRunning, onStart }) => {
+const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, summary, thinking, isRunning, onStart }) => {
   const [request, setRequest] = useState('讲解地球内部结构，展示地壳、地幔、外核和内核的关系');
+  const [isHidden, setIsHidden] = useState(false);
+
+  if (isHidden) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsHidden(false)}
+        className="absolute top-6 left-6 z-50 flex h-12 items-center gap-2 rounded-2xl border border-white/70 bg-white/90 px-4 text-xs font-black text-gray-700 shadow-2xl backdrop-blur-xl transition hover:bg-white hover:text-gray-900"
+        aria-label="显示多智能体协作台"
+        title="显示多智能体协作台"
+      >
+        {isRunning ? <Loader2 size={16} className="animate-spin text-[#86e3ce]" /> : <Route size={16} className="text-[#86e3ce]" />}
+        <span>多智能体</span>
+        <Eye size={15} className="text-gray-400" />
+      </button>
+    );
+  }
 
   return (
     <div className={`absolute top-6 left-6 z-50 max-w-[calc(100%-3rem)] rounded-3xl border border-white/70 bg-white/90 shadow-2xl backdrop-blur-xl transition-all ${isRunning || timeline.length > 0 ? 'w-[310px] p-3' : 'w-[360px] p-4'}`}>
@@ -37,16 +55,27 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
           </div>
           <div className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">Plan · Tool Use · Summary</div>
         </div>
-        <button
-          type="button"
-          disabled={isRunning}
-          onClick={() => onStart(request)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-lg transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="启动多智能体演示"
-          title="启动多智能体演示"
-        >
-          {isRunning ? <Loader2 size={17} className="animate-spin" /> : <Play size={17} />}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsHidden(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-gray-400 shadow-sm transition hover:bg-white hover:text-gray-700"
+            aria-label="隐藏多智能体协作台"
+            title="隐藏多智能体协作台"
+          >
+            <EyeOff size={17} />
+          </button>
+          <button
+            type="button"
+            disabled={isRunning}
+            onClick={() => onStart(request)}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-lg transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="启动多智能体演示"
+            title="启动多智能体演示"
+          >
+            {isRunning ? <Loader2 size={17} className="animate-spin" /> : <Play size={17} />}
+          </button>
+        </div>
       </div>
 
       <textarea
@@ -71,6 +100,16 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
           </div>
         ))}
       </div>
+
+      {thinking && (
+        <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50/80 px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black text-indigo-600">
+            <Brain size={13} />
+            Agent 思考
+          </div>
+          <p className="text-[11px] font-medium leading-relaxed text-gray-600">{thinking}</p>
+        </div>
+      )}
 
       <div className={`mt-3 space-y-1.5 overflow-y-auto pr-1 ${isRunning || timeline.length > 0 ? 'max-h-24' : 'max-h-36'}`}>
         {timeline.length === 0 ? (

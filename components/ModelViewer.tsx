@@ -188,6 +188,11 @@ const getOriginalPosition = (part: GrabbablePart): THREE.Vector3 => {
   return original?.isVector3 ? original.clone() : part.position.clone();
 };
 
+const getManualTargetPosition = (part: GrabbablePart): THREE.Vector3 | null => {
+  const manualTarget = part.userData.manualTargetPosition;
+  return manualTarget?.isVector3 ? manualTarget.clone() : null;
+};
+
 const calculateDisassemblyTargets = (
   parts: GrabbablePart[],
   strength: number,
@@ -268,12 +273,18 @@ const getEarthLayerMeta = (part: GrabbablePart, index: number) => {
 const EarthLayerFollowLabels: React.FC<{
   parts: GrabbablePart[];
   rootGroupRef: React.RefObject<THREE.Group>;
-  visible: boolean;
-}> = ({ parts, rootGroupRef, visible }) => {
+  controlRef: React.MutableRefObject<ControlRefs>;
+  enabled: boolean;
+}> = ({ parts, rootGroupRef, controlRef, enabled }) => {
   const labelRefs = useRef<THREE.Group[]>([]);
 
   useFrame(() => {
-    if (!visible || !rootGroupRef.current) return;
+    const shouldShow = enabled && Boolean(controlRef.current.agentDisassembly?.enabled);
+    labelRefs.current.forEach((label) => {
+      if (label) label.visible = shouldShow;
+    });
+
+    if (!shouldShow || !rootGroupRef.current) return;
 
     parts.slice(0, 4).forEach((part, index) => {
       const label = labelRefs.current[index];
@@ -289,7 +300,7 @@ const EarthLayerFollowLabels: React.FC<{
     });
   });
 
-  if (!visible || parts.length === 0) return null;
+  if (!enabled || parts.length === 0) return null;
 
   return (
     <>
@@ -298,6 +309,7 @@ const EarthLayerFollowLabels: React.FC<{
         return (
           <group
             key={part.uuid}
+            visible={false}
             ref={(node: THREE.Group | null) => {
               if (node) labelRefs.current[index] = node;
             }}
@@ -529,6 +541,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const releaseGrab = () => {
     const part = grabbedPartRef.current;
     if (part) {
+      part.userData.manualTargetPosition = part.position.clone();
       setPartHighlight(part, 0x000000);
     }
 
@@ -580,6 +593,9 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     const disassembly = controlRef.current.agentDisassembly;
     if (disassembly && disassembly.actionId !== lastDisassemblyActionRef.current) {
+      modelParts.forEach((part) => {
+        delete part.userData.manualTargetPosition;
+      });
       disassemblyTargetsRef.current = disassembly.enabled
         ? calculateDisassemblyTargets(modelParts, disassembly.strength, disassembly.spacing)
         : new Map();
@@ -589,9 +605,10 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     if (modelParts.length > 0 && !isGrabbingRef.current) {
       modelParts.forEach((part) => {
         if (part === grabbedPartRef.current) return;
-        const target = disassembly?.enabled
+        const manualTarget = getManualTargetPosition(part);
+        const target = manualTarget ?? (disassembly?.enabled
           ? disassemblyTargetsRef.current.get(part.uuid) || getOriginalPosition(part)
-          : getOriginalPosition(part);
+          : getOriginalPosition(part));
         part.position.lerp(target, disassembly?.enabled ? 0.075 : 0.09);
       });
     }
@@ -688,7 +705,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
       <primitive object={modelScene} />
-      <EarthLayerFollowLabels parts={modelParts} rootGroupRef={groupRef} visible={showEarthLabels} />
+      <EarthLayerFollowLabels parts={modelParts} rootGroupRef={groupRef} controlRef={controlRef} enabled={showEarthLabels} />
     </group>
   );
 };
@@ -754,10 +771,10 @@ const GridFloor: React.FC = () => {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    ctx.fillStyle = '#eee9e3';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, size, size);
 
-    ctx.strokeStyle = 'rgba(180, 170, 160, 0.15)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
     ctx.lineWidth = 1;
     const step = size / 8;
     for (let i = 0; i <= 8; i++) {
@@ -780,6 +797,8 @@ const GridFloor: React.FC = () => {
         roughness={0.85}
         metalness={0.0}
         color="#ffffff"
+        transparent
+        opacity={0.42}
       />
     </mesh>
   );
@@ -954,7 +973,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
   }, [lowerModelUrl]);
 
   return (
-    <div className="w-full h-full bg-[#fcfcfd] relative">
+    <div className="w-full h-full bg-white relative">
       {(lowerModelUrl.includes('earth-layers') || lowerModelUrl.includes('terrain-topography')) && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50">
           <button
@@ -972,7 +991,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
         camera={{ position: [3.5, 4, 3.5], fov: 45, near: 0.1, far: 100 }}
         gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, alpha: false }}
         raycaster={{ far: 100 }}
-        onCreated={({ gl }) => { gl.setClearColor('#f0f4f8'); }}
+        onCreated={({ gl }) => { gl.setClearColor('#ffffff'); }}
       >
         <Suspense fallback={null}>
           {/* ---- Lighting — warm & soft (from 环境 package) ---- */}
@@ -999,9 +1018,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           {/* ---- Local environment reflections ---- */}
           <LocalEnvironment />
 
-          {/* ---- Soft depth fog ---- */}
-          <fog attach="fog" args={['#f0f4f8', 15, 35]} />
-
           {/* ---- Grid Floor ---- */}
           <GridFloor />
 
@@ -1016,7 +1032,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
                 assetUrls={assetUrls}
                 controlRef={controlRef}
                 cameraTarget={cameraTarget}
-                showEarthLabels={lowerModelUrl.includes('earth-layers') && showLabels}
+                showEarthLabels={lowerModelUrl.includes('earth-layers')}
               />
             </>
           )}
@@ -1027,11 +1043,11 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           {/* ---- Contact shadows on floor ---- */}
           <ContactShadows
             position={[0, -0.49, 0]}
-            opacity={0.25}
+            opacity={0.12}
             scale={14}
-            blur={3}
+            blur={4}
             far={4}
-            color="#b0b8c4"
+            color="#cbd5e1"
           />
 
           {/* ---- Camera controls ---- */}
