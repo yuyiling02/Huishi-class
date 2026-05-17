@@ -204,8 +204,20 @@ const calculateDisassemblyTargets = (
   const rootBox = new THREE.Box3();
   parts.forEach((part) => rootBox.expandByObject(part));
   const rootCenter = rootBox.getCenter(new THREE.Vector3());
+  const rootSize = rootBox.getSize(new THREE.Vector3());
+  const maxDim = Math.max(rootSize.x, rootSize.y, rootSize.z, 0.001);
   const placed: THREE.Vector3[] = [];
-  const spreadDistance = spacing * (1.2 + strength * 2.2);
+
+  // Detect concentric parts (e.g. earth layers) — all share the same center
+  const origPositions = parts.map(getOriginalPosition);
+  const isConcentric = parts.length > 1 && origPositions.every(
+    (p) => p.distanceTo(origPositions[0]) < 0.01
+  );
+
+  // Concentric layers need larger spread to avoid overlapping shells
+  const spreadDistance = isConcentric
+    ? maxDim * 0.9
+    : maxDim * (0.15 + Math.min(strength, 1) * 0.25);
 
   parts.forEach((part, index) => {
     const original = getOriginalPosition(part);
@@ -221,6 +233,9 @@ const calculateDisassemblyTargets = (
     const direction = partCenter.sub(rootCenter);
     if (direction.lengthSq() < 0.0001) {
       direction.copy(fallbackDirection);
+      // Concentric layers (e.g. earth): spread horizontally only, same Y level
+      if (isConcentric) direction.y = 0;
+      if (direction.lengthSq() > 0.001) direction.normalize();
     } else {
       direction.normalize();
       direction.addScaledVector(fallbackDirection, 0.35).normalize();
@@ -388,6 +403,9 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const wasCameraGestureActiveRef = useRef(false);
   const disassemblyTargetsRef = useRef<Map<string, THREE.Vector3>>(new Map());
   const lastDisassemblyActionRef = useRef(-1);
+  // Smoothed rotation velocity to prevent abrupt camera start/stop stutter
+  const smoothedRotVelRef = useRef({ x: 0, y: 0 });
+  const smoothedZoomRef = useRef(0);
 
   // Load model and detect whether the file contains detachable internal layers.
   useEffect(() => {
@@ -555,10 +573,20 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     const { rotationVelocity, zoomSpeed, handLandmarks } = controlRef.current;
 
+    // Smooth rotation/zoom velocity to avoid abrupt camera start/stop stutter
+    const smoothFactor = 0.1;
+    smoothedRotVelRef.current.x += (rotationVelocity.x - smoothedRotVelRef.current.x) * smoothFactor;
+    smoothedRotVelRef.current.y += (rotationVelocity.y - smoothedRotVelRef.current.y) * smoothFactor;
+    smoothedZoomRef.current += (zoomSpeed - smoothedZoomRef.current) * smoothFactor;
+
+    const smoothRotX = smoothedRotVelRef.current.x;
+    const smoothRotY = smoothedRotVelRef.current.y;
+    const smoothZoom = smoothedZoomRef.current;
+
     const hasCameraGestureInput =
-      Math.abs(rotationVelocity.x) > 0.0001 ||
-      Math.abs(rotationVelocity.y) > 0.0001 ||
-      zoomSpeed !== 0;
+      Math.abs(smoothRotX) > 0.0001 ||
+      Math.abs(smoothRotY) > 0.0001 ||
+      Math.abs(smoothZoom) > 0.0001;
 
     const offset = new THREE.Vector3().subVectors(camera.position, orbitTarget);
     if (!cameraInitialized.current || !wasCameraGestureActiveRef.current) {
@@ -568,18 +596,18 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     const sph = sphericalRef.current!;
 
-    // 旋转 — modify angles on persistent spherical
-    if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
+    // 旋转 — modify angles on persistent spherical (uses smoothed velocity)
+    if (hasCameraGestureInput && (Math.abs(smoothRotX) > 0.0001 || Math.abs(smoothRotY) > 0.0001)) {
       const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
-      sph.theta -= rotationVelocity.y * sensitivity;
-      sph.phi -= rotationVelocity.x * sensitivity;
+      sph.theta -= smoothRotY * sensitivity;
+      sph.phi -= smoothRotX * sensitivity;
       sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
       sph.makeSafe();
     }
 
     // 缩放 — modify radius on persistent spherical (no conflict with rotation)
-    if (hasCameraGestureInput && zoomSpeed !== 0) {
-      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15 * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
+    if (hasCameraGestureInput && Math.abs(smoothZoom) > 0.0001) {
+      sph.radius = Math.max(0.05, sph.radius - smoothZoom * 0.15 * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
     }
 
     // Apply spherical to camera
@@ -964,13 +992,41 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
-  const [showLabels, setShowLabels] = useState(true);
+  const [showLabels, setShowLabels] = useState(false);
+  const lastAutoLabelActionRef = useRef(-1);
   const lowerModelUrl = modelUrl.toLowerCase();
   const cameraTarget = useMemo<CameraTarget>(() => {
-    if (lowerModelUrl.includes('earth-layers')) return [0, 1.0, 0];
+    if (lowerModelUrl.includes('earth-layers')) return [0, 1.5, 0];
     if (lowerModelUrl.includes('terrain-topography')) return [0, 0.5, 0];
     return [0, 0.3, 0];
   }, [lowerModelUrl]);
+
+  useEffect(() => {
+    setShowLabels(false);
+    lastAutoLabelActionRef.current = controlRef.current.agentDisassembly?.actionId ?? -1;
+  }, [controlRef, modelUrl]);
+
+  useEffect(() => {
+    let animationFrame = 0;
+
+    const syncEarthLabelsWithDisassembly = () => {
+      const disassembly = controlRef.current.agentDisassembly;
+      const isNewEarthDisassembly =
+        lowerModelUrl.includes('earth-layers') &&
+        Boolean(disassembly?.enabled) &&
+        disassembly.actionId !== lastAutoLabelActionRef.current;
+
+      if (isNewEarthDisassembly) {
+        lastAutoLabelActionRef.current = disassembly.actionId;
+        setShowLabels(true);
+      }
+
+      animationFrame = requestAnimationFrame(syncEarthLabelsWithDisassembly);
+    };
+
+    animationFrame = requestAnimationFrame(syncEarthLabelsWithDisassembly);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [controlRef, lowerModelUrl]);
 
   return (
     <div className="w-full h-full bg-white relative">
@@ -1032,7 +1088,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
                 assetUrls={assetUrls}
                 controlRef={controlRef}
                 cameraTarget={cameraTarget}
-                showEarthLabels={lowerModelUrl.includes('earth-layers')}
+                showEarthLabels={lowerModelUrl.includes('earth-layers') && showLabels}
               />
             </>
           )}

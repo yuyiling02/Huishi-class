@@ -73,6 +73,7 @@ const App: React.FC = () => {
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
+  const preloadedModelRef = useRef<TeachingModelId | null>(null);
   const stageRef = useRef<HTMLElement>(null);
   const objectUrlsRef = useRef<string[]>([]);
   const controlRef = useRef<ControlRefs>({
@@ -278,6 +279,11 @@ const App: React.FC = () => {
       switch (call.name) {
         case 'load_model': {
           const modelId = (call.args.modelId || 'earth_layers') as TeachingModelId;
+          // 如果 handleAgentStart 已预加载过同一模型，跳过避免二次刷新
+          if (preloadedModelRef.current === modelId) {
+            preloadedModelRef.current = null;
+            break;
+          }
           loadTeachingModel(modelId);
           await sleep(700);
           controlRef.current.zoomSpeed = -0.026;
@@ -376,6 +382,7 @@ const App: React.FC = () => {
     const initialThinking = `我正在理解教学需求，先识别关键词并匹配教具：当前判断适合使用“${matchedModelName}”。随后会生成演示步骤并调用工具。`;
     setAgentThinking(initialThinking);
     setAiAnalysis(initialThinking);
+    preloadedModelRef.current = matchedModel;
     loadTeachingModel(matchedModel);
     controlRef.current.zoomSpeed = -0.026;
     await sleep(900);

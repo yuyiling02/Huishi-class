@@ -6,7 +6,10 @@
       "Bash(python -c \"import numpy; print\\('numpy OK'\\)\")",
       "Bash(pip install *)",
       "Bash(mkdir -p scripts)",
-      "Bash(mkdir -p public/models)"
-    ]
+      "Bash(mkdir -p public/models)",
+      "PowerShell(echo $PROFILE)",
+      "Skill(update-config)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

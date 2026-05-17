@@ -29,6 +29,26 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
   const [request, setRequest] = useState('讲解地球内部结构，展示地壳、地幔、外核和内核的关系');
   const [isHidden, setIsHidden] = useState(false);
 
+  const handleStart = () => {
+    const trimmedRequest = request.trim();
+
+    if (isRunning || !trimmedRequest) {
+      return;
+    }
+
+    onStart(trimmedRequest);
+    setIsHidden(true);
+  };
+
+  const handleRequestKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    handleStart();
+  };
+
   if (isHidden) {
     return (
       <button
@@ -68,7 +88,7 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
           <button
             type="button"
             disabled={isRunning}
-            onClick={() => onStart(request)}
+            onClick={handleStart}
             className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-lg transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="启动多智能体演示"
             title="启动多智能体演示"
@@ -82,8 +102,10 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
         value={request}
         disabled={isRunning}
         onChange={(event) => setRequest(event.target.value)}
+        onKeyDown={handleRequestKeyDown}
         className={`mb-3 w-full resize-none rounded-2xl border border-gray-200/70 bg-white/80 px-3 py-2 text-xs font-medium leading-relaxed text-gray-700 outline-none transition focus:border-[#86e3ce] focus:ring-2 focus:ring-[#86e3ce]/20 disabled:opacity-60 ${isRunning || timeline.length > 0 ? 'h-12' : 'h-20'}`}
-        placeholder="输入教学需求，例如：讲解地形地貌的山地、高原、盆地和平原"
+        placeholder="输入教学需求，按 Enter 开始，Shift+Enter 换行"
+        title="按 Enter 开始，Shift+Enter 换行"
       />
 
       <div className="grid grid-cols-3 gap-2">
