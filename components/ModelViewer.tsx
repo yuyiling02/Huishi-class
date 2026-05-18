@@ -40,8 +40,13 @@ const MODEL_BASE_Y = -0.49;
 const MODEL_TARGET_SIZE = 1.5;
 const EARTH_LAYERS_TARGET_SIZE = 3.8;
 const EARTH_POLITICAL_TARGET_SIZE = 3.5;
+const PUBCHEM_6233_MODEL_KEY = 'pubchem-6233-bas-color-print_nih3d.glb';
+const NITROBENZENE_MODEL_KEY = '7416-bas-color-print_nih3d.glb';
 
 type GrabbablePart = THREE.Object3D;
+
+type PubchemPartKind = 'left-methyl' | 'right-methyl' | 'core';
+type NitrobenzenePartKind = 'nitro' | 'remainder';
 
 const vectorFromTarget = (target: CameraTarget) => new THREE.Vector3(target[0], target[1], target[2]);
 
@@ -70,6 +75,17 @@ const collectMeshes = (object: THREE.Object3D): THREE.Mesh[] => {
 };
 
 const findLayerRoots = (root: THREE.Object3D): GrabbablePart[] => {
+  const explicitDisassemblyRoots: GrabbablePart[] = [];
+  root.traverse((node) => {
+    if (node.userData?.teachingRole === 'disassembly-part' && hasRenderableMesh(node)) {
+      explicitDisassemblyRoots.push(node);
+    }
+  });
+
+  if (explicitDisassemblyRoots.length > 0) {
+    return explicitDisassemblyRoots;
+  }
+
   const explicitLayerRoots: GrabbablePart[] = [];
   root.traverse((node) => {
     if (node.userData?.teachingRole === 'earth-internal-layer' && hasRenderableMesh(node)) {
@@ -183,6 +199,306 @@ const getAssetKey = (url: string): string => {
   return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1).toLowerCase();
 };
 
+const isPubchem6233Model = (url: string): boolean => getAssetKey(url) === PUBCHEM_6233_MODEL_KEY;
+
+const isNitrobenzeneModel = (url: string): boolean => getAssetKey(url) === NITROBENZENE_MODEL_KEY;
+
+const classifyPubchemAtomTriangle = (center: THREE.Vector3): PubchemPartKind => {
+  if (center.x < -2.05) return 'left-methyl';
+  if (center.x > 2.05) return 'right-methyl';
+  return 'core';
+};
+
+const classifyPubchemBondTriangle = (center: THREE.Vector3): PubchemPartKind => {
+  if (center.x < -2.15) return 'left-methyl';
+  if (center.x > 2.15) return 'right-methyl';
+  return 'core';
+};
+
+const isPubchemMethylHydrogenSite = (center: THREE.Vector3): boolean => (
+  Math.abs(center.x) > 3.05 &&
+  center.y < -0.75
+);
+
+const getAttributeColorComponent = (attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined, index: number, component: number): number => {
+  if (!attribute) return 1;
+
+  const value = component === 0
+    ? attribute.getX(index)
+    : component === 1
+      ? attribute.getY(index)
+      : component === 2
+        ? attribute.getZ(index)
+        : 1;
+
+  return value > 1 ? value / 255 : value;
+};
+
+const clonePubchemMaterial = (source: THREE.Mesh): THREE.Material => {
+  const sourceMaterial = Array.isArray(source.material) ? source.material[0] : source.material;
+  const material = sourceMaterial?.clone() ?? new THREE.MeshStandardMaterial({
+    roughness: 0.62,
+    metalness: 0,
+  });
+
+  if ('vertexColors' in material) {
+    (material as THREE.MeshStandardMaterial).vertexColors = true;
+  }
+  material.side = THREE.DoubleSide;
+  material.depthWrite = true;
+  return material;
+};
+
+const createPubchemSubsetMesh = (
+  source: THREE.Mesh,
+  partKind: PubchemPartKind,
+  classifier: (center: THREE.Vector3) => PubchemPartKind,
+  recolorHydrogenSites: boolean,
+): THREE.Mesh | null => {
+  const geometry = source.geometry;
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const color = geometry.getAttribute('color');
+  const index = geometry.getIndex();
+
+  if (!position || !index) return null;
+
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const colors: number[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const center = new THREE.Vector3();
+
+  const pushVertex = (vertexIndex: number, useHydrogenColor: boolean) => {
+    positions.push(position.getX(vertexIndex), position.getY(vertexIndex), position.getZ(vertexIndex));
+
+    if (normal) {
+      normals.push(normal.getX(vertexIndex), normal.getY(vertexIndex), normal.getZ(vertexIndex));
+    }
+
+    if (useHydrogenColor) {
+      colors.push(1, 1, 1);
+    } else {
+      colors.push(
+        getAttributeColorComponent(color, vertexIndex, 0),
+        getAttributeColorComponent(color, vertexIndex, 1),
+        getAttributeColorComponent(color, vertexIndex, 2),
+      );
+    }
+  };
+
+  for (let i = 0; i < index.count; i += 3) {
+    const ia = index.getX(i);
+    const ib = index.getX(i + 1);
+    const ic = index.getX(i + 2);
+
+    a.set(position.getX(ia), position.getY(ia), position.getZ(ia));
+    b.set(position.getX(ib), position.getY(ib), position.getZ(ib));
+    c.set(position.getX(ic), position.getY(ic), position.getZ(ic));
+    center.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+
+    if (classifier(center) !== partKind) continue;
+
+    const useHydrogenColor = recolorHydrogenSites && isPubchemMethylHydrogenSite(center);
+    pushVertex(ia, useHydrogenColor);
+    pushVertex(ib, useHydrogenColor);
+    pushVertex(ic, useHydrogenColor);
+  }
+
+  if (positions.length === 0) return null;
+
+  const subsetGeometry = new THREE.BufferGeometry();
+  subsetGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  if (normals.length > 0) {
+    subsetGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  } else {
+    subsetGeometry.computeVertexNormals();
+  }
+  subsetGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  subsetGeometry.computeBoundingBox();
+  subsetGeometry.computeBoundingSphere();
+
+  const mesh = new THREE.Mesh(subsetGeometry, clonePubchemMaterial(source));
+  mesh.name = `${source.name || 'pubchem'}-${partKind}`;
+  mesh.castShadow = source.castShadow;
+  mesh.receiveShadow = source.receiveShadow;
+  mesh.position.copy(source.position);
+  mesh.quaternion.copy(source.quaternion);
+  mesh.scale.copy(source.scale);
+  return mesh;
+};
+
+const isNitrobenzeneNitroColor = (color: THREE.Vector4): boolean => {
+  const isOxygenRed = color.x > 0.75 && color.y < 0.35 && color.z < 0.35;
+  const isNitrogenBlue = color.z > 0.55 && color.x < 0.45 && color.y < 0.65;
+  return isOxygenRed || isNitrogenBlue;
+};
+
+const createNitrobenzeneSubsetMesh = (
+  source: THREE.Mesh,
+  partKind: NitrobenzenePartKind,
+  includeNitro: (center: THREE.Vector3, color: THREE.Vector4) => boolean,
+): THREE.Mesh | null => {
+  const geometry = source.geometry;
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const color = geometry.getAttribute('color');
+  const index = geometry.getIndex();
+
+  if (!position || !index) return null;
+
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const colors: number[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  const triangleColor = new THREE.Vector4();
+
+  const pushVertex = (vertexIndex: number) => {
+    positions.push(position.getX(vertexIndex), position.getY(vertexIndex), position.getZ(vertexIndex));
+
+    if (normal) {
+      normals.push(normal.getX(vertexIndex), normal.getY(vertexIndex), normal.getZ(vertexIndex));
+    }
+
+    colors.push(
+      getAttributeColorComponent(color, vertexIndex, 0),
+      getAttributeColorComponent(color, vertexIndex, 1),
+      getAttributeColorComponent(color, vertexIndex, 2),
+    );
+  };
+
+  for (let i = 0; i < index.count; i += 3) {
+    const ia = index.getX(i);
+    const ib = index.getX(i + 1);
+    const ic = index.getX(i + 2);
+
+    a.set(position.getX(ia), position.getY(ia), position.getZ(ia));
+    b.set(position.getX(ib), position.getY(ib), position.getZ(ib));
+    c.set(position.getX(ic), position.getY(ic), position.getZ(ic));
+    center.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+
+    triangleColor.set(0, 0, 0, 0);
+    [ia, ib, ic].forEach((vertexIndex) => {
+      triangleColor.x += getAttributeColorComponent(color, vertexIndex, 0) / 3;
+      triangleColor.y += getAttributeColorComponent(color, vertexIndex, 1) / 3;
+      triangleColor.z += getAttributeColorComponent(color, vertexIndex, 2) / 3;
+      triangleColor.w += getAttributeColorComponent(color, vertexIndex, 3) / 3;
+    });
+
+    const isNitro = includeNitro(center, triangleColor);
+    if ((partKind === 'nitro') !== isNitro) continue;
+
+    pushVertex(ia);
+    pushVertex(ib);
+    pushVertex(ic);
+  }
+
+  if (positions.length === 0) return null;
+
+  const subsetGeometry = new THREE.BufferGeometry();
+  subsetGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  if (normals.length > 0) {
+    subsetGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  } else {
+    subsetGeometry.computeVertexNormals();
+  }
+  subsetGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  subsetGeometry.computeBoundingBox();
+  subsetGeometry.computeBoundingSphere();
+
+  const mesh = new THREE.Mesh(subsetGeometry, clonePubchemMaterial(source));
+  mesh.name = `${source.name || 'nitrobenzene'}-${partKind}`;
+  mesh.castShadow = source.castShadow;
+  mesh.receiveShadow = source.receiveShadow;
+  mesh.position.copy(source.position);
+  mesh.quaternion.copy(source.quaternion);
+  mesh.scale.copy(source.scale);
+  return mesh;
+};
+
+const prepareNitrobenzeneModel = (root: THREE.Object3D): GrabbablePart[] => {
+  const atoms = root.getObjectByName('atoms') as THREE.Mesh | undefined;
+  const bonds = root.getObjectByName('bonds') as THREE.Mesh | undefined;
+
+  if (!atoms || !bonds || !isMeshObject(atoms) || !isMeshObject(bonds)) {
+    return [];
+  }
+
+  const parent = atoms.parent ?? root;
+  const nitroGroup = new THREE.Group();
+  const remainderGroup = new THREE.Group();
+  nitroGroup.name = 'Nitrobenzene nitro group';
+  remainderGroup.name = 'Nitrobenzene fixed benzene body';
+  nitroGroup.userData.teachingRole = 'disassembly-part';
+
+  const includeNitroAtoms = (_center: THREE.Vector3, color: THREE.Vector4) => isNitrobenzeneNitroColor(color);
+  const includeNitroBonds = (center: THREE.Vector3, color: THREE.Vector4) => (
+    isNitrobenzeneNitroColor(color) || center.x > 0.95
+  );
+
+  const nitroAtoms = createNitrobenzeneSubsetMesh(atoms, 'nitro', includeNitroAtoms);
+  const nitroBonds = createNitrobenzeneSubsetMesh(bonds, 'nitro', includeNitroBonds);
+  const remainderAtoms = createNitrobenzeneSubsetMesh(atoms, 'remainder', includeNitroAtoms);
+  const remainderBonds = createNitrobenzeneSubsetMesh(bonds, 'remainder', includeNitroBonds);
+
+  if (nitroAtoms) nitroGroup.add(nitroAtoms);
+  if (nitroBonds) nitroGroup.add(nitroBonds);
+  if (remainderAtoms) remainderGroup.add(remainderAtoms);
+  if (remainderBonds) remainderGroup.add(remainderBonds);
+
+  parent.add(remainderGroup);
+  parent.add(nitroGroup);
+  atoms.visible = false;
+  bonds.visible = false;
+  root.userData.grabbableParts = [nitroGroup, remainderGroup];
+
+  return hasRenderableMesh(nitroGroup) ? [nitroGroup] : [];
+};
+
+const preparePubchem6233Model = (root: THREE.Object3D): GrabbablePart[] => {
+  const atoms = root.getObjectByName('atoms') as THREE.Mesh | undefined;
+  const bonds = root.getObjectByName('bonds') as THREE.Mesh | undefined;
+
+  if (!atoms || !bonds || !isMeshObject(atoms) || !isMeshObject(bonds)) {
+    return [];
+  }
+
+  const parent = atoms.parent ?? root;
+  const groups: Record<PubchemPartKind, THREE.Group> = {
+    'left-methyl': new THREE.Group(),
+    'right-methyl': new THREE.Group(),
+    core: new THREE.Group(),
+  };
+
+  groups['left-methyl'].name = 'PubChem 6233 left methyl';
+  groups['right-methyl'].name = 'PubChem 6233 right methyl';
+  groups.core.name = 'PubChem 6233 benzene core';
+  groups['left-methyl'].userData.teachingRole = 'disassembly-part';
+  groups['right-methyl'].userData.teachingRole = 'disassembly-part';
+  groups.core.userData.disassemblable = false;
+
+  (Object.keys(groups) as PubchemPartKind[]).forEach((partKind) => {
+    const atomSubset = createPubchemSubsetMesh(atoms, partKind, classifyPubchemAtomTriangle, true);
+    const bondSubset = createPubchemSubsetMesh(bonds, partKind, classifyPubchemBondTriangle, true);
+
+    if (atomSubset) groups[partKind].add(atomSubset);
+    if (bondSubset) groups[partKind].add(bondSubset);
+    parent.add(groups[partKind]);
+  });
+
+  atoms.visible = false;
+  bonds.visible = false;
+
+  return [groups['left-methyl'], groups['right-methyl'], groups.core];
+};
+
+const isDisassemblablePart = (part: GrabbablePart): boolean => part.userData?.disassemblable !== false;
+
 const getOriginalPosition = (part: GrabbablePart): THREE.Vector3 => {
   const original = part.userData.originalPosition;
   return original?.isVector3 ? original.clone() : part.position.clone();
@@ -199,18 +515,19 @@ const calculateDisassemblyTargets = (
   spacing: number,
 ): Map<string, THREE.Vector3> => {
   const targets = new Map<string, THREE.Vector3>();
-  if (parts.length === 0) return targets;
+  const disassemblableParts = parts.filter(isDisassemblablePart);
+  if (disassemblableParts.length === 0) return targets;
 
   const rootBox = new THREE.Box3();
-  parts.forEach((part) => rootBox.expandByObject(part));
+  disassemblableParts.forEach((part) => rootBox.expandByObject(part));
   const rootCenter = rootBox.getCenter(new THREE.Vector3());
   const rootSize = rootBox.getSize(new THREE.Vector3());
   const maxDim = Math.max(rootSize.x, rootSize.y, rootSize.z, 0.001);
   const placed: THREE.Vector3[] = [];
 
   // Detect concentric parts (e.g. earth layers) — all share the same center
-  const origPositions = parts.map(getOriginalPosition);
-  const isConcentric = parts.length > 1 && origPositions.every(
+  const origPositions = disassemblableParts.map(getOriginalPosition);
+  const isConcentric = disassemblableParts.length > 1 && origPositions.every(
     (p) => p.distanceTo(origPositions[0]) < 0.01
   );
 
@@ -219,11 +536,11 @@ const calculateDisassemblyTargets = (
     ? maxDim * 0.9
     : maxDim * (0.15 + Math.min(strength, 1) * 0.25);
 
-  parts.forEach((part, index) => {
+  disassemblableParts.forEach((part, index) => {
     const original = getOriginalPosition(part);
     const partBox = new THREE.Box3().setFromObject(part);
     const partCenter = partBox.getCenter(new THREE.Vector3());
-    const angle = (index / Math.max(1, parts.length)) * Math.PI * 2;
+    const angle = (index / Math.max(1, disassemblableParts.length)) * Math.PI * 2;
     const fallbackDirection = new THREE.Vector3(
       Math.cos(angle),
       ((index % 3) - 1) * 0.32,
@@ -369,6 +686,7 @@ const LocalEnvironment: React.FC = () => {
 const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget; showEarthLabels?: boolean }> = ({ url, modelType, assetUrls, controlRef, cameraTarget, showEarthLabels = false }) => {
   const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
   const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
+  const [grabbableParts, setGrabbableParts] = useState<GrabbablePart[]>([]);
   const groupRef = useRef<THREE.Group>(null);
   const { camera, raycaster, scene } = useThree();
   const orbitTarget = useMemo(() => vectorFromTarget(cameraTarget), [cameraTarget]);
@@ -417,6 +735,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     setModelScene(null);
     setModelParts([]);
+    setGrabbableParts([]);
     grabbedPartRef.current = null;
     isGrabbingRef.current = false;
     cameraInitialized.current = false;
@@ -435,14 +754,24 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       else if (isEarthPolitical) targetSize = EARTH_POLITICAL_TARGET_SIZE;
       configureModel(root, targetSize);
 
-      const parts = findLayerRoots(root);
-      parts.forEach((part) => {
+      const customParts = isNitrobenzeneModel(url)
+        ? prepareNitrobenzeneModel(root)
+        : isPubchem6233Model(url)
+          ? preparePubchem6233Model(root)
+          : [];
+      const parts = customParts.length > 0 ? customParts : findLayerRoots(root);
+      const interactionParts = Array.isArray(root.userData.grabbableParts)
+        ? root.userData.grabbableParts as GrabbablePart[]
+        : parts;
+
+      Array.from(new Set([...parts, ...interactionParts])).forEach((part) => {
         part.userData.originalPosition = part.position.clone();
       });
 
       loadedRoot = root;
-      loadedParts = parts;
+      loadedParts = interactionParts;
       setModelParts(parts);
+      setGrabbableParts(interactionParts);
       setModelScene(root);
 
       const format = modelType.toUpperCase();
@@ -621,7 +950,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     const disassembly = controlRef.current.agentDisassembly;
     if (disassembly && disassembly.actionId !== lastDisassemblyActionRef.current) {
-      modelParts.forEach((part) => {
+      grabbableParts.forEach((part) => {
         delete part.userData.manualTargetPosition;
       });
       disassemblyTargetsRef.current = disassembly.enabled
@@ -649,12 +978,12 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       updateHandState(rightLandmarks);
 
       // 抓取逻辑 (一比一复刻 executeInteractions)
-      if (handState.isPinching && !isGrabbingRef.current && handState.ndc && modelParts.length > 0) {
+      if (handState.isPinching && !isGrabbingRef.current && handState.ndc && grabbableParts.length > 0) {
         raycaster.setFromCamera(handState.ndc, camera);
-        const intersects = raycaster.intersectObjects(modelParts, true);
+        const intersects = raycaster.intersectObjects(grabbableParts, true);
 
         if (intersects.length > 0) {
-          const hitPart = modelParts.find((part) => isDescendantOf(intersects[0].object, part));
+          const hitPart = grabbableParts.find((part) => isDescendantOf(intersects[0].object, part));
           if (!hitPart) return;
 
           isGrabbingRef.current = true;
