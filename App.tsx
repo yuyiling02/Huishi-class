@@ -7,9 +7,8 @@ import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
-import MultiAgentPanel from './components/MultiAgentPanel';
 import { buildClassroomSummary, buildTeachingPlan, getTeachingModelName, inferTeachingModel } from './services/agentRuntime';
-import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X } from 'lucide-react';
+import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play } from 'lucide-react';
 import { ModelType } from './types';
 
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
@@ -55,6 +54,8 @@ const App: React.FC = () => {
   const [isStageFullscreen, setIsStageFullscreen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['地理']));
+  const [sidebarTab, setSidebarTab] = useState<'resource' | 'agent'>('resource');
+  const [sidebarAgentRequest, setSidebarAgentRequest] = useState('讲解地球内部结构，展示地壳、地幔、外核和内核的关系');
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -340,6 +341,10 @@ const App: React.FC = () => {
           break;
         }
         case 'explode_model': {
+          if (modelUrl?.includes('diamond-unit-cell')) {
+            setAiAnalysis('金刚石晶胞为完整结构展示，不支持拆解。');
+            break;
+          }
           controlRef.current.agentDisassembly = {
             enabled: true,
             strength: Math.max(0, Math.min(1.4, Number(call.args.strength ?? 0.95))),
@@ -586,7 +591,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex flex-col">
             <span className="text-xl font-black text-gray-700 tracking-tight">慧视课堂</span>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest -mt-1">AI 沉浸式教学系统</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">AI 沉浸式教学系统</span>
           </div>
         </div>
 
@@ -638,7 +643,7 @@ const App: React.FC = () => {
       {/* 主体区域 */}
       <main className="flex-1 flex px-6 pb-6 gap-6 overflow-hidden">
         {/* 侧边栏 */}
-        <aside className={`glass-panel rounded-[32px] flex shrink-0 flex-col animate-in slide-in-from-left-8 duration-700 transition-all ${isSidebarCollapsed ? 'w-20 items-center p-3' : 'w-72 p-6 space-y-8'}`}>
+        <aside className={`glass-panel rounded-[32px] flex shrink-0 flex-col animate-in slide-in-from-left-8 duration-700 transition-all ${isSidebarCollapsed ? 'w-20 items-center p-3 overflow-hidden' : 'w-72 p-6 overflow-y-auto'}`}>
           {isSidebarCollapsed ? (
             <>
               <button
@@ -712,18 +717,51 @@ const App: React.FC = () => {
             <>
               <div>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h3 className="font-black text-xs text-gray-400 uppercase tracking-[0.2em] border-l-4 border-[#86e3ce] pl-3">学科资源库</h3>
+                  <div className="flex bg-gray-100/80 rounded-xl p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSidebarTab('resource');
+                        setIsSidebarCollapsed(false);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        sidebarTab === 'resource'
+                          ? 'bg-white text-gray-700 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-600'
+                      }`}
+                    >
+                      学科资源库
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSidebarTab('agent');
+                        setIsSidebarCollapsed(false);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        sidebarTab === 'agent'
+                          ? 'bg-white text-gray-700 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-600'
+                      }`}
+                    >
+                      多智能体平台
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setIsSidebarCollapsed(true)}
+                    onClick={() => {
+                      setIsSidebarCollapsed(true);
+                      setSidebarTab('resource');
+                    }}
                     className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/60 text-gray-400 shadow-sm transition hover:bg-white hover:text-gray-700"
-                    aria-label="收起资源库"
-                    title="收起资源库"
+                    aria-label="收起"
+                    title="收起"
                   >
                     <ChevronLeft size={17} />
                   </button>
                 </div>
 
+                {sidebarTab === 'resource' ? (
                 <div className="space-y-1.5">
                   {/* 物理化学 */}
                   <div className="rounded-2xl overflow-hidden">
@@ -857,6 +895,93 @@ const App: React.FC = () => {
                     )}
                   </div>
                 </div>
+                ) : (
+                <div className="space-y-3">
+                  <textarea
+                    value={sidebarAgentRequest}
+                    disabled={isAgentRunning}
+                    onChange={(e) => setSidebarAgentRequest(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!isAgentRunning && sidebarAgentRequest.trim()) {
+                          handleAgentStart(sidebarAgentRequest.trim());
+                        }
+                      }
+                    }}
+                    className="w-full resize-none rounded-2xl border border-gray-200/70 bg-white/80 px-3 py-2 text-xs font-medium leading-relaxed text-gray-700 outline-none transition focus:border-[#86e3ce] focus:ring-2 focus:ring-[#86e3ce]/20 disabled:opacity-60 h-16"
+                    placeholder="输入教学需求，按 Enter 开始，Shift+Enter 换行"
+                    title="按 Enter 开始，Shift+Enter 换行"
+                  />
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['planner', 'executor', 'evaluator'] as AgentRole[]).map((role) => {
+                      const metas: Record<AgentRole, { title: string; color: string }> = {
+                        planner: { title: '理解规划', color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
+                        executor: { title: '演示执行', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                        evaluator: { title: '学情评估', color: 'text-amber-600 bg-amber-50 border-amber-100' },
+                      };
+                      const m = metas[role];
+                      const statusMap: Record<AgentStatus, string> = { idle: '待命', thinking: '规划中', running: '执行中', done: '完成', error: '异常' };
+                      return (
+                        <div key={role} className={`rounded-xl border p-1.5 ${m.color}`}>
+                          <div className="text-[9px] font-bold truncate">{m.title}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className={`h-1.5 w-1.5 rounded-full ${agentStatuses[role] === 'running' || agentStatuses[role] === 'thinking' ? 'animate-pulse bg-current' : 'bg-current opacity-50'}`} />
+                            <span className="text-[8px] font-bold opacity-70">{statusMap[agentStatuses[role]]}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isAgentRunning || !sidebarAgentRequest.trim()}
+                    onClick={() => handleAgentStart(sidebarAgentRequest.trim())}
+                    className="w-full py-2 rounded-xl bg-gray-900 text-white text-xs font-bold shadow-lg transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {isAgentRunning ? (
+                      <><Loader2 size={14} className="animate-spin" /> 运行中...</>
+                    ) : (
+                      <><Play size={14} /> 开始演示</>
+                    )}
+                  </button>
+                  {agentThinking && (
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/80 px-2.5 py-2">
+                      <p className="text-[10px] font-medium leading-relaxed text-gray-600">{agentThinking}</p>
+                    </div>
+                  )}
+                  <div className={`space-y-1 overflow-y-auto pr-0.5 ${agentTimeline.length > 0 ? 'max-h-24' : ''}`}>
+                    {agentTimeline.length === 0 ? (
+                      <div className="rounded-xl bg-gray-50 px-2.5 py-2 text-[10px] font-medium text-gray-400">
+                        等待输入教学需求...
+                      </div>
+                    ) : (
+                      agentTimeline.map((item) => (
+                        <div key={item.id} className="rounded-xl border border-gray-100 bg-white/70 px-2.5 py-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[9px] font-bold text-gray-600 truncate">{item.title}</span>
+                            <span className={`text-[7px] font-black uppercase ${
+                              item.status === 'running' ? 'text-blue-500' :
+                              item.status === 'error' ? 'text-red-500' :
+                              item.status === 'done' ? 'text-emerald-500' : 'text-gray-400'
+                            }`}>{item.status === 'running' ? '运行中' : item.status === 'error' ? '异常' : item.status === 'done' ? '完成' : '待命'}</span>
+                          </div>
+                          <p className="mt-0.5 line-clamp-1 text-[9px] font-medium text-gray-400">{item.detail}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {agentSummary && (
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-2.5 py-2">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <ClipboardCheck size={11} className="text-amber-600" />
+                        <span className="text-[9px] font-bold text-amber-600">课堂小结</span>
+                      </div>
+                      <p className="text-[10px] font-medium leading-relaxed text-gray-600">{agentSummary}</p>
+                    </div>
+                  )}
+                </div>
+                )}
               </div>
 
               <div>
@@ -997,14 +1122,6 @@ const App: React.FC = () => {
 
         {/* 视口展示区 */}
         <section ref={stageRef} className={`flex-1 glass-panel relative overflow-hidden group bg-white ${isStageFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-[32px]'}`}>
-          <MultiAgentPanel
-            statuses={agentStatuses}
-            timeline={agentTimeline}
-            summary={agentSummary}
-            thinking={agentThinking}
-            isRunning={isAgentRunning}
-            onStart={handleAgentStart}
-          />
 
           {isProcessing && (
             <ProcessingOverlay
@@ -1156,7 +1273,7 @@ const App: React.FC = () => {
       </main>
 
       <footer className="h-8 px-10 flex items-center justify-between text-[10px] text-gray-400 uppercase tracking-widest font-bold bg-white/30 backdrop-blur-sm">
-        <span>© 2025 慧视课堂 | 教育 AI 实验室</span>
+        <span>© 2026 慧视课堂 | 教育 AI 实验室</span>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1 text-[#86e3ce]">
             <div className="w-1 h-1 bg-[#86e3ce] rounded-full animate-ping"></div>

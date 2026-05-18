@@ -42,6 +42,7 @@ const EARTH_LAYERS_TARGET_SIZE = 3.8;
 const EARTH_POLITICAL_TARGET_SIZE = 3.5;
 const PUBCHEM_6233_MODEL_KEY = 'pubchem-6233-bas-color-print_nih3d.glb';
 const NITROBENZENE_MODEL_KEY = '7416-bas-color-print_nih3d.glb';
+const DIAMOND_UNIT_CELL_KEY = 'diamond-unit-cell_nih3d.glb';
 
 type GrabbablePart = THREE.Object3D;
 
@@ -202,6 +203,8 @@ const getAssetKey = (url: string): string => {
 const isPubchem6233Model = (url: string): boolean => getAssetKey(url) === PUBCHEM_6233_MODEL_KEY;
 
 const isNitrobenzeneModel = (url: string): boolean => getAssetKey(url) === NITROBENZENE_MODEL_KEY;
+
+const isDiamondUnitCellModel = (url: string): boolean => getAssetKey(url) === DIAMOND_UNIT_CELL_KEY;
 
 const classifyPubchemAtomTriangle = (center: THREE.Vector3): PubchemPartKind => {
   if (center.x < -2.05) return 'left-methyl';
@@ -759,7 +762,11 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
         : isPubchem6233Model(url)
           ? preparePubchem6233Model(root)
           : [];
-      const parts = customParts.length > 0 ? customParts : findLayerRoots(root);
+      const parts = isDiamondUnitCellModel(url)
+        ? []
+        : customParts.length > 0
+          ? customParts
+          : findLayerRoots(root);
       const interactionParts = Array.isArray(root.userData.grabbableParts)
         ? root.userData.grabbableParts as GrabbablePart[]
         : parts;
