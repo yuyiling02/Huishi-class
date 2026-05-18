@@ -12,9 +12,12 @@ const modelNames: Record<TeachingModelId, string> = {
   biodigital_heart: '心脏模型2',
   hiv: 'HIV 病毒模型',
   diamond: '金刚石模型',
-  pubchem_6233: 'PubChem 6233 BAS 分子模型',
+  pubchem_6233: '1,4-二氯甲基苯',
   earth_layers: '地球内部结构',
   terrain: '地形地貌',
+  nacl: 'NaCl 离子晶体',
+  sio2: 'SiO₂ 二氧化硅网络',
+  nitrobenzene: '硝基苯',
 };
 
 const tool = (id: string, name: AgentToolCall['name'], label: string, args: Record<string, unknown> = {}): AgentToolCall => ({
@@ -37,8 +40,11 @@ const detectRequestedModel = (request: string): TeachingModelId | null => {
   if (/地形|地貌|高原|山地|盆地|平原|丘陵|河流|三角洲/.test(request)) return 'terrain';
   if (/地球|地壳|地幔|外核|内核|板块/.test(request)) return 'earth_layers';
   if (/病毒|HIV|免疫/i.test(request)) return 'hiv';
-  if (/6233|PubChem|NIH3D|BAS/i.test(request)) return 'pubchem_6233';
+  if (/6233|PubChem|NIH3D|BAS|二氯甲基/i.test(request)) return 'pubchem_6233';
   if (/金刚石|晶体|化学|碳原子|分子/.test(request)) return 'diamond';
+  if (/NaCl|离子晶体|氯化钠|食盐/i.test(request)) return 'nacl';
+  if (/SiO2|二氧化硅|石英|硅氧|原子晶体/i.test(request)) return 'sio2';
+  if (/硝基苯|nitrobenzene|7416/i.test(request)) return 'nitrobenzene';
   return null;
 };
 
@@ -222,7 +228,7 @@ export const buildTeachingPlan = async (request: string): Promise<AgentPlan> => 
           '你是慧视课堂的理解规划Agent。',
           '请把用户的教学需求转成可执行的3D教具演示计划。',
           '只能输出JSON对象，不要输出Markdown。',
-          'modelId只能是 heart, biodigital_heart, hiv, diamond, pubchem_6233, earth_layers, terrain 之一。',
+          'modelId只能是 heart, biodigital_heart, hiv, diamond, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene 之一。',
           '工具名只能是 load_model, auto_rotate, auto_zoom, explode_model, enable_gesture, set_teacher_log。',
           'explode_model用于自主拆解散开，必须给 strength 和 spacing。',
           '地球内部结构拆解后必须保持四层分离展示，不要调用reset_model_layout或生成恢复原样的步骤。',

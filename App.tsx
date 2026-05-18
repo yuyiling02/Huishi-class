@@ -19,6 +19,9 @@ const BUILT_IN_MODELS = {
   hiv: '/models/hiv-virus.glb',
   diamond: '/models/diamond.glb',
   pubchem6233: '/models/pubchem-6233-bas-color-print_NIH3D.glb',
+  nacl: '/models/nacl-crystal.glb',
+  sio2: '/models/sio2-crystal.glb',
+  nitrobenzene: '/models/7416-bas-color-print_NIH3D.glb',
 } as const;
 type ActiveContent = 'model' | 'biodigital';
 
@@ -64,8 +67,8 @@ const App: React.FC = () => {
 
   // Interaction speed settings
   const [showSettings, setShowSettings] = useState(false);
-  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(1.0);
-  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(1.0);
+  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(5.0);
+  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(2.0);
   const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
   const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
   const [agentSummary, setAgentSummary] = useState('');
@@ -247,7 +250,22 @@ const App: React.FC = () => {
         return;
       case 'pubchem_6233':
         showModelStage();
-        loadDemoModel(BUILT_IN_MODELS.pubchem6233, 'PubChem 6233 BAS 分子模型', 'glb');
+        loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb');
+        setCameraActive(true);
+        return;
+      case 'nacl':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.nacl, 'NaCl 离子晶体', 'glb');
+        setCameraActive(true);
+        return;
+      case 'sio2':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.sio2, 'SiO₂ 二氧化硅网络', 'glb');
+        setCameraActive(true);
+        return;
+      case 'nitrobenzene':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb');
         setCameraActive(true);
         return;
       case 'terrain':
@@ -731,8 +749,17 @@ const App: React.FC = () => {
                             <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-violet-500 animate-pulse' : 'bg-violet-300'}`}></span>金刚石模型
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, 'PubChem 6233 BAS 分子模型', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-sky-500 animate-pulse' : 'bg-sky-300'}`}></span>PubChem 6233 BAS
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-sky-500 animate-pulse' : 'bg-sky-300'}`}></span>1,4-二氯甲基苯
+                            </div>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-orange-500 animate-pulse' : 'bg-orange-300'}`}></span>硝基苯
+                            </div>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nacl, 'NaCl 离子晶体', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nacl ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nacl ? 'bg-purple-500 animate-pulse' : 'bg-purple-300'}`}></span>NaCl 离子晶体
+                            </div>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.sio2, 'SiO₂ 二氧化硅网络', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.sio2 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.sio2 ? 'bg-teal-500 animate-pulse' : 'bg-teal-300'}`}></span>SiO₂ 二氧化硅网络
                             </div>
                           </div>
                         </div>
@@ -1051,7 +1078,7 @@ const App: React.FC = () => {
                       />
                     </div>
                     <button
-                      onClick={() => { setZoomSpeedMultiplier(1.0); setRotationSpeedMultiplier(1.0); }}
+                      onClick={() => { setZoomSpeedMultiplier(5.0); setRotationSpeedMultiplier(2.0); }}
                       className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-500 text-xs font-black uppercase tracking-wider hover:bg-gray-200 transition"
                     >
                       重置默认
