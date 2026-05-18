@@ -87,13 +87,43 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
 
   useEffect(() => {
     let mounted = true;
+    let mediaStream: MediaStream | null = null;
 
-    const setupMediaPipe = async () => {
+    // 1. 先启动摄像头（不依赖 AI 模型加载）
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 320 },
+            height: { ideal: 240 },
+            frameRate: { ideal: 60, max: 60 },
+            facingMode: "user"
+          }
+        });
+        if (!mounted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        mediaStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.addEventListener("loadeddata", predictWebcam);
+        }
+        setLoading(false);
+      } catch (err) {
+        console.error("Webcam error:", err);
+        if (!mounted) return;
+        setError("无法访问摄像头，请检查摄像头权限（需 HTTPS/localhost）");
+        setLoading(false);
+      }
+    };
+
+    // 2. 同时加载 MediaPipe AI 模型（不阻塞摄像头）
+    const loadAIEngine = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
         );
-
         if (!mounted) return;
 
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
@@ -104,50 +134,26 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
           runningMode: "VIDEO",
           numHands: 2
         });
-
-        startWebcam();
       } catch (err) {
-        console.error("Error initializing MediaPipe:", err);
-        setError("AI 引擎加载失败");
-        setLoading(false);
+        console.error("MediaPipe init failed (camera still works):", err);
+        // 摄像头已启动，AI 引擎加载失败仅影响手势识别，不影响摄像头
+        if (!mounted) return;
+        controlRef.current.handLandmarks = { left: null, right: null };
       }
     };
 
-    setupMediaPipe();
+    startCamera();
+    loadAIEngine();
 
     return () => {
       mounted = false;
       if (handLandmarkerRef.current) {
         handLandmarkerRef.current.close();
       }
-      const stream = videoRef.current?.srcObject as MediaStream | null;
-      stream?.getTracks().forEach((track) => track.stop());
+      mediaStream?.getTracks().forEach((track) => track.stop());
       cancelAnimationFrame(requestRef.current);
     };
   }, []);
-
-  const startWebcam = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 320 },
-          height: { ideal: 240 },
-          frameRate: { ideal: 60, max: 60 },
-          facingMode: "user"
-        }
-      });
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.addEventListener("loadeddata", predictWebcam);
-      }
-      setLoading(false);
-    } catch (err) {
-      console.error("Webcam error:", err);
-      setError("无法访问摄像头");
-      setLoading(false);
-    }
-  };
 
   const isFingerExtended = (landmarks: any[], tipIdx: number, pipIdx: number) => {
     return landmarks[tipIdx].y < landmarks[pipIdx].y;
@@ -164,8 +170,13 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   };
 
   const predictWebcam = () => {
-    if (!videoRef.current || !handLandmarkerRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return;
     if (videoRef.current.readyState < videoRef.current.HAVE_CURRENT_DATA) {
+      requestRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+    // AI 模型尚未加载完成时，继续重试（摄像头已独立启动，不阻塞）
+    if (!handLandmarkerRef.current) {
       requestRef.current = requestAnimationFrame(predictWebcam);
       return;
     }
@@ -440,7 +451,12 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     requestRef.current = requestAnimationFrame(predictWebcam);
   };
 
-  if (error) return <div className="absolute inset-0 flex items-center justify-center bg-red-50 text-red-400 text-[10px] font-black">{error}</div>;
+  if (error) return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50 text-red-400 p-4 text-center">
+      <svg className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+      <span className="text-xs font-black leading-tight">{error}</span>
+    </div>
+  );
 
   return (
     <div className="w-full h-full relative">

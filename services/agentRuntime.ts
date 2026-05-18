@@ -12,6 +12,7 @@ const modelNames: Record<TeachingModelId, string> = {
   biodigital_heart: '心脏模型2',
   hiv: 'HIV 病毒模型',
   diamond: '金刚石模型',
+  pubchem_6233: 'PubChem 6233 BAS 分子模型',
   earth_layers: '地球内部结构',
   terrain: '地形地貌',
 };
@@ -36,6 +37,7 @@ const detectRequestedModel = (request: string): TeachingModelId | null => {
   if (/地形|地貌|高原|山地|盆地|平原|丘陵|河流|三角洲/.test(request)) return 'terrain';
   if (/地球|地壳|地幔|外核|内核|板块/.test(request)) return 'earth_layers';
   if (/病毒|HIV|免疫/i.test(request)) return 'hiv';
+  if (/6233|PubChem|NIH3D|BAS/i.test(request)) return 'pubchem_6233';
   if (/金刚石|晶体|化学|碳原子|分子/.test(request)) return 'diamond';
   return null;
 };
@@ -220,7 +222,7 @@ export const buildTeachingPlan = async (request: string): Promise<AgentPlan> => 
           '你是慧视课堂的理解规划Agent。',
           '请把用户的教学需求转成可执行的3D教具演示计划。',
           '只能输出JSON对象，不要输出Markdown。',
-          'modelId只能是 heart, biodigital_heart, hiv, diamond, earth_layers, terrain 之一。',
+          'modelId只能是 heart, biodigital_heart, hiv, diamond, pubchem_6233, earth_layers, terrain 之一。',
           '工具名只能是 load_model, auto_rotate, auto_zoom, explode_model, enable_gesture, set_teacher_log。',
           'explode_model用于自主拆解散开，必须给 strength 和 spacing。',
           '地球内部结构拆解后必须保持四层分离展示，不要调用reset_model_layout或生成恢复原样的步骤。',
