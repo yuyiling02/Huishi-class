@@ -61,7 +61,7 @@ export interface ControlRefs {
   agentDisassembly: AgentDisassemblyControl;
 }
 
-export type TeachingModelId = 'heart' | 'biodigital_heart' | 'hiv' | 'diamond' | 'pubchem_6233' | 'earth_layers' | 'terrain' | 'nacl' | 'sio2' | 'nitrobenzene';
+export type TeachingModelId = 'heart' | 'biodigital_heart' | 'hiv' | 'diamond' | 'diamond_unit_cell' | 'pubchem_6233' | 'earth_layers' | 'terrain' | 'nacl' | 'sio2' | 'nitrobenzene';
 export type AgentRole = 'planner' | 'executor' | 'evaluator';
 export type AgentStatus = 'idle' | 'thinking' | 'running' | 'done' | 'error';
 

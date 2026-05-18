@@ -18,6 +18,7 @@ const BUILT_IN_MODELS = {
   heart: '/models/心脏模型.glb',
   hiv: '/models/hiv-virus.glb',
   diamond: '/models/diamond.glb',
+  diamondUnitCell: '/models/diamond-unit-cell_NIH3D.glb',
   pubchem6233: '/models/pubchem-6233-bas-color-print_NIH3D.glb',
   nacl: '/models/nacl-crystal.glb',
   sio2: '/models/sio2-crystal.glb',
@@ -246,6 +247,11 @@ const App: React.FC = () => {
       case 'diamond':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb');
+        setCameraActive(true);
+        return;
+      case 'diamond_unit_cell':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb');
         setCameraActive(true);
         return;
       case 'pubchem_6233':
@@ -748,6 +754,9 @@ const App: React.FC = () => {
                           <div className="space-y-0.5">
                             <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-violet-500 animate-pulse' : 'bg-violet-300'}`}></span>金刚石模型
+                            </div>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-fuchsia-500 animate-pulse' : 'bg-fuchsia-300'}`}></span>金刚石晶胞
                             </div>
                             <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-sky-500 animate-pulse' : 'bg-sky-300'}`}></span>1,4-二氯甲基苯

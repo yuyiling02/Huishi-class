@@ -303,9 +303,11 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
       <mesh ref={soilRef} position={[0, -0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <boxGeometry args={[4, 4, 0.2]} />
         <meshStandardMaterial color="#7a5230" roughness={1} />
-        <Html distanceFactor={12} position={[-2.1, 0, 0]}>
-          <div className="bg-black/80 px-2 py-1 rounded text-white text-[8px] border border-orange-900/50">剖面: 土壤与沉积岩层</div>
-        </Html>
+        {showLabels && (
+          <Html distanceFactor={12} position={[-2.1, 0, 0]}>
+            <div className="bg-black/80 px-2 py-1 rounded text-white text-[8px] border border-orange-900/50">剖面: 土壤与沉积岩层</div>
+          </Html>
+        )}
       </mesh>
 
       {/* 2. 真实地表 (Surface & Contour Lines) */}
