@@ -1,11 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ControlRefs } from '../types';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 
 // ====== 豆包语音识别配置 ======
 const DOUBAO_APPID = '9430818629';
 const DOUBAO_TOKEN = '516504b5-521e-417f-a9d0-2109d9c6e732';
-const DOUBAO_CLUSTER = 'volcengine_input_edu'; // 请在火山引擎控制台 → 语音识别服务中查看实际 Cluster ID
+const DOUBAO_CLUSTER = 'volcengine_input_edu';
 const DOUBAO_WS_URL = 'wss://openspeech.bytedance.com/api/v2/asr';
 
 // ====== 二进制协议常量 ======
@@ -29,6 +29,7 @@ const SUCCESS_CODE = 1000;
 interface VoiceControllerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   onStatusChange: (status: string) => void;
+  onRecognizedText?: (text: string) => void;
 }
 
 function generateHeader(
@@ -71,7 +72,6 @@ function parseServerMessage(data: ArrayBuffer): Record<string, any> {
     const payloadSize = new DataView(payload.buffer, payload.byteOffset, 4).getInt32(0, false);
     let payloadData = payload.slice(4, 4 + payloadSize);
     if (compression === GZIP_COMPRESSION) {
-      // decompress handled async below; store buffer for later
       result._compressedPayload = payloadData;
       result._compression = compression;
       result._serialization = serialization;
@@ -137,42 +137,113 @@ function extractCommands(text: string, controlRef: ControlRefs): string[] {
   return fired;
 }
 
-const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusChange }) => {
+const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusChange, onRecognizedText }) => {
   const [isActive, setIsActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [recognizedText, setRecognizedText] = useState('');
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const seqRef = useRef(0);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const stoppedRef = useRef(false);
 
-  const stopSession = () => {
-    wsRef.current?.close();
+  const clearDisplayText = useCallback(() => {
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = null;
+    }
+    setRecognizedText('');
+    onRecognizedText?.('');
+  }, [onRecognizedText]);
+
+  const cleanupAudio = useCallback(() => {
+    // Disconnect and clean up audio processor first to stop callbacks
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current.onaudioprocess = null;
+      processorRef.current = null;
+    }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    // Close AudioContext (stops all scheduling immediately)
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    // Stop all media tracks (turns off microphone indicator)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  const stopSession = useCallback(() => {
+    stoppedRef.current = true;
+    // Close WebSocket first so onclose won't fire a second cleanup
+    const ws = wsRef.current;
     wsRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    audioCtxRef.current?.close();
-    audioCtxRef.current = null;
-    seqRef.current = 0;
+    if (ws) {
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      ws.close();
+    }
+    cleanupAudio();
     setIsActive(false);
+    clearDisplayText();
     onStatusChange('语音助手已离线');
-  };
+  }, [cleanupAudio, clearDisplayText, onStatusChange]);
 
-  const startSession = async () => {
+  const startSession = useCallback(async () => {
+    stoppedRef.current = false;
     setIsConnecting(true);
     onStatusChange('正在连接豆包语音识别...');
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Check if session was stopped while waiting for mic permission
+      if (stoppedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       streamRef.current = stream;
 
       const ws = new WebSocket(DOUBAO_WS_URL);
-      wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
 
       const reqid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
+      // Set up close handler BEFORE onopen to catch early failures
+      ws.onclose = (evt) => {
+        if (stoppedRef.current) return;
+        stoppedRef.current = true;
+        cleanupAudio();
+        setIsActive(false);
+        setIsConnecting(false);
+        clearDisplayText();
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+        }
+        onStatusChange(evt.wasClean ? '语音识别连接已断开' : `语音连接异常断开(code=${evt.code})`);
+      };
+
+      ws.onerror = () => {
+        if (stoppedRef.current) return;
+        // onclose will fire next and handle cleanup — don't duplicate
+        onStatusChange('豆包语音连接失败，请检查网络或配置。');
+      };
+
       ws.onopen = async () => {
-        // Build and send full client request
+        if (stoppedRef.current) {
+          ws.close();
+          return;
+        }
+
         const requestParams = {
           app: {
             appid: DOUBAO_APPID,
@@ -193,8 +264,6 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
             rate: 16000,
             bits: 16,
             channel: 1,
-            codec: 'raw',
-            language: 'zh-CN',
           },
         };
 
@@ -207,24 +276,34 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
         message.set(compressed, 8);
         ws.send(message);
 
-        // Set up audio pipeline
-        const audioCtx = new AudioContext({ sampleRate: 16000 });
+        let audioCtx: AudioContext;
+        try {
+          audioCtx = new AudioContext({ sampleRate: 16000 });
+        } catch {
+          audioCtx = new AudioContext();
+        }
         audioCtxRef.current = audioCtx;
+
         const source = audioCtx.createMediaStreamSource(stream);
+        sourceRef.current = source;
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
 
         processor.onaudioprocess = (e) => {
-          if (ws.readyState !== WebSocket.OPEN) return;
+          const currentWs = wsRef.current;
+          if (!currentWs || currentWs.readyState !== WebSocket.OPEN) return;
           const inputData = e.inputBuffer.getChannelData(0);
           const int16 = new Int16Array(inputData.length);
           for (let i = 0; i < inputData.length; i++) {
             int16[i] = Math.max(-32768, Math.min(32767, Math.round(inputData[i] * 32767)));
           }
           const audioBytes = new Uint8Array(int16.buffer);
-          seqRef.current++;
-          // send as audio-only request (no compression for simplicity, raw PCM)
           const audioMsg = buildAudioOnlyRequest(audioBytes, false);
-          ws.send(audioMsg);
+          try {
+            currentWs.send(audioMsg);
+          } catch {
+            // Socket closed between check and send — safe to ignore
+          }
         };
 
         source.connect(processor);
@@ -236,11 +315,16 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
       };
 
       ws.onmessage = async (event) => {
+        if (stoppedRef.current) return;
+
         const raw = parseServerMessage(event.data as ArrayBuffer);
-        const result = raw._compressedPayload ? await parseServerMessageAsync(event.data as ArrayBuffer) : raw;
+        const result = raw._compressedPayload
+          ? await parseServerMessageAsync(event.data as ArrayBuffer)
+          : raw;
 
         if (result.errorCode) {
-          console.error('Doubao ASR error:', result.errorCode, result.errorMessage);
+          console.error('[Voice] ASR error:', result.errorCode, result.errorMessage);
+          onStatusChange(`语音识别错误: ${result.errorCode} — ${result.errorMessage}`);
           return;
         }
 
@@ -248,58 +332,93 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
         if (!payload) return;
 
         if (payload.code !== SUCCESS_CODE) {
-          console.error('Doubao ASR error:', payload.code, payload.message);
+          console.error('[Voice] ASR error:', payload.code, payload.message);
           if (payload.code === 1002) {
             onStatusChange('豆包鉴权失败，请检查 AppID / Token / Cluster 配置。');
+          } else {
+            onStatusChange(`语音识别服务返回错误: ${payload.code} — ${payload.message || '未知错误'}`);
           }
           return;
         }
 
-        const utterances = payload.result?.[0]?.utterances;
+        const resultData = payload.result;
+        if (!resultData || resultData.length === 0) return;
+
+        const utterances = resultData[0]?.utterances;
         if (utterances && utterances.length > 0) {
           const latest = utterances[utterances.length - 1];
+          const text = latest.text;
+
+          if (text) {
+            if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+            setRecognizedText(text);
+            onRecognizedText?.(text);
+
+            clearTimerRef.current = setTimeout(() => {
+              setRecognizedText('');
+              onRecognizedText?.('');
+              clearTimerRef.current = null;
+            }, 3000);
+          }
+
           if (latest.definite) {
-            // Final recognition result
-            const text = latest.text;
             const commands = extractCommands(text, controlRef.current);
             if (commands.length > 0) {
               const cmdNames: Record<string, string> = { zoom_in: '放大', zoom_out: '缩小', rotate: '旋转', stop: '停止' };
               onStatusChange(`识别: "${text}" → 执行: ${commands.map((c) => cmdNames[c] || c).join('、')}`);
-            } else {
+            } else if (text) {
               onStatusChange(`识别: "${text}"`);
             }
           }
         }
       };
-
-      ws.onerror = () => {
-        console.error('Doubao WS error');
-        onStatusChange('豆包语音连接失败，请检查网络或配置。');
-      };
-
-      ws.onclose = () => {
-        setIsActive(false);
-        if (wsRef.current === ws) {
-          onStatusChange('语音识别连接已断开');
-        }
-      };
     } catch (err) {
-      console.error('Voice Setup Error:', err);
+      if (stoppedRef.current) return;
+      console.error('[Voice] Setup error:', err);
+      stoppedRef.current = true;
+      cleanupAudio();
       setIsConnecting(false);
       onStatusChange('麦克风访问失败，请允许浏览器使用麦克风。');
     }
-  };
+  }, [controlRef, onStatusChange, onRecognizedText, cleanupAudio, clearDisplayText]);
 
-  const toggleVoice = () => {
+  const toggleVoice = useCallback(() => {
     if (isActive) {
       stopSession();
     } else {
       startSession();
     }
-  };
+  }, [isActive, stopSession, startSession]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stoppedRef.current = true;
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      const ws = wsRef.current;
+      wsRef.current = null;
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.close();
+      }
+      cleanupAudio();
+    };
+  }, [cleanupAudio]);
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="relative flex items-center gap-3">
+      {/* Speech bubble: real-time recognized text */}
+      {recognizedText && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 whitespace-nowrap z-50">
+          <div className="px-4 py-2 rounded-xl bg-gray-900/90 backdrop-blur-md text-white text-sm font-medium shadow-lg border border-white/10 max-w-[320px] truncate">
+            <span className="text-[#86e3ce] mr-1.5">♪</span>
+            {recognizedText}
+          </div>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-gray-900/90" />
+        </div>
+      )}
       {isActive && (
         <div className="flex gap-1 h-4 items-center px-2">
           {[1, 2, 3, 4, 5].map((i) => (

@@ -43,6 +43,7 @@ const EARTH_POLITICAL_TARGET_SIZE = 3.5;
 const PUBCHEM_6233_MODEL_KEY = 'pubchem-6233-bas-color-print_nih3d.glb';
 const NITROBENZENE_MODEL_KEY = '7416-bas-color-print_nih3d.glb';
 const DIAMOND_UNIT_CELL_KEY = 'diamond-unit-cell_nih3d.glb';
+const DIAMOND_MODEL_KEY = 'diamond.glb';
 
 type GrabbablePart = THREE.Object3D;
 
@@ -181,6 +182,55 @@ const configureModel = (root: THREE.Object3D, targetSize = MODEL_TARGET_SIZE) =>
   });
 };
 
+const enhanceDiamondModel = (root: THREE.Object3D) => {
+  const atomsNode = root.getObjectByName('atoms') as THREE.Mesh | null;
+  const bondsNode = root.getObjectByName('bonds') as THREE.Mesh | null;
+
+  // Carbon atom material — crystalline diamond look
+  const atomMaterial = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color('#e8f4fd'),
+    metalness: 0.05,
+    roughness: 0.18,
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.15,
+    reflectivity: 1.0,
+    envMapIntensity: 1.6,
+    specularIntensity: 0.7,
+    specularColor: new THREE.Color('#c8e8ff'),
+  });
+
+  // Covalent bond material — subtle metallic gray
+  const bondMaterial = new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#b0bec5'),
+    metalness: 0.3,
+    roughness: 0.35,
+    envMapIntensity: 1.0,
+  });
+
+  if (atomsNode && isMeshObject(atomsNode)) {
+    atomsNode.material = atomMaterial;
+    atomsNode.castShadow = true;
+    atomsNode.receiveShadow = true;
+  }
+
+  if (bondsNode && isMeshObject(bondsNode)) {
+    bondsNode.material = bondMaterial;
+    bondsNode.castShadow = true;
+    bondsNode.receiveShadow = true;
+  }
+
+  // Also traverse to catch any unnamed meshes
+  root.traverse((child) => {
+    if (!isMeshObject(child) || child === atomsNode || child === bondsNode) return;
+    const name = child.name.toLowerCase();
+    if (name.includes('atom') || name.includes('carbon') || name.includes('c_')) {
+      child.material = atomMaterial;
+    } else if (name.includes('bond')) {
+      child.material = bondMaterial;
+    }
+  });
+};
+
 const setPartHighlight = (part: GrabbablePart, color: number) => {
   part.traverse((child) => {
     if (!isMeshObject(child) || !child.material) return;
@@ -205,6 +255,8 @@ const isPubchem6233Model = (url: string): boolean => getAssetKey(url) === PUBCHE
 const isNitrobenzeneModel = (url: string): boolean => getAssetKey(url) === NITROBENZENE_MODEL_KEY;
 
 const isDiamondUnitCellModel = (url: string): boolean => getAssetKey(url) === DIAMOND_UNIT_CELL_KEY;
+
+const isDiamondModel = (url: string): boolean => getAssetKey(url) === DIAMOND_MODEL_KEY;
 
 const classifyPubchemAtomTriangle = (center: THREE.Vector3): PubchemPartKind => {
   if (center.x < -2.05) return 'left-methyl';
@@ -756,6 +808,10 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       if (isEarthLayers) targetSize = EARTH_LAYERS_TARGET_SIZE;
       else if (isEarthPolitical) targetSize = EARTH_POLITICAL_TARGET_SIZE;
       configureModel(root, targetSize);
+
+      if (isDiamondModel(url)) {
+        enhanceDiamondModel(root);
+      }
 
       const customParts = isNitrobenzeneModel(url)
         ? prepareNitrobenzeneModel(root)
