@@ -803,11 +803,11 @@ const App: React.FC = () => {
                             <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-orange-500 animate-pulse' : 'bg-orange-300'}`}></span>硝基苯
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nacl, 'NaCl 离子晶体', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nacl ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nacl ? 'bg-purple-500 animate-pulse' : 'bg-purple-300'}`}></span>NaCl 离子晶体
+                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
+                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-gray-300"></span>NaCl 离子晶体
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.sio2, 'SiO₂ 二氧化硅网络', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.sio2 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.sio2 ? 'bg-teal-500 animate-pulse' : 'bg-teal-300'}`}></span>SiO₂ 二氧化硅网络
+                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
+                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-gray-300"></span>SiO₂ 二氧化硅网络
                             </div>
                           </div>
                         </div>
@@ -845,8 +845,8 @@ const App: React.FC = () => {
                             <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-500 animate-pulse' : 'bg-rose-300'}`}></span>心脏模型1
                             </div>
-                            <div onClick={showBioDigitalStage} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${activeContent === 'biodigital' ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${activeContent === 'biodigital' ? 'bg-rose-500 animate-pulse' : 'bg-rose-300'}`}></span>心脏模型2
+                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
+                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-gray-300"></span>心脏模型2
                             </div>
                           </div>
                         </div>
