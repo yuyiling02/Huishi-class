@@ -46,6 +46,12 @@ const DIAMOND_UNIT_CELL_KEY = 'diamond-unit-cell_nih3d.glb';
 const DIAMOND_MODEL_KEY = 'diamond.glb';
 
 type GrabbablePart = THREE.Object3D;
+type HighlightMaterial = THREE.Material & { emissive?: THREE.Color };
+interface DragPickProxy {
+  part: GrabbablePart;
+  localBox: THREE.Box3;
+  worldBox: THREE.Box3;
+}
 
 type PubchemPartKind = 'left-methyl' | 'right-methyl' | 'core';
 type NitrobenzenePartKind = 'nitro' | 'remainder';
@@ -75,6 +81,58 @@ const collectMeshes = (object: THREE.Object3D): THREE.Mesh[] => {
     }
   });
   return meshes;
+};
+
+const collectHighlightMaterials = (part: GrabbablePart): HighlightMaterial[] => {
+  const materials = new Set<HighlightMaterial>();
+
+  part.traverse((child) => {
+    if (!isMeshObject(child) || !child.material) return;
+
+    const meshMaterials = Array.isArray(child.material) ? child.material : [child.material];
+    meshMaterials.forEach((material) => {
+      const highlightMaterial = material as HighlightMaterial;
+      if (highlightMaterial.emissive) {
+        materials.add(highlightMaterial);
+      }
+    });
+  });
+
+  return Array.from(materials);
+};
+
+const createDragPickProxy = (part: GrabbablePart): DragPickProxy | null => {
+  part.updateWorldMatrix(true, true);
+
+  const inversePartMatrix = new THREE.Matrix4().copy(part.matrixWorld).invert();
+  const localBox = new THREE.Box3();
+  const meshLocalBox = new THREE.Box3();
+
+  collectMeshes(part).forEach((mesh) => {
+    if (!mesh.geometry) return;
+    if (!mesh.geometry.boundingBox) {
+      mesh.geometry.computeBoundingBox();
+    }
+    if (!mesh.geometry.boundingBox) return;
+
+    mesh.updateWorldMatrix(true, false);
+    meshLocalBox.copy(mesh.geometry.boundingBox)
+      .applyMatrix4(mesh.matrixWorld)
+      .applyMatrix4(inversePartMatrix);
+    localBox.union(meshLocalBox);
+  });
+
+  if (localBox.isEmpty()) {
+    const fallbackWorldBox = new THREE.Box3().setFromObject(part);
+    if (fallbackWorldBox.isEmpty()) return null;
+    localBox.copy(fallbackWorldBox).applyMatrix4(inversePartMatrix);
+  }
+
+  return {
+    part,
+    localBox: localBox.clone(),
+    worldBox: new THREE.Box3(),
+  };
 };
 
 const findLayerRoots = (root: THREE.Object3D): GrabbablePart[] => {
@@ -755,10 +813,15 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   // ========== 一比一复刻第一版变量 ==========
   const isGrabbingRef = useRef(false);
   const grabbedPartRef = useRef<GrabbablePart | null>(null);
+  const grabbedParentRef = useRef<THREE.Object3D | null>(null);
   const grabOffsetRef = useRef(new THREE.Vector3());
   const dragPlaneRef = useRef(new THREE.Plane());
   const dragTargetPositionRef = useRef(new THREE.Vector3());
   const lastGrabPinchTimeRef = useRef(0);
+  const raycastTargetsRef = useRef<THREE.Object3D[]>([]);
+  const meshToPartRef = useRef<WeakMap<THREE.Object3D, GrabbablePart>>(new WeakMap());
+  const highlightMaterialsRef = useRef<WeakMap<GrabbablePart, HighlightMaterial[]>>(new WeakMap());
+  const dragPickProxiesRef = useRef<DragPickProxy[]>([]);
 
   // 手部状态 (一比一复刻第一版 handsState)
   const interactionHandStateRef = useRef<{
@@ -785,7 +848,9 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     worldQuat: new THREE.Quaternion(),
     worldScale: new THREE.Vector3(),
     intersectPoint: new THREE.Vector3(),
-    targetPoint: new THREE.Vector3()
+    targetPoint: new THREE.Vector3(),
+    targetLocal: new THREE.Vector3(),
+    pickPoint: new THREE.Vector3()
   });
 
   // Persistent spherical coords for smooth camera orbit (avoids zoom+rotation conflict)
@@ -810,8 +875,13 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     setModelParts([]);
     setGrabbableParts([]);
     grabbedPartRef.current = null;
+    grabbedParentRef.current = null;
     isGrabbingRef.current = false;
     lastGrabPinchTimeRef.current = 0;
+    raycastTargetsRef.current = [];
+    meshToPartRef.current = new WeakMap();
+    highlightMaterialsRef.current = new WeakMap();
+    dragPickProxiesRef.current = [];
     cameraInitialized.current = false;
     wasCameraGestureActiveRef.current = false;
     disassemblyTargetsRef.current.clear();
@@ -849,6 +919,29 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       Array.from(new Set([...parts, ...interactionParts])).forEach((part) => {
         part.userData.originalPosition = part.position.clone();
       });
+
+      const nextMeshToPart = new WeakMap<THREE.Object3D, GrabbablePart>();
+      const nextHighlightMaterials = new WeakMap<GrabbablePart, HighlightMaterial[]>();
+      const nextRaycastTargets: THREE.Object3D[] = [];
+      const nextDragPickProxies: DragPickProxy[] = [];
+
+      interactionParts.forEach((part) => {
+        const meshes = collectMeshes(part);
+        meshes.forEach((mesh) => {
+          nextMeshToPart.set(mesh, part);
+          nextRaycastTargets.push(mesh);
+        });
+        nextHighlightMaterials.set(part, collectHighlightMaterials(part));
+        const pickProxy = createDragPickProxy(part);
+        if (pickProxy) {
+          nextDragPickProxies.push(pickProxy);
+        }
+      });
+
+      raycastTargetsRef.current = nextRaycastTargets;
+      meshToPartRef.current = nextMeshToPart;
+      highlightMaterialsRef.current = nextHighlightMaterials;
+      dragPickProxiesRef.current = nextDragPickProxies;
 
       loadedRoot = root;
       loadedParts = interactionParts;
@@ -973,12 +1066,54 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     const part = grabbedPartRef.current;
     if (part) {
       part.userData.manualTargetPosition = part.position.clone();
-      setPartHighlight(part, 0x000000);
+      const highlightMaterials = highlightMaterialsRef.current.get(part);
+      if (highlightMaterials) {
+        highlightMaterials.forEach((material) => material.emissive?.setHex(0x000000));
+      } else {
+        setPartHighlight(part, 0x000000);
+      }
     }
 
     isGrabbingRef.current = false;
     grabbedPartRef.current = null;
+    grabbedParentRef.current = null;
     lastGrabPinchTimeRef.current = 0;
+  };
+
+  const pickGrabbablePart = (): GrabbablePart | null => {
+    const proxies = dragPickProxiesRef.current;
+    const scratch = handProjectionScratchRef.current;
+
+    if (proxies.length > 0) {
+      groupRef.current?.updateWorldMatrix(true, true);
+
+      let bestPart: GrabbablePart | null = null;
+      let bestDistanceSq = Infinity;
+
+      proxies.forEach((proxy) => {
+        proxy.worldBox.copy(proxy.localBox).applyMatrix4(proxy.part.matrixWorld);
+        const hitPoint = raycaster.ray.intersectBox(proxy.worldBox, scratch.pickPoint);
+        if (!hitPoint) return;
+
+        const distanceSq = raycaster.ray.origin.distanceToSquared(hitPoint);
+        if (distanceSq < bestDistanceSq) {
+          bestDistanceSq = distanceSq;
+          bestPart = proxy.part;
+        }
+      });
+
+      return bestPart;
+    }
+
+    const raycastTargets = raycastTargetsRef.current;
+    const intersects = raycaster.intersectObjects(
+      raycastTargets.length > 0 ? raycastTargets : grabbableParts,
+      raycastTargets.length === 0
+    );
+    if (intersects.length === 0) return null;
+
+    const hitObject = intersects[0].object;
+    return meshToPartRef.current.get(hitObject) || grabbableParts.find((part) => isDescendantOf(hitObject, part)) || null;
   };
 
   useFrame((state, delta) => {
@@ -1090,34 +1225,25 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       // 抓取逻辑 (一比一复刻 executeInteractions)
       if (!hasRotationGestureInput && handState.isPinching && !isGrabbingRef.current && handState.ndc && grabbableParts.length > 0) {
         raycaster.setFromCamera(handState.ndc, camera);
-        const intersects = raycaster.intersectObjects(grabbableParts, true);
+        const hitPart = pickGrabbablePart();
 
-        if (intersects.length > 0) {
-          const hitPart = grabbableParts.find((part) => isDescendantOf(intersects[0].object, part));
-          if (!hitPart) return;
-
+        if (hitPart) {
           isGrabbingRef.current = true;
           grabbedPartRef.current = hitPart;
+          grabbedParentRef.current = hitPart.parent;
           lastGrabPinchTimeRef.current = nowMs;
 
           // 获取世界坐标
-          const { worldPos, worldQuat, worldScale } = scratch;
+          const { worldPos } = scratch;
           hitPart.getWorldPosition(worldPos);
-          hitPart.getWorldQuaternion(worldQuat);
-          hitPart.getWorldScale(worldScale);
-
-          // 移到场景根节点
-          if (hitPart.parent) {
-            hitPart.parent.remove(hitPart);
-          }
-          scene.add(hitPart);
-
-          hitPart.position.copy(worldPos);
-          hitPart.quaternion.copy(worldQuat);
-          hitPart.scale.copy(worldScale);
 
           // 高亮
-          setPartHighlight(hitPart, 0x333333);
+          const highlightMaterials = highlightMaterialsRef.current.get(hitPart);
+          if (highlightMaterials) {
+            highlightMaterials.forEach((material) => material.emissive?.setHex(0x333333));
+          } else {
+            setPartHighlight(hitPart, 0x333333);
+          }
 
           // 设置拖拽平面
           dragPlaneRef.current.setFromNormalAndCoplanarPoint(
@@ -1139,7 +1265,10 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
         raycaster.setFromCamera(handState.ndc, camera);
         if (raycaster.ray.intersectPlane(dragPlaneRef.current, scratch.targetPoint)) {
           dragTargetPositionRef.current.copy(scratch.targetPoint).add(grabOffsetRef.current);
-          grabbedPartRef.current.position.copy(dragTargetPositionRef.current);
+          const parent = grabbedParentRef.current || scene;
+          scratch.targetLocal.copy(dragTargetPositionRef.current);
+          parent.worldToLocal(scratch.targetLocal);
+          grabbedPartRef.current.position.copy(scratch.targetLocal);
         }
       }
     } else {

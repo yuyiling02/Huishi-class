@@ -79,8 +79,8 @@ const App: React.FC = () => {
 
   // Interaction speed settings
   const [showSettings, setShowSettings] = useState(false);
-  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(2.0);
-  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(2.0);
+  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(0.8);
+  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(0.5);
   const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
   const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
   const [agentSummary, setAgentSummary] = useState('');
@@ -102,7 +102,7 @@ const App: React.FC = () => {
     isDragging: false,
     handLandmarks: { left: null, right: null },
     interactionHandLandmarks: null,
-    interactionSettings: { zoomSpeed: 2.0, rotationSpeed: 1.0 },
+    interactionSettings: { zoomSpeed: 0.8, rotationSpeed: 0.5 },
     agentDisassembly: {
       enabled: false,
       strength: 0,
@@ -1173,7 +1173,7 @@ const App: React.FC = () => {
                       />
                     </div>
                     <button
-                      onClick={() => { setZoomSpeedMultiplier(5.0); setRotationSpeedMultiplier(2.0); }}
+                      onClick={() => { setZoomSpeedMultiplier(0.8); setRotationSpeedMultiplier(0.5); }}
                       className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-500 text-xs font-black uppercase tracking-wider hover:bg-gray-200 transition"
                     >
                       重置默认

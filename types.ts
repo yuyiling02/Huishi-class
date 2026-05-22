@@ -35,8 +35,8 @@ export interface ControlState {
 }
 
 export interface InteractionSettings {
-  zoomSpeed: number;     // 0.1 - 5.0, default 2.0
-  rotationSpeed: number; // 0.1 - 5.0, default 1.0
+  zoomSpeed: number;     // 0.1 - 5.0, default 0.8
+  rotationSpeed: number; // 0.1 - 5.0, default 0.5
 }
 
 export interface AgentDisassemblyControl {
