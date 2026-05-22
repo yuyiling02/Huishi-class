@@ -21,6 +21,23 @@ const toUserFacingHandedness = (categoryName: string) => (
   categoryName === 'Left' ? 'Right' : 'Left'
 );
 
+const LOCAL_VISION_WASM_PATH = '/mediapipe/wasm';
+const LOCAL_HAND_MODEL_PATH = '/mediapipe/hand_landmarker.task';
+const CDN_VISION_WASM_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm';
+const CDN_HAND_MODEL_PATH = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+const createHandLandmarker = async (wasmPath: string, modelAssetPath: string) => {
+  const vision = await FilesetResolver.forVisionTasks(wasmPath);
+  return HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath,
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numHands: 2
+  });
+};
+
 const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChange, interactionMode }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -46,6 +63,7 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     controlRef.current.rotationVelocity = { x: 0, y: 0 };
     controlRef.current.zoomSpeed = 0;
     controlRef.current.isDragging = false;
+    controlRef.current.interactionHandLandmarks = null;
   }, [controlRef, interactionMode]);
 
   // Smoothing refs
@@ -73,15 +91,15 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   const CONTACT_THRESHOLD = 0.12;
 
   // INCREASED SENSITIVITY: 0.15 -> 0.35
-  const ZOOM_SENSITIVITY = 0.12;
+  const ZOOM_SENSITIVITY = 0.35;
 
   // Adjusted for better range of motion
   const DRAG_SCALE_X = 7.0;
   const DRAG_SCALE_Y = 5.5;
-  const ROTATION_SENSITIVITY = 0.8;
+  const ROTATION_SENSITIVITY = 4.6;
 
   const SMOOTHING_FACTOR_ROTATION = 0.28;
-  const ROTATION_DEADZONE = 0.008;
+  const ROTATION_DEADZONE = 0.0015;
   const ROTATION_VEL_SMOOTHING = 0.34;
   const ZOOM_VEL_SMOOTHING = 0.22;
 
@@ -121,24 +139,27 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     // 2. 同时加载 MediaPipe AI 模型（不阻塞摄像头）
     const loadAIEngine = async () => {
       try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+        handLandmarkerRef.current = await createHandLandmarker(
+          LOCAL_VISION_WASM_PATH,
+          LOCAL_HAND_MODEL_PATH
         );
         if (!mounted) return;
-
-        handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-            delegate: "GPU"
-          },
-          runningMode: "VIDEO",
-          numHands: 2
-        });
       } catch (err) {
-        console.error("MediaPipe init failed (camera still works):", err);
+        console.warn("Local MediaPipe init failed, falling back to CDN:", err);
+        try {
+          handLandmarkerRef.current = await createHandLandmarker(
+            CDN_VISION_WASM_PATH,
+            CDN_HAND_MODEL_PATH
+          );
+          if (!mounted) return;
+          return;
+        } catch (fallbackErr) {
+          console.error("MediaPipe init failed (camera still works):", fallbackErr);
+        }
         // 摄像头已启动，AI 引擎加载失败仅影响手势识别，不影响摄像头
         if (!mounted) return;
         controlRef.current.handLandmarks = { left: null, right: null };
+        controlRef.current.interactionHandLandmarks = null;
       }
     };
 
@@ -169,6 +190,16 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     return getDistance(thumbTip, indexTip);
   };
 
+  const isTwoFingerRotationGesture = (landmarks: any[] | null) => {
+    if (!landmarks) return false;
+    const indexTip = landmarks[8];
+    const middleTip = landmarks[12];
+    const fingersDist = getDistance(indexTip, middleTip);
+    const isIndexUp = isFingerExtended(landmarks, 8, 6);
+    const isMiddleUp = isFingerExtended(landmarks, 12, 10);
+    return fingersDist < FINGER_CONTACT_THRESHOLD && isIndexUp && isMiddleUp;
+  };
+
   const predictWebcam = () => {
     if (!videoRef.current || !canvasRef.current) return;
     if (videoRef.current.readyState < videoRef.current.HAVE_CURRENT_DATA) {
@@ -185,8 +216,8 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       requestRef.current = requestAnimationFrame(predictWebcam);
       return;
     }
-    lastVideoTimeRef.current = videoRef.current.currentTime;
 
+    lastVideoTimeRef.current = videoRef.current.currentTime;
     const startTimeMs = performance.now();
     const result = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
 
@@ -230,12 +261,16 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
           });
         }
 
+        // Keep semantic aliases available for single-hand fallback logic.
+        const realLeftHandLandmarks = rightHandLandmarks;
+        const realRightHandLandmarks = leftHandLandmarks;
+        // Dual-hand behavior is mirrored in the current camera view.
+        const dualZoomHandLandmarks = rightHandLandmarks;
+        const dualManipulationHandLandmarks = leftHandLandmarks;
+
         const applySingleHandRotation = (landmarks: any[]) => {
           const indexTip = landmarks[8];
           const middleTip = landmarks[12];
-          const fingersDist = getDistance(indexTip, middleTip);
-          const isIndexUp = isFingerExtended(landmarks, 8, 6);
-          const isMiddleUp = isFingerExtended(landmarks, 12, 10);
 
           const rawFingerCenterX = (indexTip.x + middleTip.x) / 2;
           const rawFingerCenterY = (indexTip.y + middleTip.y) / 2;
@@ -248,7 +283,7 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
             smoothRotateFingerCenterRef.current.y = rawFingerCenterY;
           }
 
-          if (fingersDist >= FINGER_CONTACT_THRESHOLD || !isIndexUp || !isMiddleUp) {
+          if (!isTwoFingerRotationGesture(landmarks)) {
             prevRotatePosRef.current = null;
             return false;
           }
@@ -289,124 +324,98 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
           return false;
         };
 
+        const applyPinchDrag = (landmarks: any[], suppressZoom = true) => {
+          const thumbTip = landmarks[4];
+          const indexTip = landmarks[8];
+          const pinchDist = getPinchDistance(landmarks);
+
+          if (pinchDist < PINCH_THRESHOLD) {
+            isDragging = true;
+            newGesture = GestureType.RIGHT_PINCH_DRAG;
+            if (suppressZoom) {
+              newZoomSpeed = 0;
+            }
+
+            const rawX = (thumbTip.x + indexTip.x) / 2;
+            const rawY = (thumbTip.y + indexTip.y) / 2;
+
+            const dx = rawX - smoothDragPinchRef.current.x;
+            const dy = rawY - smoothDragPinchRef.current.y;
+            const movementDelta = Math.sqrt(dx * dx + dy * dy);
+            const adaptiveFactor = Math.min(0.85, Math.max(0.1, movementDelta * 15));
+
+            smoothDragPinchRef.current.x = lerp(smoothDragPinchRef.current.x, rawX, adaptiveFactor);
+            smoothDragPinchRef.current.y = lerp(smoothDragPinchRef.current.y, rawY, adaptiveFactor);
+
+            const targetX = (0.5 - smoothDragPinchRef.current.x) * DRAG_SCALE_X;
+            const targetY = (0.5 - smoothDragPinchRef.current.y) * DRAG_SCALE_Y;
+            controlRef.current.panPosition = { x: targetX, y: targetY };
+            return true;
+          }
+
+          const wrist = landmarks[0];
+          smoothDragPinchRef.current = { x: wrist.x, y: wrist.y };
+          return false;
+        };
+
         if (interactionModeRef.current === 'single') {
           wasContactingRef.current = false;
-          const activeHandLandmarks = rightHandLandmarks || leftHandLandmarks;
+          const activeHandLandmarks = realLeftHandLandmarks || realRightHandLandmarks;
 
           if (activeHandLandmarks) {
             const isRotating = applySingleHandRotation(activeHandLandmarks);
             if (!isRotating) {
-              applySingleHandZoom(activeHandLandmarks);
+              const isDraggingPart = applyPinchDrag(activeHandLandmarks);
+              if (!isDraggingPart) {
+                applySingleHandZoom(activeHandLandmarks);
+              }
             }
           }
         } else {
 
-        // 2. DUAL HAND LOGIC: Contact Detection with Hysteresis
-        let isContacting = false;
-        if (leftHandLandmarks && rightHandLandmarks) {
-          const leftWrist = leftHandLandmarks[0];
-          const rightWrist = rightHandLandmarks[0];
-          const dist = getDistance(leftWrist, rightWrist);
-
-          // Hysteresis: Require larger distance to exit contact state than to enter it
-          // This prevents flickering when hands are near the threshold
-          const threshold = wasContactingRef.current ? CONTACT_THRESHOLD * 1.3 : CONTACT_THRESHOLD;
-
-          if (dist < threshold) {
-            newGesture = GestureType.DUAL_HAND_CONTACT;
-            isContacting = true;
-          }
-        }
-        wasContactingRef.current = isContacting;
-
-        // 3. INDIVIDUAL HAND LOGIC (Only if not contacting)
-        if (!isContacting) {
-
-          // --- 右手: 食指+中指并拢旋转 OR 捏合拆解零件 ---
-          if (rightHandLandmarks) {
-            const indexTip = rightHandLandmarks[8];
-            const middleTip = rightHandLandmarks[12];
-            const fingersDist = getDistance(indexTip, middleTip);
-
-            const isIndexUp = isFingerExtended(rightHandLandmarks, 8, 6);
-            const isMiddleUp = isFingerExtended(rightHandLandmarks, 12, 10);
-
-            const rawFingerCenterX = (indexTip.x + middleTip.x) / 2;
-            const rawFingerCenterY = (indexTip.y + middleTip.y) / 2;
-
-            if (prevRotatePosRef.current) {
-              smoothRotateFingerCenterRef.current.x = lerp(smoothRotateFingerCenterRef.current.x, rawFingerCenterX, SMOOTHING_FACTOR_ROTATION);
-              smoothRotateFingerCenterRef.current.y = lerp(smoothRotateFingerCenterRef.current.y, rawFingerCenterY, SMOOTHING_FACTOR_ROTATION);
-            } else {
-              smoothRotateFingerCenterRef.current.x = rawFingerCenterX;
-              smoothRotateFingerCenterRef.current.y = rawFingerCenterY;
-            }
-
-            // 1. 食指 + 中指并拢 → 旋转画面
-            if (fingersDist < FINGER_CONTACT_THRESHOLD && isIndexUp && isMiddleUp) {
-              newGesture = GestureType.RIGHT_TWO_FINGER_ROTATE;
-
-              if (prevRotatePosRef.current) {
-                const deltaX = smoothRotateFingerCenterRef.current.x - prevRotatePosRef.current.x;
-                const deltaY = smoothRotateFingerCenterRef.current.y - prevRotatePosRef.current.y;
-
-                if (Math.abs(deltaX) > ROTATION_DEADZONE || Math.abs(deltaY) > ROTATION_DEADZONE) {
-                  rotVelY = -deltaX * ROTATION_SENSITIVITY;
-                  rotVelX = deltaY * ROTATION_SENSITIVITY;
-                }
-              }
-              prevRotatePosRef.current = { ...smoothRotateFingerCenterRef.current };
-            }
-            // 2. 食指 + 拇指捏合 → 拆解零件
-            else {
-              prevRotatePosRef.current = null;
-
-              const pinchDist = getPinchDistance(rightHandLandmarks);
-              if (pinchDist < PINCH_THRESHOLD) {
-                isDragging = true;
-                newGesture = GestureType.RIGHT_PINCH_DRAG;
-
-                const thumbTip = rightHandLandmarks[4];
-                const rawX = (thumbTip.x + indexTip.x) / 2;
-                const rawY = (thumbTip.y + indexTip.y) / 2;
-
-                const dx = rawX - smoothDragPinchRef.current.x;
-                const dy = rawY - smoothDragPinchRef.current.y;
-                const movementDelta = Math.sqrt(dx * dx + dy * dy);
-                const adaptiveFactor = Math.min(0.85, Math.max(0.1, movementDelta * 15));
-
-                smoothDragPinchRef.current.x = lerp(smoothDragPinchRef.current.x, rawX, adaptiveFactor);
-                smoothDragPinchRef.current.y = lerp(smoothDragPinchRef.current.y, rawY, adaptiveFactor);
-
-                const targetX = (0.5 - smoothDragPinchRef.current.x) * DRAG_SCALE_X;
-                const targetY = (0.5 - smoothDragPinchRef.current.y) * DRAG_SCALE_Y;
-                controlRef.current.panPosition = { x: targetX, y: targetY };
-              } else {
-                const wrist = rightHandLandmarks[0];
-                smoothDragPinchRef.current = { x: wrist.x, y: wrist.y };
-              }
-            }
+        // 2. DUAL HAND LOGIC: reference behavior - left zooms, right rotates/drags.
+          const rotationHandLandmarks = dualManipulationHandLandmarks && isTwoFingerRotationGesture(dualManipulationHandLandmarks)
+            ? dualManipulationHandLandmarks
+            : null;
+          const fullScreenRotationActive = Boolean(rotationHandLandmarks);
+          if (rotationHandLandmarks) {
+            applySingleHandRotation(rotationHandLandmarks);
+            isDragging = false;
+            wasContactingRef.current = false;
           }
 
-          // --- 左手: 放大/缩小 (Open Palm = Zoom In, Fist = Zoom Out) ---
-          if (leftHandLandmarks) {
-            const isIndexUp = isFingerExtended(leftHandLandmarks, 8, 6);
-            const isMiddleUp = isFingerExtended(leftHandLandmarks, 12, 10);
-            const isRingUp = isFingerExtended(leftHandLandmarks, 16, 14);
-            const isPinkyUp = isFingerExtended(leftHandLandmarks, 20, 18);
+          // Right hand: thumb + index pinch drag/disassemble.
+          const isRightDragging = !fullScreenRotationActive && dualManipulationHandLandmarks
+            ? applyPinchDrag(dualManipulationHandLandmarks, false)
+            : false;
 
-            // ZOOM IN: Open Palm (Check all fingers for reliability)
-            if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
-              newGesture = GestureType.ZOOM_IN_PALM;
-              newZoomSpeed = ZOOM_SENSITIVITY;
-            }
-            // ZOOM OUT: Fist (Check if fingers are folded)
-            else if (!isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-              newGesture = GestureType.ZOOM_OUT_FIST;
-              newZoomSpeed = -ZOOM_SENSITIVITY;
+          // Left hand: open palm / fist zoom.
+          const isLeftZooming = dualZoomHandLandmarks
+            ? applySingleHandZoom(dualZoomHandLandmarks)
+            : false;
+
+          if (isRightDragging) {
+            newGesture = GestureType.RIGHT_PINCH_DRAG;
+          } else if (fullScreenRotationActive) {
+            newGesture = GestureType.RIGHT_TWO_FINGER_ROTATE;
+          }
+
+          // Contact is only a fallback; it must not block independent two-hand control.
+          let isContacting = false;
+          if (!fullScreenRotationActive && !isRightDragging && !isLeftZooming && leftHandLandmarks && rightHandLandmarks) {
+            const leftWrist = leftHandLandmarks[0];
+            const rightWrist = rightHandLandmarks[0];
+            const dist = getDistance(leftWrist, rightWrist);
+
+            // Hysteresis: require larger distance to exit contact state than to enter it.
+            const threshold = wasContactingRef.current ? CONTACT_THRESHOLD * 1.3 : CONTACT_THRESHOLD;
+
+            if (dist < threshold) {
+              newGesture = GestureType.DUAL_HAND_CONTACT;
+              isContacting = true;
             }
           }
-        }
+          wasContactingRef.current = isContacting;
         }
       }
 
@@ -425,10 +434,26 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       controlRef.current.isDragging = isDragging;
 
       // 传递手部关节数据到3D场景
+      const isSingleMode = interactionModeRef.current === 'single';
+      const realLeftHandLandmarks = rightHandLandmarks;
+      const realRightHandLandmarks = leftHandLandmarks;
+      const dualManipulationHandLandmarks = leftHandLandmarks;
+      const activeSingleHandLandmarks = isSingleMode ? (realLeftHandLandmarks || realRightHandLandmarks) : null;
+      const visibleLeftHandLandmarks = isSingleMode
+        ? (activeSingleHandLandmarks === leftHandLandmarks ? leftHandLandmarks : null)
+        : leftHandLandmarks;
+      const visibleRightHandLandmarks = isSingleMode
+        ? (activeSingleHandLandmarks === rightHandLandmarks ? rightHandLandmarks : null)
+        : rightHandLandmarks;
+      const interactionHandLandmarks = isSingleMode
+        ? activeSingleHandLandmarks
+        : dualManipulationHandLandmarks;
+
       controlRef.current.handLandmarks = {
-        left: leftHandLandmarks ? leftHandLandmarks.map((lm: any) => ({ x: lm.x, y: lm.y, z: lm.z || 0 })) : null,
-        right: rightHandLandmarks ? rightHandLandmarks.map((lm: any) => ({ x: lm.x, y: lm.y, z: lm.z || 0 })) : null
+        left: visibleLeftHandLandmarks ? toPointList(visibleLeftHandLandmarks) : null,
+        right: visibleRightHandLandmarks ? toPointList(visibleRightHandLandmarks) : null
       };
+      controlRef.current.interactionHandLandmarks = interactionHandLandmarks ? toPointList(interactionHandLandmarks) : null;
 
       // Use ref to call the latest callback, only on state changes
       const lastPublishedState = lastPublishedStateRef.current;

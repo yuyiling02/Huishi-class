@@ -6,6 +6,8 @@ export interface HandLandmarkPoint {
   z: number;
 }
 
+export type HandLandmarks = HandLandmarkPoint[] | null;
+
 export type ModelType = 'glb' | 'gltf' | 'fbx';
 export type InteractionMode = 'dual' | 'single';
 
@@ -33,7 +35,7 @@ export interface ControlState {
 }
 
 export interface InteractionSettings {
-  zoomSpeed: number;     // 0.1 - 5.0, default 1.0
+  zoomSpeed: number;     // 0.1 - 5.0, default 2.0
   rotationSpeed: number; // 0.1 - 5.0, default 1.0
 }
 
@@ -54,9 +56,10 @@ export interface ControlRefs {
   isDragging: boolean;
   // 3D虚拟手数据
   handLandmarks: {
-    left: { x: number; y: number; z: number }[] | null;
-    right: { x: number; y: number; z: number }[] | null;
+    left: HandLandmarks;
+    right: HandLandmarks;
   };
+  interactionHandLandmarks: HandLandmarks;
   interactionSettings: InteractionSettings;
   agentDisassembly: AgentDisassemblyControl;
 }

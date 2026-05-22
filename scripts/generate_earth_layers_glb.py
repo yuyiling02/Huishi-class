@@ -74,6 +74,41 @@ def load_texture(path: Path, size: tuple[int, int] | None = None) -> Image.Image
     return img
 
 
+def create_earth_surface_texture() -> Image.Image:
+    img = load_texture(TEXTURE_DIR / "earth_atmos_2048.jpg")
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+
+    r = arr[..., 0]
+    g = arr[..., 1]
+    b = arr[..., 2]
+    maxc = arr.max(axis=2)
+    minc = arr.min(axis=2)
+    saturation = (maxc - minc) / np.maximum(maxc, 1e-6)
+
+    ocean_mask = (
+        (b > r * 1.12)
+        & (b >= g * 0.86)
+        & (saturation > 0.12)
+        & (maxc < 0.82)
+    )
+
+    depth = np.clip((0.62 - maxc) / 0.46, 0.0, 1.0)
+    shore = np.clip((g - r + 0.12) / 0.32, 0.0, 1.0) * (1.0 - depth)
+    deep_blue = np.array([0.015, 0.18, 0.48], dtype=np.float32)
+    surface_blue = np.array([0.02, 0.38, 0.78], dtype=np.float32)
+    shallow_blue = np.array([0.00, 0.62, 0.84], dtype=np.float32)
+
+    target = deep_blue * depth[..., None] + surface_blue * (1.0 - depth[..., None])
+    target = target * (1.0 - shore[..., None] * 0.38) + shallow_blue * (shore[..., None] * 0.38)
+
+    mix = np.where(ocean_mask, 0.45 + depth * 0.18 + shore * 0.08, 0.0)[..., None]
+    boosted = arr * (1.0 - mix) + target * mix
+    boosted[..., 2] = np.where(ocean_mask, np.maximum(boosted[..., 2], arr[..., 2] * 1.12), boosted[..., 2])
+    boosted[..., 1] = np.where(ocean_mask, np.maximum(boosted[..., 1], arr[..., 1] * 1.03), boosted[..., 1])
+
+    return Image.fromarray(np.clip(boosted * 255.0, 0, 255).astype(np.uint8), mode="RGB")
+
+
 def smooth_noise(width: int, height: int, seed: int, blur: float) -> np.ndarray:
     rng = np.random.default_rng(seed)
     raw = (rng.random((height, width)) * 255).astype(np.uint8)
@@ -233,7 +268,7 @@ def make_materials() -> list[dict[str, Any]]:
 
 def build_glb() -> bytes:
     images = [
-        load_texture(TEXTURE_DIR / "earth_atmos_2048.jpg"),
+        create_earth_surface_texture(),
         load_texture(TEXTURE_DIR / "earth_normal_2048.jpg"),
         create_layer_texture(1024, 512, ((48, 19, 12), (145, 57, 26), (231, 122, 53)), 101, 0.42, 30.0),
         create_layer_texture(1024, 512, ((68, 39, 17), (178, 98, 28), (255, 189, 77)), 207, 0.55, 42.0),

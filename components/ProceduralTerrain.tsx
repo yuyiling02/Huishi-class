@@ -4,6 +4,8 @@ import { Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { ControlRefs } from '../types';
 
+const frameDamping = (delta: number, speed: number) => 1 - Math.exp(-speed * Math.min(delta, 0.05));
+
 interface ProceduralTerrainProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   showLabels?: boolean;
@@ -49,9 +51,16 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
   const { camera } = useThree();
   const orbitTarget = useMemo(() => new THREE.Vector3(cameraTarget[0], cameraTarget[1], cameraTarget[2]), [cameraTarget]);
   
-  const sphericalRef = useRef<THREE.Spherical | null>(null);
+  const sphericalRef = useRef(new THREE.Spherical());
   const cameraInitialized = useRef(false);
   const wasCameraGestureActiveRef = useRef(false);
+  const frameScratchRef = useRef({
+    offset: new THREE.Vector3(),
+    bedrockTarget: new THREE.Vector3(),
+    soilTarget: new THREE.Vector3(),
+    surfaceTarget: new THREE.Vector3(),
+    waterTarget: new THREE.Vector3()
+  });
 
   // 自定义材质：通过着色器实现真实的等高线渲染
   const terrainMaterial = useMemo(() => {
@@ -236,7 +245,7 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
     return geo;
   }, []);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (groupRef.current && controlRef.current.rotationVelocity.x === 0 && controlRef.current.rotationVelocity.y === 0) {
       groupRef.current.rotation.y += 0.0015;
     }
@@ -248,24 +257,27 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
       Math.abs(rotationVelocity.y) > 0.0001 ||
       zoomSpeed !== 0;
 
-    const offset = new THREE.Vector3().subVectors(camera.position, orbitTarget);
+    const scratch = frameScratchRef.current;
+    const offset = scratch.offset.subVectors(camera.position, orbitTarget);
     if (!cameraInitialized.current || !wasCameraGestureActiveRef.current) {
-      sphericalRef.current = new THREE.Spherical().setFromVector3(offset);
+      sphericalRef.current.setFromVector3(offset);
       cameraInitialized.current = true;
     }
 
-    const sph = sphericalRef.current!;
+    const sph = sphericalRef.current;
 
     if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
       const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
-      sph.theta -= rotationVelocity.y * sensitivity;
-      sph.phi -= rotationVelocity.x * sensitivity;
+      const frameScale = Math.min(delta * 60, 2);
+      sph.theta -= rotationVelocity.y * sensitivity * frameScale;
+      sph.phi -= rotationVelocity.x * sensitivity * frameScale;
       sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
       sph.makeSafe();
     }
 
     if (hasCameraGestureInput && zoomSpeed !== 0) {
-      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15 * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
+      const frameScale = Math.min(delta * 60, 2);
+      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15 * frameScale * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
     }
 
     if (hasCameraGestureInput) {
@@ -284,14 +296,15 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
       offset: THREE.Vector3,
     ) => {
       if (!ref.current) return;
-      ref.current.position.lerp(original.clone().addScaledVector(offset, strength), strength > 0 ? 0.075 : 0.09);
+      const smooth = frameDamping(delta, strength > 0 ? 4.8 : 5.8);
+      ref.current.position.lerp(original.addScaledVector(offset, strength), smooth);
     };
 
-    moveMesh(bedrockRef, new THREE.Vector3(0, -0.6, 0), new THREE.Vector3(-1.0, -0.35, -0.95));
-    moveMesh(soilRef, new THREE.Vector3(0, -0.2, 0), new THREE.Vector3(1.0, -0.05, -0.75));
-    moveMesh(surfaceRef, new THREE.Vector3(0, 0, 0), new THREE.Vector3(-0.35, 0.3, 0.9));
-    moveMesh(waterRef, new THREE.Vector3(0, -0.05, 0), new THREE.Vector3(1.1, 0.18, 0.9));
-  });
+    moveMesh(bedrockRef, scratch.bedrockTarget.set(0, -0.6, 0), scratch.offset.set(-1.0, -0.35, -0.95));
+    moveMesh(soilRef, scratch.soilTarget.set(0, -0.2, 0), scratch.offset.set(1.0, -0.05, -0.75));
+    moveMesh(surfaceRef, scratch.surfaceTarget.set(0, 0, 0), scratch.offset.set(-0.35, 0.3, 0.9));
+    moveMesh(waterRef, scratch.waterTarget.set(0, -0.05, 0), scratch.offset.set(1.1, 0.18, 0.9));
+  }, -1);
 
   return (
     <group ref={groupRef} position={[0, 0.5, 0]}>

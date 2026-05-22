@@ -43,16 +43,17 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
   const orbitTarget = React.useMemo(() => new THREE.Vector3(cameraTarget[0], cameraTarget[1], cameraTarget[2]), [cameraTarget]);
   
   // Persistent spherical coords for smooth camera orbit
-  const sphericalRef = useRef<THREE.Spherical | null>(null);
+  const sphericalRef = useRef(new THREE.Spherical());
   const cameraInitialized = useRef(false);
   const wasCameraGestureActiveRef = useRef(false);
+  const frameOffsetRef = useRef(new THREE.Vector3());
   
   // Load textures using TextureLoader
   const colorMap = useLoader(THREE.TextureLoader, '/textures/earth_atmos_2048.jpg');
   const normalMap = useLoader(THREE.TextureLoader, '/textures/earth_normal_2048.jpg');
   const specularMap = useLoader(THREE.TextureLoader, '/textures/earth_specular_2048.jpg');
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     // 1. Slow rotation for showcase
     if (groupRef.current && controlRef.current.rotationVelocity.x === 0 && controlRef.current.rotationVelocity.y === 0) {
       groupRef.current.rotation.y += 0.002;
@@ -66,24 +67,26 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
       Math.abs(rotationVelocity.y) > 0.0001 ||
       zoomSpeed !== 0;
 
-    const offset = new THREE.Vector3().subVectors(camera.position, orbitTarget);
+    const offset = frameOffsetRef.current.subVectors(camera.position, orbitTarget);
     if (!cameraInitialized.current || !wasCameraGestureActiveRef.current) {
-      sphericalRef.current = new THREE.Spherical().setFromVector3(offset);
+      sphericalRef.current.setFromVector3(offset);
       cameraInitialized.current = true;
     }
 
-    const sph = sphericalRef.current!;
+    const sph = sphericalRef.current;
 
     if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
       const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
-      sph.theta -= rotationVelocity.y * sensitivity;
-      sph.phi -= rotationVelocity.x * sensitivity;
+      const frameScale = Math.min(delta * 60, 3);
+      sph.theta -= rotationVelocity.y * sensitivity * frameScale;
+      sph.phi -= rotationVelocity.x * sensitivity * frameScale;
       sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
       sph.makeSafe();
     }
 
     if (hasCameraGestureInput && zoomSpeed !== 0) {
-      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15 * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
+      const frameScale = Math.min(delta * 60, 3);
+      sph.radius = Math.max(0.05, sph.radius - zoomSpeed * 0.15 * frameScale * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
     }
 
     if (hasCameraGestureInput) {
@@ -93,7 +96,7 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
       sphericalRef.current.setFromVector3(offset);
     }
     wasCameraGestureActiveRef.current = hasCameraGestureInput;
-  });
+  }, -1);
 
   const phiStart = 0;
   const phiLength = Math.PI * 1.5;

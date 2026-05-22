@@ -8,7 +8,7 @@ import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
 import { buildClassroomSummary, buildTeachingPlan, getTeachingModelName, inferTeachingModel } from './services/agentRuntime';
-import { Upload, Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Video, Film, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play } from 'lucide-react';
+import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play, Download } from 'lucide-react';
 import { ModelType } from './types';
 
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
@@ -23,6 +23,17 @@ const BUILT_IN_MODELS = {
   sio2: '/models/sio2-crystal.glb',
   nitrobenzene: '/models/7416-bas-color-print_NIH3D.glb',
 } as const;
+const DIAMOND_STRUCTURE_IMAGE = '/images/diamond-structure.png';
+const DICHLOROTOLUENE_STRUCTURE_IMAGE = '/images/dichlorotoluene-structure.png';
+const NITROBENZENE_STRUCTURE_IMAGE = '/images/nitrobenzene-structure.svg';
+const HEART_STRUCTURE_IMAGE = '/images/heart-structure.png';
+const STRUCTURE_IMAGE_BY_MODEL: Record<string, string> = {
+  [BUILT_IN_MODELS.heart]: HEART_STRUCTURE_IMAGE,
+  [BUILT_IN_MODELS.diamond]: DIAMOND_STRUCTURE_IMAGE,
+  [BUILT_IN_MODELS.diamondUnitCell]: DIAMOND_STRUCTURE_IMAGE,
+  [BUILT_IN_MODELS.pubchem6233]: DICHLOROTOLUENE_STRUCTURE_IMAGE,
+  [BUILT_IN_MODELS.nitrobenzene]: NITROBENZENE_STRUCTURE_IMAGE,
+};
 type ActiveContent = 'model' | 'biodigital';
 
 const AGENT_STATUS_IDLE: Record<AgentRole, AgentStatus> = {
@@ -45,8 +56,6 @@ const App: React.FC = () => {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [modelType, setModelType] = useState<ModelType>('glb');
   const [modelAssetUrls, setModelAssetUrls] = useState<Record<string, string>>({});
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [isVideoMode, setIsVideoMode] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [cameraActive, setCameraActive] = useState(false);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('dual');
@@ -70,16 +79,19 @@ const App: React.FC = () => {
 
   // Interaction speed settings
   const [showSettings, setShowSettings] = useState(false);
-  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(5.0);
+  const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(2.0);
   const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(2.0);
   const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
   const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
   const [agentSummary, setAgentSummary] = useState('');
   const [agentThinking, setAgentThinking] = useState('');
   const [isAgentRunning, setIsAgentRunning] = useState(false);
+  const [expandedStructureImage, setExpandedStructureImage] = useState<string | null>(null);
+  const modelStructureImage = activeContent === 'model' && modelUrl
+    ? STRUCTURE_IMAGE_BY_MODEL[modelUrl]
+    : undefined;
 
   // Refs
-  const videoRef = useRef<HTMLVideoElement>(null);
   const preloadedModelRef = useRef<TeachingModelId | null>(null);
   const stageRef = useRef<HTMLElement>(null);
   const objectUrlsRef = useRef<string[]>([]);
@@ -89,7 +101,8 @@ const App: React.FC = () => {
     panPosition: { x: 0, y: 0 },
     isDragging: false,
     handLandmarks: { left: null, right: null },
-    interactionSettings: { zoomSpeed: 1.0, rotationSpeed: 1.0 },
+    interactionHandLandmarks: null,
+    interactionSettings: { zoomSpeed: 2.0, rotationSpeed: 1.0 },
     agentDisassembly: {
       enabled: false,
       strength: 0,
@@ -100,6 +113,12 @@ const App: React.FC = () => {
     }
   });
 
+  useEffect(() => {
+    if (expandedStructureImage && expandedStructureImage !== modelStructureImage) {
+      setExpandedStructureImage(null);
+    }
+  }, [expandedStructureImage, modelStructureImage]);
+
   const resetControls = () => {
     const nextActionId = (controlRef.current.agentDisassembly?.actionId ?? 0) + 1;
     controlRef.current = {
@@ -108,6 +127,7 @@ const App: React.FC = () => {
       panPosition: { x: 0, y: 0 },
       isDragging: false,
       handLandmarks: { left: null, right: null },
+      interactionHandLandmarks: null,
       interactionSettings: {
         zoomSpeed: zoomSpeedMultiplier,
         rotationSpeed: rotationSpeedMultiplier,
@@ -141,12 +161,10 @@ const App: React.FC = () => {
 
   const showModelStage = () => {
     setActiveContent('model');
-    setIsVideoMode(false);
   };
 
   const showBioDigitalStage = () => {
     setActiveContent('biodigital');
-    setIsVideoMode(false);
     setCameraActive(false);
     resetControls();
     setAiAnalysis('正在加载心脏模型2：URL 交互展示页面。');
@@ -200,15 +218,6 @@ const App: React.FC = () => {
       setCameraActive(true);
       setAiAnalysis(`模型已加载: ${modelFile.name}，将按内部层级自动启用拆解`);
       event.target.value = '';
-    }
-  };
-
-  const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setVideoUrl(url);
-      setAiAnalysis(`视频已就绪: 双手接触即可播放`);
     }
   };
 
@@ -541,27 +550,14 @@ const App: React.FC = () => {
     setGestureStatus(gesture);
     setDirectionStatus(direction);
     setIsDragging(dragging);
-
-    const shouldBeVideoMode = gesture === GestureType.DUAL_HAND_CONTACT;
-
-    setIsVideoMode((prev) => {
-      if (prev !== shouldBeVideoMode) {
-        if (shouldBeVideoMode && videoUrl) {
-          setAiAnalysis('视频模式：双手保持接触中');
-        }
-        return shouldBeVideoMode;
-      }
-      return prev;
-    });
-  }, [videoUrl]);
+  }, []);
 
   const handleInteractionModeChange = (mode: InteractionMode) => {
     setInteractionMode(mode);
-    setIsVideoMode(false);
     resetControls();
     setAiAnalysis(mode === 'dual'
-      ? '已切换为双手模式：左手缩放，右手旋转/拖拽，双手接触播放视频。'
-      : '已切换为单手模式：张开放大，握拳缩小，食指和中指并拢滑动旋转。'
+      ? '已切换为双手模式：右手缩放，左手旋转/拖拽。'
+      : '已切换为单手模式：右手优先；双指旋转，张掌/握拳缩放，捏合拖拽；缩放与拖拽互斥。'
     );
   };
 
@@ -572,15 +568,6 @@ const App: React.FC = () => {
       rotationSpeed: rotationSpeedMultiplier,
     };
   }, [zoomSpeedMultiplier, rotationSpeedMultiplier]);
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isVideoMode) {
-        videoRef.current.play().catch(console.error);
-      } else {
-        videoRef.current.pause();
-      }
-    }
-  }, [isVideoMode]);
 
   return (
     <div className="flex flex-col h-screen text-slate-700">
@@ -597,18 +584,6 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          <div className="relative group">
-            <input
-              type="file"
-              accept="video/*"
-              onChange={handleVideoUpload}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-            />
-            <button className="px-6 py-2 rounded-full glass-panel text-gray-500 hover:text-purple-500 flex items-center transition-all hover:bg-purple-50">
-              <Video className="mr-2" size={18} /> 导入视频
-            </button>
-          </div>
-
           <div className="relative group">
             <input
               type="file"
@@ -631,7 +606,7 @@ const App: React.FC = () => {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
             <button className="px-6 py-2 rounded-full glass-panel text-orange-400 hover:text-orange-600 flex items-center transition-all hover:bg-orange-50">
-              <Upload className="mr-2" size={16} /> 导入模型
+              <Download className="mr-2 text-orange-300" size={18} /> 导入模型
             </button>
           </div>
 
@@ -1011,21 +986,21 @@ const App: React.FC = () => {
                         <div className="flex items-center gap-2 pb-2 border-b border-white/30">
                           <div className="p-1.5 bg-indigo-100 rounded-lg"><Move3d size={14} className="text-indigo-400" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">双手接触</span>
-                            <span className="text-[9px] text-indigo-500 font-bold">保持接触 → 视频展示</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">双手协同</span>
+                            <span className="text-[9px] text-indigo-500 font-bold">右手缩放 | 左手旋转/拖拽</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">左手缩放</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">右手缩放</span>
                             <span className="text-[9px] text-gray-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">右手交互</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">左手交互</span>
                             <span className="text-[9px] text-purple-400 font-bold">捏合 → 拖拽零件</span>
                             <span className="text-[9px] text-gray-400 font-bold">食指+中指并拢滑动 → 旋转画面</span>
                           </div>
@@ -1036,22 +1011,22 @@ const App: React.FC = () => {
                         <div className="flex items-center gap-2 pb-2 border-b border-white/30">
                           <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">张开手掌</span>
-                            <span className="text-[9px] text-emerald-500 font-bold">放大画面</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">右手优先</span>
+                            <span className="text-[9px] text-emerald-500 font-bold">张掌放大 | 握拳缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-amber-100 rounded-lg"><Hand size={14} className="text-amber-500" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">握拳</span>
-                            <span className="text-[9px] text-gray-400 font-bold">缩小画面</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">捏合拖拽</span>
+                            <span className="text-[9px] text-gray-400 font-bold">食指+拇指捏合 → 拖拽零件</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">食指+中指并拢</span>
-                            <span className="text-[9px] text-purple-400 font-bold">保持并滑动 → 旋转画面</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">互斥控制</span>
+                            <span className="text-[9px] text-purple-400 font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
                           </div>
                         </div>
                       </>
@@ -1064,7 +1039,7 @@ const App: React.FC = () => {
                       <div className="p-1.5 bg-indigo-100 rounded-lg"><Move3d size={14} className="text-indigo-400" /></div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-500 uppercase">双人/双手</span>
-                        <span className="text-[9px] text-indigo-500 font-bold">双手接触 (保持) → 视频展示</span>
+                        <span className="text-[9px] text-indigo-500 font-bold">双手协同控制模型</span>
                       </div>
                     </div>
 
@@ -1142,24 +1117,6 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* 视频播放层 */}
-          <div className={`absolute inset-0 z-20 bg-black transition-opacity duration-300 ${isVideoMode ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            {videoUrl && (
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                className="w-full h-full object-contain"
-                loop
-                controls={false}
-                muted
-              />
-            )}
-            <div className="absolute top-6 left-6 px-4 py-2 bg-black/50 backdrop-blur-md rounded-xl text-white/80 text-xs font-bold border border-white/20 flex items-center gap-2">
-              <Film size={14} className="text-purple-400" />
-              视频模式 (分开双手关闭)
-            </div>
-          </div>
-
           {activeContent === 'model' && (
             <div className="absolute bottom-6 left-6 z-50 flex items-center gap-2">
               <VoiceController
@@ -1227,6 +1184,48 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {modelStructureImage && (
+            <button
+              type="button"
+              onClick={() => setExpandedStructureImage(modelStructureImage)}
+              className="absolute left-6 top-6 z-40 w-28 sm:w-36 md:w-44 lg:w-52 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl backdrop-blur-md cursor-zoom-in transition hover:scale-[1.03] hover:bg-white active:scale-95"
+              aria-label="放大结构图"
+              title="放大结构图"
+            >
+              <img
+                src={modelStructureImage}
+                alt="Chemical structure"
+                className="block w-full h-auto"
+              />
+            </button>
+          )}
+
+          {expandedStructureImage && (
+            <div
+              className="absolute inset-0 z-[70] flex items-center justify-center bg-black/35 p-6 backdrop-blur-sm"
+              onClick={() => setExpandedStructureImage(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label="结构图放大预览"
+            >
+              <button
+                type="button"
+                onClick={() => setExpandedStructureImage(null)}
+                className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-xl bg-white/90 text-gray-500 shadow-lg transition hover:bg-white hover:text-gray-800"
+                aria-label="关闭结构图预览"
+                title="关闭"
+              >
+                <X size={18} />
+              </button>
+              <img
+                src={expandedStructureImage}
+                alt="Chemical structure enlarged"
+                className="max-h-[86%] max-w-[86%] rounded-2xl bg-white object-contain shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              />
+            </div>
+          )}
+
           <div className="absolute top-6 right-6 flex gap-2 z-40">
             {activeContent === 'model' && (
               <div className={`px-4 py-2 rounded-xl bg-white/80 backdrop-blur-md text-[10px] font-bold shadow-sm flex items-center gap-2 ${cameraActive ? 'text-emerald-500' : 'text-gray-400'}`}>
@@ -1246,7 +1245,7 @@ const App: React.FC = () => {
           </div>
 
           {/* 3D 模型层 */}
-          <div className={`w-full h-full transition-opacity duration-300 ${isVideoMode ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="w-full h-full transition-opacity duration-300 opacity-100">
             {activeContent === 'biodigital' ? (
               <BioDigitalViewer src={BIODIGITAL_HEART_URL} onFallback={loadHeartFallbackModel} />
             ) : modelUrl ? (
@@ -1264,7 +1263,7 @@ const App: React.FC = () => {
                   <p className="text-gray-400 text-sm font-medium max-w-[360px] leading-relaxed">
                     <b>交互指令更新：</b><br />
                     右手捏合：拖拽 | 右手双指并拢+滑动：控制旋转<br />
-                    左手张开/闭合：缩放 | 双手接触：播放视频
+                    左手张开/闭合：缩放 | 双手协同：精细控制模型
                   </p>
                 </div>
               </div>
@@ -1286,13 +1285,6 @@ const App: React.FC = () => {
 
       <footer className="h-8 px-10 flex items-center justify-between text-[10px] text-gray-400 uppercase tracking-widest font-bold bg-white/30 backdrop-blur-sm">
         <span>© 2026 慧视课堂 | 教育 AI 实验室</span>
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1 text-[#86e3ce]">
-            <div className="w-1 h-1 bg-[#86e3ce] rounded-full animate-ping"></div>
-            Gemini Live API 已接入
-          </span>
-          <span>v3.7.0-FINGER-CTRL</span>
-        </div>
       </footer>
     </div>
   );

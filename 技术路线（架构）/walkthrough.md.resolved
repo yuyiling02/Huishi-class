@@ -52,7 +52,7 @@ graph TB
     subgraph 用户输入层
         A["📷 摄像头<br/>(MediaPipe Hands)"]
         B["🎤 麦克风<br/>(Gemini Live Audio)"]
-        C["📁 文件上传<br/>(GLB/FBX/图片/视频)"]
+        C["📁 文件上传<br/>(GLB/FBX/图片)"]
     end
 
     subgraph 感知与控制层
@@ -132,7 +132,6 @@ export interface ControlRefs {
 | `modelUrl` | `string \| null` | 文件上传 / Demo 加载 | 模型 URL |
 | `modelType` | `'glb' \| 'fbx'` | 文件上传 | 渲染策略分支 |
 | `gestureStatus` | `GestureType` | HandController 回调 | UI 手势状态显示 |
-| `isVideoMode` | `boolean` | 双手接触手势 | 视频/3D 切换 |
 | `isProcessing` | `boolean` | AI 图生 3D 流程 | 加载遮罩 |
 | `aiAnalysis` | `string` | 多处 | 助教日志消息 |
 | `cameraActive` | `boolean` | 用户按钮 | 摄像头开关 |
@@ -165,7 +164,6 @@ sequenceDiagram
 
 | 手势 | 枚举值 | 检测条件 | 控制效果 |
 |------|--------|----------|----------|
-| **双手接触** | `DUAL_HAND_CONTACT` | 双手腕距 < 0.12（带迟滞 ×1.3） | 切换视频模式 |
 | **左手双指旋转** | `LEFT_TWO_FINGER_ROTATE` | 食+中指距 < 0.05 且均伸直 | 写入 `rotationVelocity`（Delta 计算） |
 | **左手捏合拖拽** | `RIGHT_PINCH_DRAG` | 拇+食指距 < 0.05 | 写入 `panPosition` + `isDragging` |
 | **右手张开放大** | `ZOOM_IN_PALM` | 四指均伸直 | `zoomSpeed = +0.35` |
@@ -329,10 +327,10 @@ sequenceDiagram
 
 #### 核心职责
 1. **全局状态管理**：管理模型 URL、手势状态、AI 分析日志等
-2. **文件上传**：支持 GLB / FBX / 图片 / 视频四种文件类型
+2. **文件上传**：支持 GLB / FBX / 图片三种文件类型
 3. **AI 图生 3D**：上传图片 → Gemini Vision 分析 → 模拟重建步骤 → 加载示例模型
 4. **布局编排**：导航栏 + 侧边栏 + 3D 视口 + 摄像头预览
-5. **视频模式切换**：双手接触 → 全屏视频播放
+5. **手势控制联动**：摄像头识别 → 缩放 / 旋转 / 拖拽模型
 
 #### AI 图生 3D 流程
 ```mermaid
@@ -422,7 +420,7 @@ graph LR
     V6 --- F3["✅ AI 图生3D 演示流程"]
     V6 --- F4["✅ 3D 虚拟手可视化"]
     V6 --- F5["✅ FBX 零件物理拆解"]
-    V6 --- F6["✅ 双手接触视频模式"]
+    V6 --- F6["✅ 双手协同模型控制"]
 ```
 
 ---

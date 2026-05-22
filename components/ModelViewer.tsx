@@ -51,6 +51,7 @@ type PubchemPartKind = 'left-methyl' | 'right-methyl' | 'core';
 type NitrobenzenePartKind = 'nitro' | 'remainder';
 
 const vectorFromTarget = (target: CameraTarget) => new THREE.Vector3(target[0], target[1], target[2]);
+const PINCH_RELEASE_GRACE_MS = 0;
 
 const isMeshObject = (object: THREE.Object3D): object is THREE.Mesh => {
   return Boolean((object as THREE.Mesh).isMesh);
@@ -744,6 +745,11 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const [grabbableParts, setGrabbableParts] = useState<GrabbablePart[]>([]);
   const groupRef = useRef<THREE.Group>(null);
   const { camera, raycaster, scene } = useThree();
+  const orbitControls = useThree((threeState) => (threeState as any).controls as {
+    enabled?: boolean;
+    target?: THREE.Vector3;
+    update?: () => void;
+  } | undefined);
   const orbitTarget = useMemo(() => vectorFromTarget(cameraTarget), [cameraTarget]);
 
   // ========== 一比一复刻第一版变量 ==========
@@ -751,6 +757,8 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const grabbedPartRef = useRef<GrabbablePart | null>(null);
   const grabOffsetRef = useRef(new THREE.Vector3());
   const dragPlaneRef = useRef(new THREE.Plane());
+  const dragTargetPositionRef = useRef(new THREE.Vector3());
+  const lastGrabPinchTimeRef = useRef(0);
 
   // 手部状态 (一比一复刻第一版 handsState)
   const interactionHandStateRef = useRef<{
@@ -768,10 +776,20 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   });
 
   // 虚拟平面 (用于手部3D投影)
-  const handPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0));
+  const handProjectionScratchRef = useRef({
+    cameraDir: new THREE.Vector3(),
+    rayDir: new THREE.Vector3(),
+    points: Array.from({ length: 21 }, () => new THREE.Vector3()),
+    offset: new THREE.Vector3(),
+    worldPos: new THREE.Vector3(),
+    worldQuat: new THREE.Quaternion(),
+    worldScale: new THREE.Vector3(),
+    intersectPoint: new THREE.Vector3(),
+    targetPoint: new THREE.Vector3()
+  });
 
   // Persistent spherical coords for smooth camera orbit (avoids zoom+rotation conflict)
-  const sphericalRef = useRef<THREE.Spherical | null>(null);
+  const sphericalRef = useRef(new THREE.Spherical());
   const cameraInitialized = useRef(false);
   const wasCameraGestureActiveRef = useRef(false);
   const disassemblyTargetsRef = useRef<Map<string, THREE.Vector3>>(new Map());
@@ -793,6 +811,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     setGrabbableParts([]);
     grabbedPartRef.current = null;
     isGrabbingRef.current = false;
+    lastGrabPinchTimeRef.current = 0;
     cameraInitialized.current = false;
     wasCameraGestureActiveRef.current = false;
     disassemblyTargetsRef.current.clear();
@@ -875,32 +894,34 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
   const updateHandState = (landmarks: { x: number; y: number; z: number }[]) => {
     const state = interactionHandStateRef.current;
     state.exists = true;
+    const scratch = handProjectionScratchRef.current;
 
     // 更新虚拟平面
     const planeDistance = 2;
-    const cameraDir = camera.getWorldDirection(new THREE.Vector3());
-    const planePoint = camera.position.clone().addScaledVector(cameraDir, planeDistance);
-    handPlaneRef.current.setFromNormalAndCoplanarPoint(cameraDir, planePoint);
+    camera.getWorldDirection(scratch.cameraDir);
 
     // 将landmarks投影到3D世界坐标
-    const project3D = (lmk: { x: number; y: number; z: number }): THREE.Vector3 => {
+    const project3D = (lmk: { x: number; y: number; z: number }, point: THREE.Vector3) => {
       const ndcX = (0.5 - lmk.x) * 2;
       const ndcY = -(lmk.y - 0.5) * 2;
-      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
-      const point = new THREE.Vector3();
-      raycaster.ray.intersectPlane(handPlaneRef.current, point);
-      return point;
+      point.set(ndcX, ndcY, 0.5).unproject(camera);
+      scratch.rayDir.copy(point).sub(camera.position).normalize();
+      const planeHitDistance = planeDistance / Math.max(0.0001, scratch.rayDir.dot(scratch.cameraDir));
+      point.copy(camera.position).addScaledVector(scratch.rayDir, planeHitDistance);
     };
+    for (let i = 0; i < 21; i += 1) {
+      project3D(landmarks[i], scratch.points[i]);
+    }
 
-    const wrist = project3D(landmarks[0]);
-    const middleMCP = project3D(landmarks[9]);
+    const wrist = scratch.points[0];
+    const middleMCP = scratch.points[9];
     const handScale = wrist.distanceTo(middleMCP);
 
     // 计算指尖到腕关节的平均距离
     const tipIndices = [4, 8, 12, 16, 20];
     let totalDist = 0;
     tipIndices.forEach(i => {
-      totalDist += project3D(landmarks[i]).distanceTo(wrist);
+      totalDist += scratch.points[i].distanceTo(wrist);
     });
     const avgDist = totalDist / 5;
 
@@ -910,8 +931,8 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     state.isOpen = normalizedDist > 1.8;
 
     // 捏合检测 (一比一复刻第一版)
-    const thumbTip = project3D(landmarks[4]);
-    const indexTip = project3D(landmarks[8]);
+    const thumbTip = scratch.points[4];
+    const indexTip = scratch.points[8];
     const pinchDist = thumbTip.distanceTo(indexTip);
     const normalizedPinchDist = handScale > 0 ? pinchDist / handScale : 1;
 
@@ -957,16 +978,16 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     isGrabbingRef.current = false;
     grabbedPartRef.current = null;
-    console.log('Released part - display position preserved.');
+    lastGrabPinchTimeRef.current = 0;
   };
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!modelScene || !groupRef.current) return;
 
-    const { rotationVelocity, zoomSpeed, handLandmarks } = controlRef.current;
+    const { rotationVelocity, zoomSpeed, interactionHandLandmarks } = controlRef.current;
 
     // Smooth rotation/zoom velocity to avoid abrupt camera start/stop stutter
-    const smoothFactor = 0.1;
+    const smoothFactor = 1 - Math.exp(-delta * 18);
     smoothedRotVelRef.current.x += (rotationVelocity.x - smoothedRotVelRef.current.x) * smoothFactor;
     smoothedRotVelRef.current.y += (rotationVelocity.y - smoothedRotVelRef.current.y) * smoothFactor;
     smoothedZoomRef.current += (zoomSpeed - smoothedZoomRef.current) * smoothFactor;
@@ -974,40 +995,59 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     const smoothRotX = smoothedRotVelRef.current.x;
     const smoothRotY = smoothedRotVelRef.current.y;
     const smoothZoom = smoothedZoomRef.current;
+    const frameScale = Math.min(delta * 60, 2);
 
-    const hasCameraGestureInput =
+    const hasRotationGestureInput =
       Math.abs(smoothRotX) > 0.0001 ||
-      Math.abs(smoothRotY) > 0.0001 ||
+      Math.abs(smoothRotY) > 0.0001;
+    const hasCameraGestureInput =
+      hasRotationGestureInput ||
       Math.abs(smoothZoom) > 0.0001;
 
-    const offset = new THREE.Vector3().subVectors(camera.position, orbitTarget);
+    const scratch = handProjectionScratchRef.current;
+    const offset = scratch.offset.subVectors(camera.position, orbitTarget);
     if (!cameraInitialized.current || !wasCameraGestureActiveRef.current) {
-      sphericalRef.current = new THREE.Spherical().setFromVector3(offset);
+      sphericalRef.current.setFromVector3(offset);
       cameraInitialized.current = true;
     }
 
-    const sph = sphericalRef.current!;
+    const sph = sphericalRef.current;
 
     // 旋转 — modify angles on persistent spherical (uses smoothed velocity)
     if (hasCameraGestureInput && (Math.abs(smoothRotX) > 0.0001 || Math.abs(smoothRotY) > 0.0001)) {
-      const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
-      sph.theta -= smoothRotY * sensitivity;
-      sph.phi -= smoothRotX * sensitivity;
+      const sensitivity = 3.1 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
+      sph.theta -= smoothRotY * sensitivity * frameScale;
+      sph.phi -= smoothRotX * sensitivity * frameScale;
       sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
       sph.makeSafe();
     }
 
     // 缩放 — modify radius on persistent spherical (no conflict with rotation)
     if (hasCameraGestureInput && Math.abs(smoothZoom) > 0.0001) {
-      sph.radius = Math.max(0.05, sph.radius - smoothZoom * 0.15 * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0));
+      sph.radius = Math.max(
+        3,
+        Math.min(12, sph.radius - smoothZoom * 0.13 * frameScale * (controlRef.current.interactionSettings?.zoomSpeed ?? 1.0))
+      );
     }
 
     // Apply spherical to camera
     if (hasCameraGestureInput) {
+      if (orbitControls) {
+        orbitControls.enabled = false;
+      }
       camera.position.setFromSpherical(sph).add(orbitTarget);
       camera.lookAt(orbitTarget);
     } else {
       sphericalRef.current.setFromVector3(offset);
+      if (wasCameraGestureActiveRef.current) {
+        if (orbitControls?.target) {
+          orbitControls.target.copy(orbitTarget);
+          orbitControls.update?.();
+        }
+        if (orbitControls) {
+          orbitControls.enabled = true;
+        }
+      }
     }
     wasCameraGestureActiveRef.current = hasCameraGestureInput;
 
@@ -1034,14 +1074,21 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
     }
 
     // ========== 一比一复刻第一版手部交互 ==========
-    const rightLandmarks = handLandmarks?.right;
+    const activeInteractionLandmarks = interactionHandLandmarks;
     const handState = interactionHandStateRef.current;
 
-    if (rightLandmarks && rightLandmarks.length >= 21) {
-      updateHandState(rightLandmarks);
+    if (activeInteractionLandmarks && activeInteractionLandmarks.length >= 21) {
+      updateHandState(activeInteractionLandmarks);
+      const nowMs = performance.now();
+      if (handState.isPinching) {
+        lastGrabPinchTimeRef.current = nowMs;
+      }
+      const keepGrabAlive =
+        isGrabbingRef.current &&
+        nowMs - lastGrabPinchTimeRef.current <= PINCH_RELEASE_GRACE_MS;
 
       // 抓取逻辑 (一比一复刻 executeInteractions)
-      if (handState.isPinching && !isGrabbingRef.current && handState.ndc && grabbableParts.length > 0) {
+      if (!hasRotationGestureInput && handState.isPinching && !isGrabbingRef.current && handState.ndc && grabbableParts.length > 0) {
         raycaster.setFromCamera(handState.ndc, camera);
         const intersects = raycaster.intersectObjects(grabbableParts, true);
 
@@ -1051,11 +1098,10 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
           isGrabbingRef.current = true;
           grabbedPartRef.current = hitPart;
+          lastGrabPinchTimeRef.current = nowMs;
 
           // 获取世界坐标
-          const worldPos = new THREE.Vector3();
-          const worldQuat = new THREE.Quaternion();
-          const worldScale = new THREE.Vector3();
+          const { worldPos, worldQuat, worldScale } = scratch;
           hitPart.getWorldPosition(worldPos);
           hitPart.getWorldQuaternion(worldQuat);
           hitPart.getWorldScale(worldScale);
@@ -1075,41 +1121,43 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
           // 设置拖拽平面
           dragPlaneRef.current.setFromNormalAndCoplanarPoint(
-            camera.getWorldDirection(new THREE.Vector3()),
+            camera.getWorldDirection(scratch.cameraDir),
             worldPos
           );
 
           // 计算偏移
-          const intersectPoint = new THREE.Vector3();
-          raycaster.ray.intersectPlane(dragPlaneRef.current, intersectPoint);
-          grabOffsetRef.current.copy(worldPos).sub(intersectPoint);
-          console.log('✓ 抓取零件');
+          raycaster.ray.intersectPlane(dragPlaneRef.current, scratch.intersectPoint);
+          grabOffsetRef.current.copy(worldPos).sub(scratch.intersectPoint);
+          dragTargetPositionRef.current.copy(worldPos);
         }
-      } else if (!handState.isPinching && isGrabbingRef.current) {
+      } else if (!handState.isPinching && isGrabbingRef.current && !keepGrabAlive) {
         releaseGrab();
       }
 
       // 拖拽
       if (isGrabbingRef.current && grabbedPartRef.current && handState.ndc) {
         raycaster.setFromCamera(handState.ndc, camera);
-        const targetPoint = new THREE.Vector3();
-        if (raycaster.ray.intersectPlane(dragPlaneRef.current, targetPoint)) {
-          grabbedPartRef.current.position.copy(targetPoint).add(grabOffsetRef.current);
+        if (raycaster.ray.intersectPlane(dragPlaneRef.current, scratch.targetPoint)) {
+          dragTargetPositionRef.current.copy(scratch.targetPoint).add(grabOffsetRef.current);
+          grabbedPartRef.current.position.copy(dragTargetPositionRef.current);
         }
       }
     } else {
       // 手部丢失
       handState.exists = false;
-      if (isGrabbingRef.current) {
+      if (
+        isGrabbingRef.current &&
+        performance.now() - lastGrabPinchTimeRef.current > PINCH_RELEASE_GRACE_MS
+      ) {
         releaseGrab();
       }
     }
 
     // 待机动画
-    if (rotationVelocity.x === 0 && rotationVelocity.y === 0 && !isGrabbingRef.current) {
-      groupRef.current.rotation.y += Math.sin(state.clock.elapsedTime * 0.3) * 0.001;
+    if (!hasCameraGestureInput && !isGrabbingRef.current) {
+      groupRef.current.rotation.y += Math.sin(state.clock.elapsedTime * 0.3) * 0.001 * frameScale;
     }
-  });
+  }, -1);
 
   if (!modelScene) {
     return (
@@ -1235,6 +1283,16 @@ const HAND_CONNECTIONS = [
 ];
 
 // 3D虚拟手组件 (从第一版移植)
+const HAND_VISIBILITY_GRACE_MS = 180;
+const HAND_POSITION_SMOOTHING = 0.36;
+const HAND_PLANE_DISTANCE = 2.85;
+const HAND_DEPTH_SCALE = 0.48;
+const HAND_DEPTH_LIMIT = 0.18;
+const HAND_RENDER_ORDER = 40;
+const PINCH_VISUAL_THRESHOLD = 0.055;
+const HAND_FINGERTIPS = new Set([4, 8, 12, 16, 20]);
+const HAND_HIGHLIGHT_JOINTS = new Set([4, 8]);
+
 const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }> = ({ controlRef }) => {
   const { camera } = useThree();
 
@@ -1243,6 +1301,15 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
   const rightJointsRef = useRef<THREE.Mesh[]>([]);
   const leftLinesRef = useRef<THREE.Line[]>([]);
   const rightLinesRef = useRef<THREE.Line[]>([]);
+  const leftPinchLineRef = useRef<THREE.Line | null>(null);
+  const rightPinchLineRef = useRef<THREE.Line | null>(null);
+  const leftPositionsRef = useRef<THREE.Vector3[]>(Array.from({ length: 21 }, () => new THREE.Vector3()));
+  const rightPositionsRef = useRef<THREE.Vector3[]>(Array.from({ length: 21 }, () => new THREE.Vector3()));
+  const virtualHandScratchRef = useRef({
+    targetLocal: new THREE.Vector3()
+  });
+  const leftLastSeenRef = useRef(0);
+  const rightLastSeenRef = useRef(0);
 
   // 初始化关节点和连线
   const [initialized, setInitialized] = useState(false);
@@ -1257,14 +1324,37 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
     }
 
     // 创建关节点材质
-    const leftMaterial = new THREE.MeshBasicMaterial({ color: 0xff8a5b, transparent: true, opacity: 0.92 });
-    const rightMaterial = new THREE.MeshBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.92 });
-    const thumbMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d5a, transparent: true, opacity: 0.98 });
-    const indexMaterial = new THREE.MeshBasicMaterial({ color: 0xffd54a, transparent: true, opacity: 0.98 });
+    const createJointMaterial = (color: number, opacity: number) => new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false
+    });
+    const createLineMaterial = (color: number, opacity: number) => new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false
+    });
 
-    const jointGeometry = new THREE.SphereGeometry(0.018, 8, 8);
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x2dd4ff, transparent: true, opacity: 0.82 });
-    const leftLineMaterial = new THREE.LineBasicMaterial({ color: 0xff8a5b, transparent: true, opacity: 0.82 });
+    const leftMaterial = createJointMaterial(0xff8a5b, 0.74);
+    const rightMaterial = createJointMaterial(0x2dd4ff, 0.76);
+    const thumbMaterial = createJointMaterial(0xff4d5a, 0.95);
+    const indexMaterial = createJointMaterial(0xffd54a, 0.95);
+
+    const jointGeometry = new THREE.SphereGeometry(1, 12, 12);
+    const lineMaterial = createLineMaterial(0x2dd4ff, 0.58);
+    const leftLineMaterial = createLineMaterial(0xff8a5b, 0.56);
+    const pinchLineMaterial = createLineMaterial(0xfff1a6, 0.92);
+
+    const applyOverlayStyle = (object: THREE.Object3D) => {
+      object.renderOrder = HAND_RENDER_ORDER;
+      object.frustumCulled = false;
+    };
 
     // 创建左手关节点
     leftJointsRef.current = [];
@@ -1272,7 +1362,8 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
       const material = i === 4 ? thumbMaterial : i === 8 ? indexMaterial : leftMaterial;
       const sphere = new THREE.Mesh(jointGeometry, material);
       sphere.visible = false;
-      sphere.frustumCulled = false;
+      sphere.scale.setScalar(HAND_FINGERTIPS.has(i) ? 0.022 : 0.014);
+      applyOverlayStyle(sphere);
       groupRef.current.add(sphere);
       leftJointsRef.current.push(sphere);
     }
@@ -1283,7 +1374,8 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
       const material = i === 4 ? thumbMaterial : i === 8 ? indexMaterial : rightMaterial;
       const sphere = new THREE.Mesh(jointGeometry, material);
       sphere.visible = false;
-      sphere.frustumCulled = false;
+      sphere.scale.setScalar(HAND_FINGERTIPS.has(i) ? 0.022 : 0.014);
+      applyOverlayStyle(sphere);
       groupRef.current.add(sphere);
       rightJointsRef.current.push(sphere);
     }
@@ -1298,6 +1390,7 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
       leftGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
       const leftLine = new THREE.Line(leftGeo, leftLineMaterial);
       leftLine.visible = false;
+      applyOverlayStyle(leftLine);
       groupRef.current!.add(leftLine);
       leftLinesRef.current.push(leftLine);
 
@@ -1306,9 +1399,22 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
       rightGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
       const rightLine = new THREE.Line(rightGeo, lineMaterial);
       rightLine.visible = false;
+      applyOverlayStyle(rightLine);
       groupRef.current!.add(rightLine);
       rightLinesRef.current.push(rightLine);
     });
+
+    const createPinchLine = () => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      const line = new THREE.Line(geo, pinchLineMaterial);
+      line.visible = false;
+      applyOverlayStyle(line);
+      groupRef.current!.add(line);
+      return line;
+    };
+    leftPinchLineRef.current = createPinchLine();
+    rightPinchLineRef.current = createPinchLine();
 
     setInitialized(true);
   }, []);
@@ -1317,66 +1423,140 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
     if (!initialized || !groupRef.current) return;
 
     const { handLandmarks } = controlRef.current;
+    groupRef.current.position.copy(camera.position);
+    groupRef.current.quaternion.copy(camera.quaternion);
 
     // 更新手部可视化的辅助函数
     const updateHand = (
       landmarks: { x: number; y: number; z: number }[] | null,
       joints: THREE.Mesh[],
-      lines: THREE.Line[]
+      lines: THREE.Line[],
+      pinchLine: THREE.Line | null,
+      cachedPositionsRef: React.MutableRefObject<THREE.Vector3[]>,
+      lastSeenRef: React.MutableRefObject<number>
     ) => {
-      if (!landmarks || landmarks.length < 21) {
-        // 隐藏所有关节点和连线
+      const hideHand = () => {
         joints.forEach(j => j.visible = false);
         lines.forEach(l => l.visible = false);
+        if (pinchLine) pinchLine.visible = false;
+      };
+
+      const renderHand = (positions: THREE.Vector3[], isPinching: boolean) => {
+        if (positions.length < 21) {
+          hideHand();
+          return;
+        }
+
+        positions.forEach((position, i) => {
+          joints[i].position.copy(position);
+          const baseScale = HAND_FINGERTIPS.has(i) ? 0.022 : 0.014;
+          const pinchScale = isPinching && HAND_HIGHLIGHT_JOINTS.has(i) ? 1.45 : 1;
+          joints[i].scale.setScalar(baseScale * pinchScale);
+          joints[i].visible = true;
+        });
+
+        // Update every line from the same cached point set so visible bones stay connected.
+        HAND_CONNECTIONS.forEach((conn, i) => {
+          const start = positions[conn[0]];
+          const end = positions[conn[1]];
+          if (!start || !end) {
+            lines[i].visible = false;
+            return;
+          }
+
+          const line = lines[i];
+          const posArray = line.geometry.attributes.position.array as Float32Array;
+
+          posArray[0] = start.x;
+          posArray[1] = start.y;
+          posArray[2] = start.z;
+          posArray[3] = end.x;
+          posArray[4] = end.y;
+          posArray[5] = end.z;
+
+          line.geometry.attributes.position.needsUpdate = true;
+          line.visible = true;
+        });
+
+        if (pinchLine) {
+          const thumbTip = positions[4];
+          const indexTip = positions[8];
+          if (isPinching && thumbTip && indexTip) {
+            const posArray = pinchLine.geometry.attributes.position.array as Float32Array;
+            posArray[0] = thumbTip.x;
+            posArray[1] = thumbTip.y;
+            posArray[2] = thumbTip.z;
+            posArray[3] = indexTip.x;
+            posArray[4] = indexTip.y;
+            posArray[5] = indexTip.z;
+            pinchLine.geometry.attributes.position.needsUpdate = true;
+            pinchLine.visible = true;
+          } else {
+            pinchLine.visible = false;
+          }
+        }
+      };
+
+      const now = performance.now();
+      if (!landmarks || landmarks.length < 21) {
+        if (lastSeenRef.current > 0 && now - lastSeenRef.current <= HAND_VISIBILITY_GRACE_MS) {
+          renderHand(cachedPositionsRef.current, false);
+        } else {
+          hideHand();
+        }
         return;
       }
-
       // 虚拟平面设置
-      const planeDistance = 3;
-      const cameraDir = camera.getWorldDirection(new THREE.Vector3());
-      const planePoint = camera.position.clone().addScaledVector(cameraDir, planeDistance);
-      const handPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDir, planePoint);
-
-      const positions: THREE.Vector3[] = [];
-      const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
+      const scratch = virtualHandScratchRef.current;
+      const positions = cachedPositionsRef.current;
+      const hasPreviousPositions = lastSeenRef.current > 0;
+      const isPerspectiveCamera = (camera as THREE.PerspectiveCamera).isPerspectiveCamera;
+      const isOrthographicCamera = (camera as THREE.OrthographicCamera).isOrthographicCamera;
+      let halfWidth = 1;
+      let halfHeight = 1;
+      if (isPerspectiveCamera) {
+        const perspectiveCamera = camera as THREE.PerspectiveCamera;
+        halfHeight = Math.tan(THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2) * HAND_PLANE_DISTANCE;
+        halfWidth = halfHeight * perspectiveCamera.aspect;
+      } else if (isOrthographicCamera) {
+        const orthographicCamera = camera as THREE.OrthographicCamera;
+        halfWidth = (orthographicCamera.right - orthographicCamera.left) / (2 * orthographicCamera.zoom);
+        halfHeight = (orthographicCamera.top - orthographicCamera.bottom) / (2 * orthographicCamera.zoom);
+      }
 
       landmarks.forEach((pt, i) => {
         // NDC坐标转换 (镜像X轴)
         const ndcX = (0.5 - pt.x) * 2;
         const ndcY = -(pt.y - 0.5) * 2;
 
-        mouse.set(ndcX, ndcY);
-        raycaster.setFromCamera(mouse, camera);
+        const depthOffset = THREE.MathUtils.clamp((pt.z || 0) * HAND_DEPTH_SCALE, -HAND_DEPTH_LIMIT, HAND_DEPTH_LIMIT);
+        scratch.targetLocal.set(
+          ndcX * halfWidth,
+          ndcY * halfHeight,
+          -HAND_PLANE_DISTANCE + depthOffset
+        );
 
-        const projectionPoint = new THREE.Vector3();
-        raycaster.ray.intersectPlane(handPlane, projectionPoint);
-
-        positions.push(projectionPoint.clone());
-        joints[i].position.copy(projectionPoint);
-        joints[i].visible = true;
+        if (hasPreviousPositions) {
+          positions[i].lerp(scratch.targetLocal, HAND_POSITION_SMOOTHING);
+        } else {
+          positions[i].copy(scratch.targetLocal);
+        }
       });
 
-      // 更新连线
-      HAND_CONNECTIONS.forEach((conn, i) => {
-        const line = lines[i];
-        const posArray = line.geometry.attributes.position.array as Float32Array;
+      const pinchDistance = Math.sqrt(
+        Math.pow(landmarks[4].x - landmarks[8].x, 2) +
+        Math.pow(landmarks[4].y - landmarks[8].y, 2)
+      );
+      const isPinching = pinchDistance < PINCH_VISUAL_THRESHOLD;
 
-        posArray[0] = positions[conn[0]].x;
-        posArray[1] = positions[conn[0]].y;
-        posArray[2] = positions[conn[0]].z;
-        posArray[3] = positions[conn[1]].x;
-        posArray[4] = positions[conn[1]].y;
-        posArray[5] = positions[conn[1]].z;
-
-        line.geometry.attributes.position.needsUpdate = true;
-        line.visible = true;
-      });
+      cachedPositionsRef.current = positions;
+      lastSeenRef.current = now;
+      renderHand(positions, isPinching);
     };
 
     // 更新左右手
-    updateHand(handLandmarks.left, leftJointsRef.current, leftLinesRef.current);
-    updateHand(handLandmarks.right, rightJointsRef.current, rightLinesRef.current);
+    updateHand(handLandmarks.left, leftJointsRef.current, leftLinesRef.current, leftPinchLineRef.current, leftPositionsRef, leftLastSeenRef);
+    updateHand(handLandmarks.right, rightJointsRef.current, rightLinesRef.current, rightPinchLineRef.current, rightPositionsRef, rightLastSeenRef);
   });
 
   return <group ref={groupRef} />;
@@ -1506,8 +1686,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
             enableZoom={true}
             minPolarAngle={Math.PI / 6}
             maxPolarAngle={Math.PI / 2.2}
+            minDistance={3}
+            maxDistance={12}
             enableDamping
-            dampingFactor={0.06}
+            dampingFactor={0.045}
+            rotateSpeed={0.35}
+            zoomSpeed={0.9}
           />
         </Suspense>
       </Canvas>
