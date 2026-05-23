@@ -34,6 +34,8 @@ interface ModelViewerProps {
   modelType: ModelType;
   assetUrls?: Record<string, string>;
   controlRef: React.MutableRefObject<ControlRefs>;
+  showLabels?: boolean;
+  onShowLabelsChange?: (val: boolean) => void;
 }
 
 const MODEL_BASE_Y = -0.49;
@@ -1691,9 +1693,11 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
   return <group ref={groupRef} />;
 };
 
-const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef }) => {
+const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
-  const [showLabels, setShowLabels] = useState(false);
+  const [internalShowLabels, setInternalShowLabels] = useState(false);
+  const showLabels = externalShowLabels !== undefined ? externalShowLabels : internalShowLabels;
+  const setShowLabels = onShowLabelsChange || setInternalShowLabels;
   const lastAutoLabelActionRef = useRef(-1);
   const lowerModelUrl = modelUrl.toLowerCase();
   const cameraTarget = useMemo<CameraTarget>(() => {
@@ -1731,17 +1735,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
 
   return (
     <div className="w-full h-full bg-white relative">
-      {(lowerModelUrl.includes('earth-layers') || lowerModelUrl.includes('terrain-topography')) && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50">
-          <button
-            onClick={() => setShowLabels(!showLabels)}
-            className="px-5 py-2.5 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg border border-gray-200/50 text-xs font-black tracking-widest uppercase text-gray-600 hover:text-[#86e3ce] hover:border-[#86e3ce]/50 transition-all flex items-center gap-2"
-          >
-            <div className={`w-2 h-2 rounded-full ${showLabels ? 'bg-[#86e3ce] shadow-[0_0_8px_#86e3ce]' : 'bg-gray-300'}`}></div>
-            {showLabels ? '关闭教学辅导标签' : '开启教学辅导标签'}
-          </button>
-        </div>
-      )}
       <Canvas
         shadows
         dpr={[1, 2]}

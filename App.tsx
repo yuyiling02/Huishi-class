@@ -81,6 +81,7 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(0.8);
   const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(0.5);
+  const [showLabels, setShowLabels] = useState(false);
   const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
   const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
   const [agentSummary, setAgentSummary] = useState('');
@@ -1133,6 +1134,16 @@ const App: React.FC = () => {
                 <Settings size={20} />
               </button>
 
+              {modelUrl && (modelUrl.toLowerCase().includes('earth-layers') || modelUrl.toLowerCase().includes('terrain-topography')) && (
+                <button
+                  onClick={() => setShowLabels(!showLabels)}
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-gray-200/50 text-xs font-black tracking-widest uppercase text-gray-600 hover:text-[#86e3ce] hover:border-[#86e3ce]/50 transition-all flex items-center gap-1.5 sm:gap-2"
+                >
+                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${showLabels ? 'bg-[#86e3ce] shadow-[0_0_8px_#86e3ce]' : 'bg-gray-300'}`}></div>
+                  {showLabels ? '关闭教学辅导标签' : '开启教学辅导标签'}
+                </button>
+              )}
+
               {showSettings && (
                 <div className="absolute bottom-16 left-0 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/50 p-5 w-64">
                   <div className="flex items-center justify-between mb-4">
@@ -1249,7 +1260,7 @@ const App: React.FC = () => {
             {activeContent === 'biodigital' ? (
               <BioDigitalViewer src={BIODIGITAL_HEART_URL} onFallback={loadHeartFallbackModel} />
             ) : modelUrl ? (
-              <ModelViewer modelUrl={modelUrl} modelType={modelType} assetUrls={modelAssetUrls} controlRef={controlRef} />
+              <ModelViewer modelUrl={modelUrl} modelType={modelType} assetUrls={modelAssetUrls} controlRef={controlRef} showLabels={showLabels} onShowLabelsChange={setShowLabels} />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-white/20">
                 <div className="relative mb-8">
