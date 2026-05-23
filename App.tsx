@@ -98,9 +98,63 @@ const App: React.FC = () => {
   const [handNearStructureImage, setHandNearStructureImage] = useState(false);
   const [isHandExpanded, setIsHandExpanded] = useState(false);
   const structureImageRef = useRef<HTMLButtonElement>(null);
+  const knowledgeSpeechBufferRef = useRef('');
+  const knowledgeSpeechClosedRef = useRef(false);
+  const knowledgeSpeechSessionRef = useRef(0);
   const modelStructureImage = activeContent === 'model' && modelUrl
     ? STRUCTURE_IMAGE_BY_MODEL[modelUrl]
     : undefined;
+
+  const resetKnowledgeSpeech = useCallback(() => {
+    knowledgeSpeechBufferRef.current = '';
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  const speakKnowledgeSegment = useCallback((text: string) => {
+    const segment = text.trim();
+    if (!segment || knowledgeSpeechClosedRef.current || !('speechSynthesis' in window)) return;
+
+    const utterance = new SpeechSynthesisUtterance(segment);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    const zhVoice = window.speechSynthesis.getVoices().find((voice) => voice.lang.startsWith('zh'));
+    if (zhVoice) utterance.voice = zhVoice;
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const enqueueKnowledgeSpeech = useCallback((text: string) => {
+    if (knowledgeSpeechClosedRef.current) return;
+    let buffer = knowledgeSpeechBufferRef.current + text;
+
+    while (buffer) {
+      const punctuationIndex = buffer.search(/[。！？!?；;\n]/);
+      const shouldFlushLongSegment = punctuationIndex < 0 && buffer.trim().length >= 45;
+      if (punctuationIndex < 0 && !shouldFlushLongSegment) break;
+
+      const endIndex = punctuationIndex >= 0 ? punctuationIndex + 1 : buffer.length;
+      speakKnowledgeSegment(buffer.slice(0, endIndex));
+      buffer = buffer.slice(endIndex);
+    }
+
+    knowledgeSpeechBufferRef.current = buffer;
+  }, [speakKnowledgeSegment]);
+
+  const flushKnowledgeSpeech = useCallback(() => {
+    const remaining = knowledgeSpeechBufferRef.current;
+    knowledgeSpeechBufferRef.current = '';
+    speakKnowledgeSegment(remaining);
+  }, [speakKnowledgeSegment]);
+
+  const closeKnowledgePanel = useCallback(() => {
+    knowledgeSpeechClosedRef.current = true;
+    setKnowledgeContent('');
+    setIsKnowledgeStreaming(false);
+    resetKnowledgeSpeech();
+  }, [resetKnowledgeSpeech]);
 
   // Refs
   const preloadedModelRef = useRef<TeachingModelId | null>(null);
@@ -418,8 +472,8 @@ const App: React.FC = () => {
           break;
         }
         case 'explode_model': {
-          if (modelUrl?.includes('diamond-unit-cell')) {
-            setAiAnalysis('金刚石晶胞为完整结构展示，不支持拆解。');
+          if (modelUrl?.includes('diamond.glb') || modelUrl?.includes('diamond-unit-cell')) {
+            setAiAnalysis('金刚石结构模型为完整结构展示，不支持拆解。');
             break;
           }
           controlRef.current.agentDisassembly = {
@@ -485,7 +539,9 @@ const App: React.FC = () => {
     }
 
     setIsAgentRunning(true);
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    knowledgeSpeechClosedRef.current = false;
+    knowledgeSpeechSessionRef.current += 1;
+    resetKnowledgeSpeech();
     setKnowledgeContent('');
     setIsKnowledgeStreaming(false);
     setAgentThinking('');
@@ -560,36 +616,33 @@ const App: React.FC = () => {
         status: 'running',
       });
 
+      const knowledgeSpeechSession = knowledgeSpeechSessionRef.current;
       let accumulatedKnowledge = '';
+      let hasStreamedKnowledge = false;
       const fullKnowledge = await buildKnowledgeExplanation(
         request,
         plan.modelId,
         (token: string) => {
+          if (knowledgeSpeechClosedRef.current || knowledgeSpeechSessionRef.current !== knowledgeSpeechSession) return;
+          hasStreamedKnowledge = true;
           accumulatedKnowledge += token;
           setKnowledgeContent(accumulatedKnowledge);
+          enqueueKnowledgeSpeech(token);
         },
       );
 
-      setKnowledgeContent(fullKnowledge);
+      if (!knowledgeSpeechClosedRef.current && knowledgeSpeechSessionRef.current === knowledgeSpeechSession) {
+        if (!hasStreamedKnowledge && fullKnowledge) {
+          enqueueKnowledgeSpeech(fullKnowledge);
+        }
+        flushKnowledgeSpeech();
+        setKnowledgeContent(fullKnowledge);
+        setAiAnalysis('知识讲解已生成，语音播报已同步进行。');
+      }
       setIsKnowledgeStreaming(false);
       setAgentThinking('');
-      setAiAnalysis('知识讲解已生成，开始语音朗读...');
       setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'done' });
       setAgentTimeline((items) => items.map((item) => item.agent === 'evaluator' ? { ...item, status: 'done', detail: '知识讲解完成' } : item));
-
-      // TTS: read knowledge aloud
-      if ('speechSynthesis' in window && fullKnowledge) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(fullKnowledge);
-        utterance.lang = 'zh-CN';
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        const voices = window.speechSynthesis.getVoices();
-        const zhVoice = voices.find(v => v.lang.startsWith('zh'));
-        if (zhVoice) utterance.voice = zhVoice;
-        window.speechSynthesis.speak(utterance);
-      }
     } catch (error) {
       console.error('Agent run failed:', error);
       setIsKnowledgeStreaming(false);
@@ -660,7 +713,7 @@ const App: React.FC = () => {
     setInteractionMode(mode);
     resetControls();
     setAiAnalysis(mode === 'dual'
-      ? '已切换为双手模式：右手缩放，左手旋转/拖拽。'
+      ? '已切换为双手模式：左手缩放，右手旋转/拖拽。'
       : '已切换为单手模式：右手优先；双指旋转，张掌/握拳缩放，捏合拖拽；缩放与拖拽互斥。'
     );
   };
@@ -741,8 +794,8 @@ const App: React.FC = () => {
                   type="button"
                   onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); setCameraActive(true); }}
                   className="flex h-11 w-11 items-center justify-center rounded-2xl text-blue-400 transition hover:bg-blue-50/60"
-                  aria-label="物理化学"
-                  title="物理化学 · 金刚石模型"
+                  aria-label="化学"
+                  title="化学 · 金刚石模型"
                 >
                   <FlaskConical size={19} />
                 </button>
@@ -843,14 +896,14 @@ const App: React.FC = () => {
 
                 {sidebarTab === 'resource' ? (
                 <div className="space-y-1.5">
-                  {/* 物理化学 */}
+                  {/* 化学 */}
                   <div className="rounded-2xl overflow-hidden">
                     <button
                       type="button"
                       onClick={() => {
                         setExpandedCategories(prev => {
                           const next = new Set(prev);
-                          next.has('物理化学') ? next.delete('物理化学') : next.add('物理化学');
+                          next.has('化学') ? next.delete('化学') : next.add('化学');
                           return next;
                         });
                       }}
@@ -858,11 +911,11 @@ const App: React.FC = () => {
                     >
                       <div className="flex items-center gap-2.5">
                         <FlaskConical size={16} className="text-blue-400" />
-                        <span>物理化学</span>
+                        <span>化学</span>
                       </div>
-                      <ChevronDown size={13} className={`text-blue-300 transition-transform duration-200 ${expandedCategories.has('物理化学') ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={13} className={`text-blue-300 transition-transform duration-200 ${expandedCategories.has('化学') ? 'rotate-180' : ''}`} />
                     </button>
-                    {expandedCategories.has('物理化学') && (
+                    {expandedCategories.has('化学') && (
                       <div className="px-2 pb-2 space-y-2.5">
                         <div>
                           <div className="flex items-center gap-1.5 mb-1 pl-1">
@@ -1095,20 +1148,20 @@ const App: React.FC = () => {
                           <div className="p-1.5 bg-indigo-100 rounded-lg"><Move3d size={14} className="text-indigo-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">双手协同</span>
-                            <span className="text-[9px] text-indigo-500 font-bold">右手缩放 | 左手旋转/拖拽</span>
+                            <span className="text-[9px] text-indigo-500 font-bold">左手缩放 | 右手旋转/拖拽</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">右手缩放</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">左手缩放</span>
                             <span className="text-[9px] text-gray-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">左手交互</span>
+                            <span className="text-[10px] font-black text-gray-500 uppercase">右手交互</span>
                             <span className="text-[9px] text-purple-400 font-bold">捏合 → 拖拽零件</span>
                             <span className="text-[9px] text-gray-400 font-bold">食指+中指并拢滑动 → 旋转画面</span>
                           </div>
@@ -1329,7 +1382,7 @@ const App: React.FC = () => {
                       </div>
                       <button
                         type="button"
-                        onClick={() => { setKnowledgeContent(''); setIsKnowledgeStreaming(false); }}
+                        onClick={closeKnowledgePanel}
                         className="flex h-6 w-6 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition"
                         aria-label="关闭知识讲解"
                       >

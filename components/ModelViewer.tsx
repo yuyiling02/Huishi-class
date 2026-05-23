@@ -713,6 +713,8 @@ const earthLayerMeta = [
   { key: 'innercore', title: '内核 Inner Core', detail: '~1220 km · 固态铁镍', color: '#f6d84a' },
 ] as const;
 
+const EARTH_LAYER_LABEL_REVEAL_DISTANCE = 0.12;
+
 const getEarthLayerMeta = (part: GrabbablePart, index: number) => {
   const normalizedName = part.name.toLowerCase().replace(/[^a-z]/g, '');
   return earthLayerMeta.find((meta) => normalizedName.includes(meta.key)) || earthLayerMeta[index % earthLayerMeta.length];
@@ -725,22 +727,57 @@ const EarthLayerFollowLabels: React.FC<{
   enabled: boolean;
 }> = ({ parts, rootGroupRef, controlRef, enabled }) => {
   const labelRefs = useRef<THREE.Group[]>([]);
+  const [visibleLayerCount, setVisibleLayerCount] = useState(0);
+  const visibleLayerCountRef = useRef(0);
+
+  const updateVisibleLayerCount = (nextCount: number) => {
+    if (visibleLayerCountRef.current === nextCount) return;
+    visibleLayerCountRef.current = nextCount;
+    setVisibleLayerCount(nextCount);
+  };
 
   useFrame(() => {
-    const shouldShow = enabled && Boolean(controlRef.current.agentDisassembly?.enabled);
-    labelRefs.current.forEach((label) => {
-      if (label) label.visible = shouldShow;
-    });
+    if (!enabled || !rootGroupRef.current || parts.length === 0) {
+      labelRefs.current.forEach((label) => { if (label) label.visible = false; });
+      updateVisibleLayerCount(0);
+      return;
+    }
 
-    if (!shouldShow || !rootGroupRef.current) return;
+    const maxLayers = Math.min(parts.length, 4);
 
-    parts.slice(0, 4).forEach((part, index) => {
+    // Compute world bounds for all concentric layers
+    const boundsInfo: { center: THREE.Vector3; size: THREE.Vector3 }[] = [];
+    for (let i = 0; i < maxLayers; i++) {
+      const box = new THREE.Box3().setFromObject(parts[i]);
+      boundsInfo.push({
+        center: box.getCenter(new THREE.Vector3()),
+        size: box.getSize(new THREE.Vector3()),
+      });
+    }
+
+    let revealedCount = 1;
+
+    for (let i = 0; i < maxLayers - 1; i++) {
+      const distanceFromOriginal = parts[i].position.distanceTo(getOriginalPosition(parts[i]));
+      if (distanceFromOriginal > EARTH_LAYER_LABEL_REVEAL_DISTANCE) {
+        revealedCount = i + 2;
+      } else {
+        break;
+      }
+    }
+    updateVisibleLayerCount(revealedCount);
+
+    parts.slice(0, maxLayers).forEach((part, index) => {
       const label = labelRefs.current[index];
       if (!label) return;
 
-      const box = new THREE.Box3().setFromObject(part);
-      const worldPosition = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
+      if (index >= revealedCount) {
+        label.visible = false;
+        return;
+      }
+
+      const { center, size } = boundsInfo[index];
+      const worldPosition = center.clone();
       worldPosition.y += Math.max(0.35, size.y * 0.58);
       const localPosition = rootGroupRef.current!.worldToLocal(worldPosition);
       label.position.lerp(localPosition, 0.18);
@@ -762,15 +799,17 @@ const EarthLayerFollowLabels: React.FC<{
               if (node) labelRefs.current[index] = node;
             }}
           >
-            <Html distanceFactor={10} center>
-              <div className="bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl text-slate-800 text-[10px] whitespace-nowrap border shadow-lg font-bold" style={{ borderColor: meta.color }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: meta.color }} />
-                  <span style={{ color: meta.color }} className="text-[11px] font-extrabold">{meta.title}</span>
+            {index < visibleLayerCount && (
+              <Html distanceFactor={10} center>
+                <div className="bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl text-slate-800 text-[10px] whitespace-nowrap border shadow-lg font-bold" style={{ borderColor: meta.color }}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: meta.color }} />
+                    <span style={{ color: meta.color }} className="text-[11px] font-extrabold">{meta.title}</span>
+                  </div>
+                  <div className="font-medium text-slate-500 leading-relaxed text-[9px]">{meta.detail}</div>
                 </div>
-                <div className="font-medium text-slate-500 leading-relaxed text-[9px]">{meta.detail}</div>
-              </div>
-            </Html>
+              </Html>
+            )}
           </group>
         );
       })}
@@ -909,7 +948,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
         : isPubchem6233Model(url)
           ? preparePubchem6233Model(root)
           : [];
-      const parts = isDiamondUnitCellModel(url)
+      const parts = isDiamondModel(url) || isDiamondUnitCellModel(url)
         ? []
         : customParts.length > 0
           ? customParts
@@ -1726,9 +1765,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
   }, [lowerModelUrl]);
 
   useEffect(() => {
-    setShowLabels(false);
+    if (lowerModelUrl.includes('earth-layers')) {
+      setShowLabels(true);
+    } else {
+      setShowLabels(false);
+    }
     lastAutoLabelActionRef.current = controlRef.current.agentDisassembly?.actionId ?? -1;
-  }, [controlRef, modelUrl]);
+  }, [controlRef, modelUrl, lowerModelUrl]);
 
   useEffect(() => {
     let animationFrame = 0;

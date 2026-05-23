@@ -56,10 +56,16 @@ export const inferTeachingModel = (request: string): TeachingModelId => pickMode
 
 export const getTeachingModelName = (modelId: TeachingModelId): string => modelNames[modelId];
 
+const supportsModelDisassembly = (modelId: TeachingModelId): boolean => ![
+  'biodigital_heart',
+  'diamond',
+  'diamond_unit_cell',
+].includes(modelId);
+
 const createFallbackPlan = (request: string): AgentPlan => {
   const modelId = pickModel(request);
   const modelName = modelNames[modelId];
-  const supportsDisassembly = modelId !== 'biodigital_heart';
+  const supportsDisassembly = supportsModelDisassembly(modelId);
 
   const steps: AgentPlanStep[] = [
     createStep(
@@ -134,7 +140,8 @@ const normalizePlan = (raw: any, request: string): AgentPlan => {
         call.name === 'load_model'
           ? { ...(typeof call.args === 'object' && call.args ? call.args : {}), modelId }
           : (typeof call.args === 'object' && call.args ? call.args : {}),
-      ));
+      ))
+      .filter((call) => supportsModelDisassembly(modelId) || call.name !== 'explode_model');
 
     return createStep(
       String(step?.id || `ai-step-${stepIndex}`),
@@ -148,7 +155,7 @@ const normalizePlan = (raw: any, request: string): AgentPlan => {
   const hasModelLoad = normalizedSteps.some((step) =>
     step.toolCalls.some((call) => call.name === 'load_model')
   );
-  const shouldDisassemble = modelId !== 'biodigital_heart';
+  const shouldDisassemble = supportsModelDisassembly(modelId);
   const hasDisassembly = normalizedSteps.some((step) =>
     step.toolCalls.some((call) => call.name === 'explode_model')
   );
@@ -309,6 +316,7 @@ export const buildTeachingPlan = async (request: string): Promise<AgentPlan> => 
           'modelId只能是 heart, biodigital_heart, hiv, diamond, diamond_unit_cell, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene 之一。',
           '工具名只能是 load_model, auto_rotate, auto_zoom, explode_model, enable_gesture, set_teacher_log。',
           'explode_model用于自主拆解散开，必须给 strength 和 spacing。',
+          '金刚石模型和金刚石晶胞是完整结构展示，禁止调用explode_model。',
           '地球内部结构拆解后必须保持四层分离展示，不要调用reset_model_layout或生成恢复原样的步骤。',
           '每个步骤包含 id, title, narration, toolCalls。',
         ].join('\n'),
