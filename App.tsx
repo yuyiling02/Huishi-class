@@ -27,12 +27,18 @@ const DIAMOND_STRUCTURE_IMAGE = '/images/diamond-structure.png';
 const DICHLOROTOLUENE_STRUCTURE_IMAGE = '/images/dichlorotoluene-structure.png';
 const NITROBENZENE_STRUCTURE_IMAGE = '/images/nitrobenzene-structure.svg';
 const HEART_STRUCTURE_IMAGE = '/images/heart-structure.png';
+const HIV_STRUCTURE_IMAGE = '/images/hiv-structure.png';
+const EARTH_LAYERS_IMAGE = '/images/earth-layers-diagram.png';
+const TERRAIN_TOPOGRAPHY_IMAGE = '/images/terrain-topography-diagram.png';
 const STRUCTURE_IMAGE_BY_MODEL: Record<string, string> = {
   [BUILT_IN_MODELS.heart]: HEART_STRUCTURE_IMAGE,
+  [BUILT_IN_MODELS.hiv]: HIV_STRUCTURE_IMAGE,
   [BUILT_IN_MODELS.diamond]: DIAMOND_STRUCTURE_IMAGE,
   [BUILT_IN_MODELS.diamondUnitCell]: DIAMOND_STRUCTURE_IMAGE,
   [BUILT_IN_MODELS.pubchem6233]: DICHLOROTOLUENE_STRUCTURE_IMAGE,
   [BUILT_IN_MODELS.nitrobenzene]: NITROBENZENE_STRUCTURE_IMAGE,
+  '/models/earth-layers.glb': EARTH_LAYERS_IMAGE,
+  '/models/terrain-topography.glb': TERRAIN_TOPOGRAPHY_IMAGE,
 };
 type ActiveContent = 'model' | 'biodigital';
 
@@ -1193,7 +1199,7 @@ const App: React.FC = () => {
             >
               <img
                 src={modelStructureImage}
-                alt="Chemical structure"
+                alt="结构图"
                 className="block w-full h-auto"
               />
             </button>
