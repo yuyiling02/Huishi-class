@@ -2,128 +2,12 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ControlRefs } from '../types';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 
-// ====== 豆包语音识别配置 ======
-const DOUBAO_APPID = '9430818629';
-const DOUBAO_TOKEN = '516504b5-521e-417f-a9d0-2109d9c6e732';
-const DOUBAO_CLUSTER = 'volcengine_input_edu';
-const DOUBAO_WS_URL = 'wss://openspeech.bytedance.com/api/v2/asr';
-
-// ====== 二进制协议常量 ======
-const PROTOCOL_VERSION = 0b0001;
-const DEFAULT_HEADER_SIZE = 0b0001;
-
-const CLIENT_FULL_REQUEST = 0b0001;
-const CLIENT_AUDIO_ONLY_REQUEST = 0b0010;
-const SERVER_FULL_RESPONSE = 0b1001;
-const SERVER_ERROR_RESPONSE = 0b1111;
-
-const NO_SEQUENCE = 0b0000;
-const NEG_SEQUENCE = 0b0010;
-const JSON_SERIALIZATION = 0b0001;
-const NO_SERIALIZATION = 0b0000;
-const GZIP_COMPRESSION = 0b0001;
-const NO_COMPRESSION = 0b0000;
-
-const SUCCESS_CODE = 1000;
-
-interface VoiceControllerProps {
-  controlRef: React.MutableRefObject<ControlRefs>;
-  onStatusChange: (status: string) => void;
-  onRecognizedText?: (text: string) => void;
-}
-
-function generateHeader(
-  messageType: number,
-  messageTypeSpecificFlags: number = NO_SEQUENCE,
-  serialMethod: number = JSON_SERIALIZATION,
-  compressionType: number = GZIP_COMPRESSION,
-): Uint8Array {
-  const header = new Uint8Array(4);
-  header[0] = (PROTOCOL_VERSION << 4) | DEFAULT_HEADER_SIZE;
-  header[1] = (messageType << 4) | messageTypeSpecificFlags;
-  header[2] = (serialMethod << 4) | compressionType;
-  header[3] = 0x00;
-  return header;
-}
-
-async function gzipCompress(data: Uint8Array): Promise<Uint8Array> {
-  const blob = new Blob([data]);
-  const compressed = blob.stream().pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(compressed).arrayBuffer());
-}
-
-async function gzipDecompress(data: Uint8Array): Promise<Uint8Array> {
-  const blob = new Blob([data]);
-  const decompressed = blob.stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(decompressed).arrayBuffer());
-}
-
-function parseServerMessage(data: ArrayBuffer): Record<string, any> {
-  const view = new Uint8Array(data);
-  const headerSize = (view[0] & 0x0f) * 4;
-  const messageType = view[1] >> 4;
-  const compression = view[2] & 0x0f;
-  const serialization = view[2] >> 4;
-
-  const payload = view.slice(headerSize);
-  const result: Record<string, any> = { messageType };
-
-  if (messageType === SERVER_FULL_RESPONSE) {
-    const payloadSize = new DataView(payload.buffer, payload.byteOffset, 4).getInt32(0, false);
-    let payloadData = payload.slice(4, 4 + payloadSize);
-    if (compression === GZIP_COMPRESSION) {
-      result._compressedPayload = payloadData;
-      result._compression = compression;
-      result._serialization = serialization;
-      return result;
-    }
-    if (serialization === JSON_SERIALIZATION) {
-      result.payload = JSON.parse(new TextDecoder().decode(payloadData));
-    }
-  } else if (messageType === SERVER_ERROR_RESPONSE) {
-    const code = new DataView(payload.buffer, payload.byteOffset, 4).getInt32(0, false);
-    const msgSize = new DataView(payload.buffer, payload.byteOffset + 4, 4).getInt32(0, false);
-    result.errorCode = code;
-    result.errorMessage = new TextDecoder().decode(payload.slice(8, 8 + msgSize));
-  }
-
-  return result;
-}
-
-async function parseServerMessageAsync(data: ArrayBuffer): Promise<Record<string, any>> {
-  const raw = parseServerMessage(data);
-  if (raw._compressedPayload) {
-    const decompressed = await gzipDecompress(raw._compressedPayload);
-    delete raw._compressedPayload;
-    delete raw._compression;
-    if (raw._serialization === JSON_SERIALIZATION) {
-      raw.payload = JSON.parse(new TextDecoder().decode(decompressed));
-    }
-    delete raw._serialization;
-  }
-  return raw;
-}
-
-function buildAudioOnlyRequest(audioData: Uint8Array, isLast: boolean): Uint8Array {
-  const header = generateHeader(
-    CLIENT_AUDIO_ONLY_REQUEST,
-    isLast ? NEG_SEQUENCE : NO_SEQUENCE,
-    NO_SERIALIZATION,
-    NO_COMPRESSION,
-  );
-  const payloadSize = audioData.length;
-  const message = new Uint8Array(4 + 4 + payloadSize);
-  message.set(header, 0);
-  new DataView(message.buffer, 4, 4).setInt32(0, payloadSize, false);
-  message.set(audioData, 8);
-  return message;
-}
-
+// ====== 语音命令模式（扩展版，支持自然语言变体）======
 const COMMAND_PATTERNS: [RegExp, string, (ctrl: ControlRefs) => void][] = [
-  [/放大|大一点|靠近|拉近/, 'zoom_in', (c) => { c.zoomSpeed = 0.015; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
-  [/缩小|小一点|远离|拉远/, 'zoom_out', (c) => { c.zoomSpeed = -0.015; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
-  [/旋转|转起来|转动/, 'rotate', (c) => { c.rotationVelocity = { x: 0, y: 0.02 }; }],
-  [/停止|停|暂停|别转了/, 'stop', (c) => { c.zoomSpeed = 0; c.rotationVelocity = { x: 0, y: 0 }; }],
+  [/再?放?大一点|大一点|大些|大一些|靠近|拉近|近一点|近一些|放大/, 'zoom_in', (c) => { c.zoomSpeed = 0.015; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
+  [/再?缩?小一点|小一点|小些|小一些|远离|拉远|远一点|远一些|缩小/, 'zoom_out', (c) => { c.zoomSpeed = -0.015; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
+  [/旋转|转起来|转动|转一转|转圈|转一下|开始转/, 'rotate', (c) => { c.rotationVelocity = { x: 0, y: 0.02 }; }],
+  [/停止|停|暂停|别转|停下|不要转|停下来|结束/, 'stop', (c) => { c.zoomSpeed = 0; c.rotationVelocity = { x: 0, y: 0 }; }],
 ];
 
 function extractCommands(text: string, controlRef: ControlRefs): string[] {
@@ -137,17 +21,19 @@ function extractCommands(text: string, controlRef: ControlRefs): string[] {
   return fired;
 }
 
+interface VoiceControllerProps {
+  controlRef: React.MutableRefObject<ControlRefs>;
+  onStatusChange: (status: string) => void;
+  onRecognizedText?: (text: string) => void;
+}
+
 const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusChange, onRecognizedText }) => {
   const [isActive, setIsActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const stoppedRef = useRef(false);
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearDisplayText = useCallback(() => {
     if (clearTimerRef.current) {
@@ -158,229 +44,106 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
     onRecognizedText?.('');
   }, [onRecognizedText]);
 
-  const cleanupAudio = useCallback(() => {
-    // Disconnect and clean up audio processor first to stop callbacks
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current.onaudioprocess = null;
-      processorRef.current = null;
-    }
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
-    // Close AudioContext (stops all scheduling immediately)
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close().catch(() => {});
-      audioCtxRef.current = null;
-    }
-    // Stop all media tracks (turns off microphone indicator)
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-  }, []);
-
   const stopSession = useCallback(() => {
     stoppedRef.current = true;
-    // Close WebSocket first so onclose won't fire a second cleanup
-    const ws = wsRef.current;
-    wsRef.current = null;
-    if (ws) {
-      ws.onclose = null;
-      ws.onerror = null;
-      ws.onmessage = null;
-      ws.close();
+    const rec = recognitionRef.current;
+    recognitionRef.current = null;
+    if (rec) {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      try { rec.abort(); } catch { /* ignore */ }
     }
-    cleanupAudio();
     setIsActive(false);
     clearDisplayText();
     onStatusChange('语音助手已离线');
-  }, [cleanupAudio, clearDisplayText, onStatusChange]);
+  }, [clearDisplayText, onStatusChange]);
 
-  const startSession = useCallback(async () => {
+  const startSession = useCallback(() => {
     stoppedRef.current = false;
     setIsConnecting(true);
-    onStatusChange('正在连接豆包语音识别...');
+    onStatusChange('正在启动语音识别...');
+
+    // 检查浏览器是否支持 Web Speech API
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      onStatusChange('当前浏览器不支持语音识别，请使用 Chrome 或 Edge。');
+      setIsConnecting(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI() as SpeechRecognition;
+    recognition.lang = 'zh-CN';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onresult = (event: any) => {
+      if (stoppedRef.current) return;
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0].transcript.trim();
+
+        if (text) {
+          if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+          setRecognizedText(text);
+          onRecognizedText?.(text);
+
+          clearTimerRef.current = setTimeout(() => {
+            setRecognizedText('');
+            onRecognizedText?.('');
+            clearTimerRef.current = null;
+          }, 3000);
+        }
+
+        if (result.isFinal) {
+          const commands = extractCommands(text, controlRef.current);
+          if (commands.length > 0) {
+            const cmdNames: Record<string, string> = { zoom_in: '放大', zoom_out: '缩小', rotate: '旋转', stop: '停止' };
+            onStatusChange(`识别: "${text}" → 执行: ${commands.map((c) => cmdNames[c] || c).join('、')}`);
+          } else if (text) {
+            onStatusChange(`识别: "${text}"`);
+          }
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (stoppedRef.current) return;
+      console.error('[Voice] Recognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        onStatusChange('麦克风访问被拒绝，请允许浏览器使用麦克风。');
+        stopSession();
+      } else if (event.error === 'no-speech' || event.error === 'aborted') {
+        // 静默忽略，onend 会负责重启
+        return;
+      } else {
+        onStatusChange(`语音识别错误: ${event.error}`);
+        stopSession();
+      }
+    };
+
+    recognition.onend = () => {
+      if (stoppedRef.current) return;
+      // 如果不是手动停止，自动重启识别
+      if (recognitionRef.current === recognition) {
+        try { recognition.start(); } catch { /* already started */ }
+      }
+    };
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Check if session was stopped while waiting for mic permission
-      if (stoppedRef.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      streamRef.current = stream;
-
-      const ws = new WebSocket(DOUBAO_WS_URL);
-      ws.binaryType = 'arraybuffer';
-      wsRef.current = ws;
-
-      const reqid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-
-      // Set up close handler BEFORE onopen to catch early failures
-      ws.onclose = (evt) => {
-        if (stoppedRef.current) return;
-        stoppedRef.current = true;
-        cleanupAudio();
-        setIsActive(false);
-        setIsConnecting(false);
-        clearDisplayText();
-        if (wsRef.current === ws) {
-          wsRef.current = null;
-        }
-        onStatusChange(evt.wasClean ? '语音识别连接已断开' : `语音连接异常断开(code=${evt.code})`);
-      };
-
-      ws.onerror = () => {
-        if (stoppedRef.current) return;
-        // onclose will fire next and handle cleanup — don't duplicate
-        onStatusChange('豆包语音连接失败，请检查网络或配置。');
-      };
-
-      ws.onopen = async () => {
-        if (stoppedRef.current) {
-          ws.close();
-          return;
-        }
-
-        const requestParams = {
-          app: {
-            appid: DOUBAO_APPID,
-            token: DOUBAO_TOKEN,
-            cluster: DOUBAO_CLUSTER,
-          },
-          user: { uid: 'huiShiKeTang-web' },
-          request: {
-            reqid,
-            nbest: 1,
-            workflow: 'audio_in,resample,partition,vad,fe,decode,itn,nlu_punctuate',
-            show_utterances: true,
-            result_type: 'single',
-            sequence: 1,
-          },
-          audio: {
-            format: 'raw',
-            rate: 16000,
-            bits: 16,
-            channel: 1,
-          },
-        };
-
-        const jsonBytes = new TextEncoder().encode(JSON.stringify(requestParams));
-        const compressed = await gzipCompress(jsonBytes);
-        const header = generateHeader(CLIENT_FULL_REQUEST, NO_SEQUENCE, JSON_SERIALIZATION, GZIP_COMPRESSION);
-        const message = new Uint8Array(4 + 4 + compressed.length);
-        message.set(header, 0);
-        new DataView(message.buffer, 4, 4).setInt32(0, compressed.length, false);
-        message.set(compressed, 8);
-        ws.send(message);
-
-        let audioCtx: AudioContext;
-        try {
-          audioCtx = new AudioContext({ sampleRate: 16000 });
-        } catch {
-          audioCtx = new AudioContext();
-        }
-        audioCtxRef.current = audioCtx;
-
-        const source = audioCtx.createMediaStreamSource(stream);
-        sourceRef.current = source;
-        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-        processorRef.current = processor;
-
-        processor.onaudioprocess = (e) => {
-          const currentWs = wsRef.current;
-          if (!currentWs || currentWs.readyState !== WebSocket.OPEN) return;
-          const inputData = e.inputBuffer.getChannelData(0);
-          const int16 = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, Math.round(inputData[i] * 32767)));
-          }
-          const audioBytes = new Uint8Array(int16.buffer);
-          const audioMsg = buildAudioOnlyRequest(audioBytes, false);
-          try {
-            currentWs.send(audioMsg);
-          } catch {
-            // Socket closed between check and send — safe to ignore
-          }
-        };
-
-        source.connect(processor);
-        processor.connect(audioCtx.destination);
-
-        setIsActive(true);
-        setIsConnecting(false);
-        onStatusChange('豆包语音识别已就绪，请说话（支持指令：放大/缩小/旋转/停止）');
-      };
-
-      ws.onmessage = async (event) => {
-        if (stoppedRef.current) return;
-
-        const raw = parseServerMessage(event.data as ArrayBuffer);
-        const result = raw._compressedPayload
-          ? await parseServerMessageAsync(event.data as ArrayBuffer)
-          : raw;
-
-        if (result.errorCode) {
-          console.error('[Voice] ASR error:', result.errorCode, result.errorMessage);
-          onStatusChange(`语音识别错误: ${result.errorCode} — ${result.errorMessage}`);
-          return;
-        }
-
-        const payload = result.payload;
-        if (!payload) return;
-
-        if (payload.code !== SUCCESS_CODE) {
-          console.error('[Voice] ASR error:', payload.code, payload.message);
-          if (payload.code === 1002) {
-            onStatusChange('豆包鉴权失败，请检查 AppID / Token / Cluster 配置。');
-          } else {
-            onStatusChange(`语音识别服务返回错误: ${payload.code} — ${payload.message || '未知错误'}`);
-          }
-          return;
-        }
-
-        const resultData = payload.result;
-        if (!resultData || resultData.length === 0) return;
-
-        const utterances = resultData[0]?.utterances;
-        if (utterances && utterances.length > 0) {
-          const latest = utterances[utterances.length - 1];
-          const text = latest.text;
-
-          if (text) {
-            if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
-            setRecognizedText(text);
-            onRecognizedText?.(text);
-
-            clearTimerRef.current = setTimeout(() => {
-              setRecognizedText('');
-              onRecognizedText?.('');
-              clearTimerRef.current = null;
-            }, 3000);
-          }
-
-          if (latest.definite) {
-            const commands = extractCommands(text, controlRef.current);
-            if (commands.length > 0) {
-              const cmdNames: Record<string, string> = { zoom_in: '放大', zoom_out: '缩小', rotate: '旋转', stop: '停止' };
-              onStatusChange(`识别: "${text}" → 执行: ${commands.map((c) => cmdNames[c] || c).join('、')}`);
-            } else if (text) {
-              onStatusChange(`识别: "${text}"`);
-            }
-          }
-        }
-      };
-    } catch (err) {
-      if (stoppedRef.current) return;
-      console.error('[Voice] Setup error:', err);
-      stoppedRef.current = true;
-      cleanupAudio();
+      recognition.start();
+      setIsActive(true);
       setIsConnecting(false);
-      onStatusChange('麦克风访问失败，请允许浏览器使用麦克风。');
+      onStatusChange('语音识别已就绪（试试说：放大、再大一点、缩小、旋转、停止）');
+    } catch (err) {
+      console.error('[Voice] Start error:', err);
+      setIsConnecting(false);
+      onStatusChange('语音识别启动失败，请重试。');
     }
-  }, [controlRef, onStatusChange, onRecognizedText, cleanupAudio, clearDisplayText]);
+  }, [controlRef, onStatusChange, onRecognizedText, stopSession]);
 
   const toggleVoice = useCallback(() => {
     if (isActive) {
@@ -390,26 +153,25 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
     }
   }, [isActive, stopSession, startSession]);
 
-  // Cleanup on unmount
+  // 组件卸载时清理
   useEffect(() => {
     return () => {
       stoppedRef.current = true;
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
-      const ws = wsRef.current;
-      wsRef.current = null;
-      if (ws) {
-        ws.onclose = null;
-        ws.onerror = null;
-        ws.onmessage = null;
-        ws.close();
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      if (rec) {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        try { rec.abort(); } catch { /* ignore */ }
       }
-      cleanupAudio();
     };
-  }, [cleanupAudio]);
+  }, []);
 
   return (
     <div className="relative flex items-center gap-3">
-      {/* Speech bubble: real-time recognized text */}
+      {/* 实时识别文字气泡 */}
       {recognizedText && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 whitespace-nowrap z-50">
           <div className="px-4 py-2 rounded-xl bg-gray-900/90 backdrop-blur-md text-white text-sm font-medium shadow-lg border border-white/10 max-w-[320px] truncate">
@@ -436,8 +198,8 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
         className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${
           isActive ? 'bg-pink-400 text-white animate-pulse' : 'bg-white text-gray-400 hover:text-[#86e3ce]'
         }`}
-        aria-label={isActive ? '关闭语音识别' : '开启豆包语音识别'}
-        title={isActive ? '关闭语音识别' : '开启豆包语音识别'}
+        aria-label={isActive ? '关闭语音识别' : '开启语音识别'}
+        title={isActive ? '关闭语音识别' : '开启语音识别'}
       >
         {isConnecting ? <Loader2 className="animate-spin" size={20} /> : isActive ? <Mic size={20} /> : <MicOff size={20} />}
       </button>
