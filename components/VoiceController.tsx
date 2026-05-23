@@ -4,8 +4,8 @@ import { Mic, MicOff, Loader2 } from 'lucide-react';
 
 // ====== 语音命令模式（扩展版，支持自然语言变体）======
 const COMMAND_PATTERNS: [RegExp, string, (ctrl: ControlRefs) => void][] = [
-  [/再?放?大一点|大一点|大些|大一些|靠近|拉近|近一点|近一些|放大/, 'zoom_in', (c) => { c.zoomSpeed = 2.0; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
-  [/再?缩?小一点|小一点|小些|小一些|远离|拉远|远一点|远一些|缩小/, 'zoom_out', (c) => { c.zoomSpeed = -2.0; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
+  [/再?放?大一点|大一点|大些|大一些|靠近|拉近|近一点|近一些|放大/, 'zoom_in', (c) => { c.zoomSpeed = 5.0; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
+  [/再?缩?小一点|小一点|小些|小一些|远离|拉远|远一点|远一些|缩小/, 'zoom_out', (c) => { c.zoomSpeed = -5.0; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
   [/旋转|转起来|转动|转一转|转圈|转一下|开始转/, 'rotate', (c) => { c.rotationVelocity = { x: 0, y: 0.02 }; }],
   [/停止|停|暂停|别转|停下|不要转|停下来|结束/, 'stop', (c) => { c.zoomSpeed = 0; c.rotationVelocity = { x: 0, y: 0 }; }],
 ];
