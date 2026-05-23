@@ -70,7 +70,6 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [aiAnalysis, setAiAnalysis] = useState('等待指令中...');
-  const [voiceText, setVoiceText] = useState('');
 
   // Hand/Voice state
   const [gestureStatus, setGestureStatus] = useState<GestureType>(GestureType.NONE);
@@ -1108,22 +1107,11 @@ const App: React.FC = () => {
             />
           )}
 
-          {/* 语音识别文字浮层 */}
-          {voiceText && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
-              <div className="px-5 py-2.5 rounded-2xl bg-black/60 backdrop-blur-lg text-white text-base font-medium shadow-2xl border border-white/15 max-w-lg text-center leading-relaxed">
-                <span className="text-[#86e3ce] mr-1.5">♪</span>
-                {voiceText}
-              </div>
-            </div>
-          )}
-
           {activeContent === 'model' && (
             <div className="absolute bottom-6 left-6 z-50 flex items-center gap-2">
               <VoiceController
                 controlRef={controlRef}
                 onStatusChange={(msg) => setAiAnalysis(msg)}
-                onRecognizedText={(text) => setVoiceText(text)}
               />
               <button
                 onClick={() => setShowSettings(!showSettings)}
