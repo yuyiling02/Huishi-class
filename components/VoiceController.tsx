@@ -25,9 +25,10 @@ interface VoiceControllerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   onStatusChange: (status: string) => void;
   onRecognizedText?: (text: string) => void;
+  disabled?: boolean;
 }
 
-const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusChange, onRecognizedText }) => {
+const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusChange, onRecognizedText, disabled = false }) => {
   const [isActive, setIsActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
@@ -194,12 +195,14 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
       )}
       <button
         onClick={toggleVoice}
-        disabled={isConnecting}
+        disabled={isConnecting || disabled}
         className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${
-          isActive ? 'bg-pink-400 text-white animate-pulse' : 'bg-white text-gray-400 hover:text-[#86e3ce]'
+          disabled
+            ? 'bg-gray-200 text-gray-300 cursor-not-allowed'
+            : isActive ? 'bg-pink-400 text-white animate-pulse' : 'bg-white text-gray-400 hover:text-[#86e3ce]'
         }`}
         aria-label={isActive ? '关闭语音识别' : '开启语音识别'}
-        title={isActive ? '关闭语音识别' : '开启语音识别'}
+        title={disabled ? '请先加载模型' : (isActive ? '关闭语音识别' : '开启语音识别')}
       >
         {isConnecting ? <Loader2 className="animate-spin" size={20} /> : isActive ? <Mic size={20} /> : <MicOff size={20} />}
       </button>

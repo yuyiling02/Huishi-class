@@ -218,6 +218,82 @@ const callDeepSeek = async (messages: DeepSeekMessage[], fallbackText: string): 
   return data?.choices?.[0]?.message?.content || fallbackText;
 };
 
+const callDeepSeekStream = async (
+  messages: DeepSeekMessage[],
+  onToken: (token: string) => void,
+  onDone: (fullText: string) => void,
+  onError: (error: Error) => void,
+): Promise<void> => {
+  const env = (import.meta as any).env || {};
+  const apiKey = env.VITE_DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    onError(new Error('API key not configured'));
+    return;
+  }
+
+  try {
+    const response = await fetch(DEEPSEEK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: env.VITE_DEEPSEEK_MODEL || 'deepseek-chat',
+        messages,
+        temperature: 0.3,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`DeepSeek stream request failed: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
+
+    const decoder = new TextDecoder();
+    let accumulated = '';
+    let buffer = '';
+
+    const processLines = () => {
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed?.choices?.[0]?.delta?.content || '';
+          if (content) {
+            accumulated += content;
+            onToken(content);
+          }
+        } catch {
+          // skip malformed JSON lines
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      processLines();
+    }
+    // flush remaining buffer
+    processLines();
+    onDone(accumulated);
+  } catch (error) {
+    onError(error instanceof Error ? error : new Error(String(error)));
+  }
+};
+
 export const buildTeachingPlan = async (request: string): Promise<AgentPlan> => {
   const fallback = createFallbackPlan(request);
   const fallbackText = JSON.stringify(fallback);
@@ -250,35 +326,35 @@ export const buildTeachingPlan = async (request: string): Promise<AgentPlan> => 
   }
 };
 
-export const buildClassroomSummary = async (request: string, plan: AgentPlan, executedLogs: string[]): Promise<string> => {
-  const fallback = [
-    `课堂小结：本次围绕“${plan.topic}”完成了${modelNames[plan.modelId]}的互动演示。`,
-    '学生应能说出核心结构名称，描述整体与局部的空间关系，并理解拆解观察比静态图片更适合建立三维概念。',
-    `演示记录：${executedLogs.slice(-4).join('；')}`,
-  ].join('\n');
+export const buildKnowledgeExplanation = async (
+  request: string,
+  modelId: TeachingModelId,
+  onToken: (token: string) => void,
+): Promise<string> => {
+  const modelName = modelNames[modelId] || '3D模型';
+  const fallback = `${modelName}是一个用于教学演示的三维模型。它展示了内部结构和层次关系，可以帮助学生建立空间认知。请结合3D演示进行观察，注意各部件之间的位置关系和连接方式。拆解展示可以更清晰地看到内部细节。`;
 
-  try {
-    const content = await callDeepSeek([
-      {
-        role: 'system',
-        content: '你是学情评估Agent。请输出JSON对象，字段summary为中文课堂小结，语气像教师课后记录，80到140字。',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          teachingRequest: request,
-          planTopic: plan.topic,
-          model: modelNames[plan.modelId],
-          executedLogs,
-          summaryFocus: plan.summaryFocus,
-        }),
-      },
-    ], JSON.stringify({ summary: fallback }));
-
-    const parsed = JSON.parse(content);
-    return String(parsed.summary || fallback);
-  } catch (error) {
-    console.warn('Evaluator Agent fallback:', error);
-    return fallback;
-  }
+  return new Promise<string>((resolve) => {
+    callDeepSeekStream(
+      [
+        {
+          role: 'system',
+          content: [
+            '你是慧视课堂的知识讲解Agent。',
+            '根据用户的教学需求和当前展示的3D模型，生成适合中学生理解的教学知识内容。',
+            '语气像课堂老师讲解，通俗易懂，内容准确、有条理。',
+            '用纯文本输出，不要使用JSON或Markdown格式。',
+            '控制在200-400字之间。',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: `当前模型：${modelName}\n教学需求：${request}\n请生成知识讲解内容。`,
+        },
+      ],
+      onToken,
+      (fullText) => resolve(fullText || fallback),
+      () => resolve(fallback),
+    );
+  });
 };

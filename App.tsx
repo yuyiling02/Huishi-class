@@ -7,7 +7,7 @@ import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
-import { buildClassroomSummary, buildTeachingPlan, getTeachingModelName, inferTeachingModel } from './services/agentRuntime';
+import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation } from './services/agentRuntime';
 import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play, Download } from 'lucide-react';
 import { ModelType } from './types';
 
@@ -93,6 +93,11 @@ const App: React.FC = () => {
   const [agentThinking, setAgentThinking] = useState('');
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [expandedStructureImage, setExpandedStructureImage] = useState<string | null>(null);
+  const [knowledgeContent, setKnowledgeContent] = useState('');
+  const [isKnowledgeStreaming, setIsKnowledgeStreaming] = useState(false);
+  const [handNearStructureImage, setHandNearStructureImage] = useState(false);
+  const [isHandExpanded, setIsHandExpanded] = useState(false);
+  const structureImageRef = useRef<HTMLButtonElement>(null);
   const modelStructureImage = activeContent === 'model' && modelUrl
     ? STRUCTURE_IMAGE_BY_MODEL[modelUrl]
     : undefined;
@@ -108,6 +113,7 @@ const App: React.FC = () => {
     isDragging: false,
     handLandmarks: { left: null, right: null },
     interactionHandLandmarks: null,
+    handNDCPosition: null,
     interactionSettings: { zoomSpeed: 0.8, rotationSpeed: 0.5 },
     agentDisassembly: {
       enabled: false,
@@ -125,6 +131,60 @@ const App: React.FC = () => {
     }
   }, [expandedStructureImage, modelStructureImage]);
 
+  // Hand proximity: auto-expand structure image when virtual hand is near
+  useEffect(() => {
+    if (!modelStructureImage || !cameraActive) return;
+
+    const checkProximity = () => {
+      const handLm = controlRef.current.interactionHandLandmarks;
+      if (!handLm || handLm.length < 9) {
+        setHandNearStructureImage(false);
+        return;
+      }
+      // Use index finger tip (landmark 8)
+      const indexTip = handLm[8];
+      if (!indexTip) {
+        setHandNearStructureImage(false);
+        return;
+      }
+
+      // Convert normalized [0,1] camera coordinates to viewport pixels
+      const screenX = indexTip.x * window.innerWidth;
+      const screenY = indexTip.y * window.innerHeight;
+
+      const imgEl = structureImageRef.current;
+      if (!imgEl) {
+        setHandNearStructureImage(false);
+        return;
+      }
+
+      const rect = imgEl.getBoundingClientRect();
+      const margin = 80;
+      const isNear = (
+        screenX >= rect.left - margin &&
+        screenX <= rect.right + margin &&
+        screenY >= rect.top - margin &&
+        screenY <= rect.bottom + margin
+      );
+
+      setHandNearStructureImage(isNear);
+    };
+
+    const intervalId = setInterval(checkProximity, 100);
+    return () => clearInterval(intervalId);
+  }, [modelStructureImage, cameraActive, controlRef]);
+
+  // Sync hand proximity to image expansion
+  useEffect(() => {
+    if (handNearStructureImage && modelStructureImage) {
+      setExpandedStructureImage(modelStructureImage);
+      setIsHandExpanded(true);
+    } else if (!handNearStructureImage && isHandExpanded) {
+      setExpandedStructureImage(null);
+      setIsHandExpanded(false);
+    }
+  }, [handNearStructureImage, modelStructureImage, isHandExpanded]);
+
   const resetControls = () => {
     const nextActionId = (controlRef.current.agentDisassembly?.actionId ?? 0) + 1;
     controlRef.current = {
@@ -134,6 +194,7 @@ const App: React.FC = () => {
       isDragging: false,
       handLandmarks: { left: null, right: null },
       interactionHandLandmarks: null,
+      handNDCPosition: null,
       interactionSettings: {
         zoomSpeed: zoomSpeedMultiplier,
         rotationSpeed: rotationSpeedMultiplier,
@@ -424,7 +485,9 @@ const App: React.FC = () => {
     }
 
     setIsAgentRunning(true);
-    setAgentSummary('');
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setKnowledgeContent('');
+    setIsKnowledgeStreaming(false);
     setAgentThinking('');
     setAgentTimeline([]);
     setAgentStatuses({ planner: 'thinking', executor: 'idle', evaluator: 'idle' });
@@ -457,6 +520,13 @@ const App: React.FC = () => {
       setAgentTimeline((items) => items.map((item) => item.agent === 'planner' ? { ...item, status: 'done', detail: `规划完成：${plan.topic}` } : item));
       setAiAnalysis(`规划完成：${plan.topic}`);
 
+      // Auto zoom into the model
+      setAiAnalysis('正在自动拉近视角...');
+      controlRef.current.zoomSpeed = -0.026;
+      await sleep(1200);
+      controlRef.current.zoomSpeed = 0;
+      await sleep(200);
+
       for (const step of plan.steps) {
         appendTimeline({
           id: step.id,
@@ -476,25 +546,53 @@ const App: React.FC = () => {
         setTimelineStatus(step.id, 'done');
       }
 
+      // Knowledge Explainer: stream knowledge content
       setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'thinking' });
-      setAgentThinking('学情评估Agent正在回看演示步骤和工具调用记录，生成课堂小结。');
-      setAiAnalysis('学情评估Agent正在生成课堂小结...');
+      setAgentThinking('知识讲解Agent正在生成关于该模型的教学内容...');
+      setAiAnalysis('知识讲解Agent正在生成教学内容...');
+      setKnowledgeContent('');
+      setIsKnowledgeStreaming(true);
       appendTimeline({
         id: `evaluator-${Date.now()}`,
         agent: 'evaluator',
-        title: '生成课堂小结',
-        detail: '根据规划步骤和工具调用记录总结本次演示。',
+        title: '生成知识讲解',
+        detail: '根据模型和教学需求生成知识内容。',
         status: 'running',
       });
 
-      const summary = await buildClassroomSummary(request, plan, executedLogs);
-      setAgentSummary(summary);
+      let accumulatedKnowledge = '';
+      const fullKnowledge = await buildKnowledgeExplanation(
+        request,
+        plan.modelId,
+        (token: string) => {
+          accumulatedKnowledge += token;
+          setKnowledgeContent(accumulatedKnowledge);
+        },
+      );
+
+      setKnowledgeContent(fullKnowledge);
+      setIsKnowledgeStreaming(false);
       setAgentThinking('');
-      setAiAnalysis(summary);
+      setAiAnalysis('知识讲解已生成，开始语音朗读...');
       setAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'done' });
-      setAgentTimeline((items) => items.map((item) => item.agent === 'evaluator' ? { ...item, status: 'done', detail: summary } : item));
+      setAgentTimeline((items) => items.map((item) => item.agent === 'evaluator' ? { ...item, status: 'done', detail: '知识讲解完成' } : item));
+
+      // TTS: read knowledge aloud
+      if ('speechSynthesis' in window && fullKnowledge) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(fullKnowledge);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        const voices = window.speechSynthesis.getVoices();
+        const zhVoice = voices.find(v => v.lang.startsWith('zh'));
+        if (zhVoice) utterance.voice = zhVoice;
+        window.speechSynthesis.speak(utterance);
+      }
     } catch (error) {
       console.error('Agent run failed:', error);
+      setIsKnowledgeStreaming(false);
       setAgentThinking('智能体流程异常：请检查网络或 DeepSeek 配置，系统仍可使用本地模型手动演示。');
       setAiAnalysis('多智能体演示失败，请检查 DeepSeek 配置或网络。');
       setAgentStatuses({ planner: 'error', executor: 'error', evaluator: 'idle' });
@@ -900,7 +998,7 @@ const App: React.FC = () => {
                       const metas: Record<AgentRole, { title: string; color: string }> = {
                         planner: { title: '理解规划', color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
                         executor: { title: '演示执行', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
-                        evaluator: { title: '学情评估', color: 'text-amber-600 bg-amber-50 border-amber-100' },
+                        evaluator: { title: '知识讲解', color: 'text-amber-600 bg-amber-50 border-amber-100' },
                       };
                       const m = metas[role];
                       const statusMap: Record<AgentStatus, string> = { idle: '待命', thinking: '规划中', running: '执行中', done: '完成', error: '异常' };
@@ -953,13 +1051,17 @@ const App: React.FC = () => {
                       ))
                     )}
                   </div>
-                  {agentSummary && (
-                    <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-2.5 py-2">
+                  {(knowledgeContent || isKnowledgeStreaming) && (
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-2.5 py-2">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <ClipboardCheck size={11} className="text-amber-600" />
-                        <span className="text-[9px] font-bold text-amber-600">课堂小结</span>
+                        {isKnowledgeStreaming ? (
+                          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+                        ) : (
+                          <ClipboardCheck size={11} className="text-indigo-600" />
+                        )}
+                        <span className="text-[9px] font-bold text-indigo-600">知识讲解</span>
                       </div>
-                      <p className="text-[10px] font-medium leading-relaxed text-gray-600">{agentSummary}</p>
+                      <p className="text-[10px] font-medium leading-relaxed text-gray-600 line-clamp-3">{knowledgeContent || (isKnowledgeStreaming ? '正在生成知识讲解...' : '')}</p>
                     </div>
                   )}
                 </div>
@@ -1118,6 +1220,7 @@ const App: React.FC = () => {
               <VoiceController
                 controlRef={controlRef}
                 onStatusChange={(msg) => setAiAnalysis(msg)}
+                disabled={modelUrl === null}
               />
               <button
                 onClick={() => setShowSettings(!showSettings)}
@@ -1190,19 +1293,49 @@ const App: React.FC = () => {
           )}
 
           {modelStructureImage && (
-            <button
-              type="button"
-              onClick={() => setExpandedStructureImage(modelStructureImage)}
-              className="absolute left-6 top-6 z-40 w-28 sm:w-36 md:w-44 lg:w-52 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl backdrop-blur-md cursor-zoom-in transition hover:scale-[1.03] hover:bg-white active:scale-95"
-              aria-label="放大结构图"
-              title="放大结构图"
-            >
-              <img
-                src={modelStructureImage}
-                alt="结构图"
-                className="block w-full h-auto"
-              />
-            </button>
+            <div className="absolute left-6 top-6 z-40 flex flex-col gap-2 max-w-[280px]">
+              <button
+                ref={structureImageRef}
+                type="button"
+                onClick={() => setExpandedStructureImage(modelStructureImage)}
+                className={`overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl backdrop-blur-md cursor-zoom-in transition hover:scale-[1.03] hover:bg-white active:scale-95 ${
+                  isKnowledgeStreaming || knowledgeContent
+                    ? 'w-20 h-20 opacity-70'
+                    : 'w-28 sm:w-36 md:w-44 lg:w-52'
+                }`}
+                aria-label="放大结构图"
+                title="放大结构图"
+              >
+                <img
+                  src={modelStructureImage}
+                  alt="结构图"
+                  className="block w-full h-full object-contain"
+                />
+              </button>
+
+              {(isKnowledgeStreaming || knowledgeContent) && (
+                <div className="rounded-2xl border border-indigo-100 bg-white/95 shadow-xl backdrop-blur-md overflow-hidden">
+                  <div className="px-4 py-3 bg-indigo-50/80 border-b border-indigo-100">
+                    <div className="flex items-center gap-2">
+                      {isKnowledgeStreaming ? (
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                      ) : (
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                      )}
+                      <span className="text-[11px] font-black text-indigo-600 uppercase tracking-wider">
+                        知识讲解
+                      </span>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3 max-h-[40vh] overflow-y-auto">
+                    <p className="text-xs font-medium leading-relaxed text-gray-700 whitespace-pre-wrap">
+                      {knowledgeContent}
+                      {isKnowledgeStreaming && <span className="animate-pulse text-indigo-400">|</span>}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {expandedStructureImage && (

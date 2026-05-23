@@ -60,6 +60,7 @@ export interface ControlRefs {
     right: HandLandmarks;
   };
   interactionHandLandmarks: HandLandmarks;
+  handNDCPosition: { x: number; y: number } | null;
   interactionSettings: InteractionSettings;
   agentDisassembly: AgentDisassemblyControl;
 }

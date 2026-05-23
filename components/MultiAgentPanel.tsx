@@ -14,7 +14,7 @@ interface MultiAgentPanelProps {
 const roleMeta: Record<AgentRole, { title: string; icon: React.ReactNode; color: string }> = {
   planner: { title: '理解规划Agent', icon: <Brain size={14} />, color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
   executor: { title: '演示执行Agent', icon: <Settings2 size={14} />, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
-  evaluator: { title: '学情评估Agent', icon: <ClipboardCheck size={14} />, color: 'text-amber-600 bg-amber-50 border-amber-100' },
+  evaluator: { title: '知识讲解Agent', icon: <ClipboardCheck size={14} />, color: 'text-amber-600 bg-amber-50 border-amber-100' },
 };
 
 const statusText: Record<AgentStatus, string> = {
@@ -155,7 +155,7 @@ const MultiAgentPanel: React.FC<MultiAgentPanelProps> = ({ statuses, timeline, s
         <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">
           <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black text-amber-600">
             <ClipboardCheck size={13} />
-            课堂小结
+            知识讲解
           </div>
           <p className="text-[11px] font-medium leading-relaxed text-gray-600">{summary}</p>
         </div>
