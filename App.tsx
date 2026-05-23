@@ -202,9 +202,17 @@ const App: React.FC = () => {
         return;
       }
 
-      // Convert normalized [0,1] camera coordinates to viewport pixels
-      const screenX = (1 - indexTip.x) * window.innerWidth;
-      const screenY = indexTip.y * window.innerHeight;
+      const stageEl = stageRef.current;
+      if (!stageEl) {
+        setHandNearStructureImage(false);
+        return;
+      }
+
+      // Convert normalized [0,1] camera coordinates to stage-relative viewport pixels.
+      // In fullscreen the stage fills the viewport; outside fullscreen it is offset by the app chrome/sidebar.
+      const stageRect = stageEl.getBoundingClientRect();
+      const screenX = stageRect.left + (1 - indexTip.x) * stageRect.width;
+      const screenY = stageRect.top + indexTip.y * stageRect.height;
 
       const imgEl = structureImageRef.current;
       if (!imgEl) {
@@ -213,7 +221,7 @@ const App: React.FC = () => {
       }
 
       const rect = imgEl.getBoundingClientRect();
-      const margin = 10;
+      const margin = 2;
       const isNear = (
         screenX >= rect.left - margin &&
         screenX <= rect.right + margin &&
