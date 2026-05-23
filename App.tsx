@@ -149,7 +149,7 @@ const App: React.FC = () => {
       }
 
       // Convert normalized [0,1] camera coordinates to viewport pixels
-      const screenX = indexTip.x * window.innerWidth;
+      const screenX = (1 - indexTip.x) * window.innerWidth;
       const screenY = indexTip.y * window.innerHeight;
 
       const imgEl = structureImageRef.current;
@@ -159,7 +159,7 @@ const App: React.FC = () => {
       }
 
       const rect = imgEl.getBoundingClientRect();
-      const margin = 80;
+      const margin = 10;
       const isNear = (
         screenX >= rect.left - margin &&
         screenX <= rect.right + margin &&
@@ -1316,15 +1316,25 @@ const App: React.FC = () => {
               {(isKnowledgeStreaming || knowledgeContent) && (
                 <div className="rounded-2xl border border-indigo-100 bg-white/95 shadow-xl backdrop-blur-md overflow-hidden">
                   <div className="px-4 py-3 bg-indigo-50/80 border-b border-indigo-100">
-                    <div className="flex items-center gap-2">
-                      {isKnowledgeStreaming ? (
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-                      ) : (
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                      )}
-                      <span className="text-[11px] font-black text-indigo-600 uppercase tracking-wider">
-                        知识讲解
-                      </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {isKnowledgeStreaming ? (
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                        ) : (
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                        )}
+                        <span className="text-[11px] font-black text-indigo-600 uppercase tracking-wider">
+                          知识讲解
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setKnowledgeContent(''); setIsKnowledgeStreaming(false); }}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition"
+                        aria-label="关闭知识讲解"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   </div>
                   <div className="px-4 py-3 max-h-[40vh] overflow-y-auto">

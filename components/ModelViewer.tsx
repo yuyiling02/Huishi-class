@@ -1693,6 +1693,25 @@ const VirtualHand: React.FC<{ controlRef: React.MutableRefObject<ControlRefs> }>
   return <group ref={groupRef} />;
 };
 
+/** Sets the camera initial position based on model type */
+const CameraInit: React.FC<{ modelUrl: string; target: CameraTarget }> = ({ modelUrl, target }) => {
+  const { camera } = useThree();
+  const controls = useThree((s) => (s as any).controls);
+
+  useEffect(() => {
+    const lower = modelUrl.toLowerCase();
+    if (lower.includes('心脏模型') || lower.includes('heart')) {
+      camera.position.set(0, 1.5, 4.5);
+    } else {
+      camera.position.set(3.5, 4, 3.5);
+    }
+    camera.lookAt(...target);
+    controls?.update?.();
+  }, [modelUrl]);
+
+  return null;
+};
+
 const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const [internalShowLabels, setInternalShowLabels] = useState(false);
@@ -1815,6 +1834,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
             rotateSpeed={0.35}
             zoomSpeed={0.9}
           />
+          <CameraInit modelUrl={modelUrl} target={cameraTarget} />
         </Suspense>
       </Canvas>
     </div>
