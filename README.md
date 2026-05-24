@@ -22,3 +22,4 @@
    Optional: `GEMINI_API_KEY=your_gemini_key`
 3. Run the app:
    `npm run dev`
+"# yidingkeyi" 
