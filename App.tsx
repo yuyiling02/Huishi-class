@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Landing from './Landing';
 import Dashboard from './Dashboard';
 
-type AppView = 'landing' | 'transitioning' | 'dashboard';
+type AppView = 'landing' | 'dashboard';
 
 export default function App() {
   const [view, setView] = useState<AppView>('landing');

@@ -468,10 +468,6 @@ html, body {
   animation: lab-cursor 840ms steps(1) infinite;
 }
 
-@keyframes lab-transition-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
 
 @keyframes lab-shell-in {
   from { opacity: 0; }
