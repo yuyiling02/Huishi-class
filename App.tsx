@@ -11,9 +11,13 @@ export default function App() {
     setView('dashboard');
   };
 
+  const handleBack = () => {
+    setView('landing');
+  };
+
   if (view === 'landing') {
     return <Landing onEnter={handleEnter} />;
   }
 
-  return <Dashboard playIntro />;
+  return <Dashboard playIntro onBack={handleBack} />;
 }

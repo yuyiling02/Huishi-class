@@ -175,11 +175,11 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
       {/* 实时识别文字气泡 */}
       {recognizedText && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 whitespace-nowrap z-50">
-          <div className="px-4 py-2 rounded-xl bg-gray-900/90 backdrop-blur-md text-white text-sm font-medium shadow-lg border border-white/10 max-w-[320px] truncate">
-            <span className="text-[#86e3ce] mr-1.5">♪</span>
+          <div className="px-4 py-2 rounded-xl bg-cyan-950/80 backdrop-blur-md text-cyan-50 text-sm font-medium shadow-[0_0_15px_rgba(34,211,238,0.2)] border border-cyan-500/30 max-w-[320px] truncate">
+            <span className="text-cyan-400 mr-1.5">♪</span>
             {recognizedText}
           </div>
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-gray-900/90" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-cyan-950/80" />
         </div>
       )}
       {isActive && (
@@ -187,7 +187,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
           {[1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
-              className="w-1 bg-[#86e3ce] rounded-full animate-bounce"
+              className="w-1 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] rounded-full animate-bounce"
               style={{ animationDelay: `${i * 0.1}s`, height: `${40 + Math.random() * 60}%` }}
             />
           ))}
@@ -196,10 +196,10 @@ const VoiceController: React.FC<VoiceControllerProps> = ({ controlRef, onStatusC
       <button
         onClick={toggleVoice}
         disabled={isConnecting || disabled}
-        className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${
+        className={`p-3 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.15)] border transition-all active:scale-90 ${
           disabled
-            ? 'bg-gray-200 text-gray-300 cursor-not-allowed'
-            : isActive ? 'bg-pink-400 text-white animate-pulse' : 'bg-white text-gray-400 hover:text-[#86e3ce]'
+            ? 'bg-cyan-950/20 border-cyan-900/30 text-slate-600 cursor-not-allowed shadow-none'
+            : isActive ? 'bg-rose-950/40 border-rose-900/50 text-rose-400 animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.3)]' : 'bg-cyan-950/40 border-cyan-900/50 text-cyan-500 hover:bg-cyan-900/60 hover:text-cyan-300'
         }`}
         aria-label={isActive ? '关闭语音识别' : '开启语音识别'}
         title={disabled ? '请先加载模型' : (isActive ? '关闭语音识别' : '开启语音识别')}

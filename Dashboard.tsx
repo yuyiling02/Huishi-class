@@ -63,9 +63,10 @@ const INTRO_INSTRUCTION =
 
 interface DashboardProps {
   playIntro?: boolean;
+  onBack?: () => void;
 }
 
-const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
+const App: React.FC<DashboardProps> = ({ playIntro = true, onBack }) => {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [modelType, setModelType] = useState<ModelType>('glb');
   const [modelAssetUrls, setModelAssetUrls] = useState<Record<string, string>>({});
@@ -767,10 +768,13 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
       <div className="lab-ambient lab-ambient-bottom" aria-hidden="true" />
       {/* 顶部导航 */}
       <nav className="relative z-50 flex h-[84px] items-center justify-between px-7">
-        <div className="flex items-center space-x-3">
-          <img src="/brand/smart-cube-tech/mark.svg" alt="慧视课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(39,242,255,0.46)]" />
+        <div 
+          className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={onBack}
+        >
+          <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(39,242,255,0.46)]" />
           <div className="flex flex-col">
-            <span className="text-xl font-black tracking-tight text-white">慧视课堂</span>
+            <span className="text-xl font-black tracking-tight text-white">数智课堂</span>
             <span className="text-xs font-semibold tracking-wide text-slate-400">AI 沉浸式教学系统</span>
           </div>
         </div>
@@ -785,7 +789,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
             <button className="lab-pill-button">
-              <Sparkles className="mr-2 text-[#86e3ce]" size={18} /> 图片转 3D
+              <Sparkles className="mr-2 text-white/90" size={18} /> 图片转 3D
             </button>
           </div>
 
@@ -798,7 +802,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
             <button className="lab-pill-button">
-              <Download className="mr-2 text-orange-300" size={18} /> 导入模型
+              <Download className="mr-2 text-white/90" size={18} /> 导入模型
             </button>
           </div>
 
@@ -828,7 +832,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                 <button
                   type="button"
                   onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); }}
-                  className="lab-icon-button text-[#09baff]"
+                  className="lab-icon-button"
                   aria-label="化学"
                   title="化学 · 金刚石模型"
                 >
@@ -838,7 +842,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                 <button
                   type="button"
                   onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); }}
-                  className={`lab-icon-button ${modelUrl === BUILT_IN_MODELS.heart ? 'is-active text-[#ff5f7f]' : 'text-[#ff5f7f]'}`}
+                  className={`lab-icon-button ${modelUrl === BUILT_IN_MODELS.heart ? 'is-active' : ''}`}
                   aria-label="生物"
                   title="生物 · 心脏/HIV 病毒"
                 >
@@ -848,7 +852,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                 <button
                   type="button"
                   onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); }}
-                  className={`lab-icon-button ${modelUrl === '/models/earth-layers.glb' ? 'is-active text-[#20e58d]' : 'text-[#20e58d]'}`}
+                  className={`lab-icon-button ${modelUrl === '/models/earth-layers.glb' ? 'is-active' : ''}`}
                   aria-label="地理"
                   title="地理 · 地球内部结构/地形地貌"
                 >
@@ -942,39 +946,39 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                           return next;
                         });
                       }}
-                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-blue-600 hover:bg-blue-50/60 transition-colors rounded-2xl"
+                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-cyan-400 hover:bg-cyan-950/40 transition-colors rounded-2xl"
                     >
                       <div className="flex items-center gap-2.5">
-                        <FlaskConical size={16} className="text-blue-400" />
+                        <FlaskConical size={16} className="text-cyan-400" />
                         <span>化学</span>
                       </div>
-                      <ChevronDown size={13} className={`text-blue-300 transition-transform duration-200 ${expandedCategories.has('化学') ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={13} className={`text-cyan-500 transition-transform duration-200 ${expandedCategories.has('化学') ? 'rotate-180' : ''}`} />
                     </button>
                     {expandedCategories.has('化学') && (
                       <div className="px-2 pb-2 space-y-2.5">
                         <div>
                           <div className="flex items-center gap-1.5 mb-1 pl-1">
-                            <Atom size={11} className="text-violet-400" />
-                            <span className="text-[10px] font-black text-violet-400/70 uppercase tracking-wider">化学分子</span>
+                            <Atom size={11} className="text-cyan-500/70" />
+                            <span className="text-[10px] font-black text-cyan-500/70 uppercase tracking-wider">化学分子</span>
                           </div>
                           <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-violet-500 animate-pulse' : 'bg-violet-300'}`}></span>金刚石模型
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>金刚石模型
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-fuchsia-500 animate-pulse' : 'bg-fuchsia-300'}`}></span>金刚石晶胞
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>金刚石晶胞
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-sky-500 animate-pulse' : 'bg-sky-300'}`}></span>1,4-二氯甲基苯
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>1,4-二氯甲基苯
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-orange-500 animate-pulse' : 'bg-orange-300'}`}></span>硝基苯
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>硝基苯
                             </div>
-                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
-                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-gray-300"></span>NaCl 离子晶体
+                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-cyan-950/10 text-slate-500 opacity-70">
+                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-slate-700"></span>NaCl 离子晶体
                             </div>
-                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
-                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-gray-300"></span>SiO₂ 二氧化硅网络
+                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-cyan-950/10 text-slate-500 opacity-70">
+                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-slate-700"></span>SiO₂ 二氧化硅网络
                             </div>
                           </div>
                         </div>
@@ -993,38 +997,38 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                           return next;
                         });
                       }}
-                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-rose-600 hover:bg-rose-50/60 transition-colors rounded-2xl"
+                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-cyan-400 hover:bg-cyan-950/40 transition-colors rounded-2xl"
                     >
                       <div className="flex items-center gap-2.5">
-                        <Heart size={16} className="text-rose-400" />
+                        <Heart size={16} className="text-cyan-400" />
                         <span>生物</span>
                       </div>
-                      <ChevronDown size={13} className={`text-rose-300 transition-transform duration-200 ${expandedCategories.has('生物') ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={13} className={`text-cyan-500 transition-transform duration-200 ${expandedCategories.has('生物') ? 'rotate-180' : ''}`} />
                     </button>
                     {expandedCategories.has('生物') && (
                       <div className="px-2 pb-2 space-y-2.5">
                         <div>
                           <div className="flex items-center gap-1.5 mb-1 pl-1">
-                            <Heart size={11} className="text-rose-400" />
-                            <span className="text-[10px] font-black text-rose-400/70 uppercase tracking-wider">人体解剖</span>
+                            <Heart size={11} className="text-cyan-500/70" />
+                            <span className="text-[10px] font-black text-cyan-500/70 uppercase tracking-wider">人体解剖</span>
                           </div>
                           <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-500 animate-pulse' : 'bg-rose-300'}`}></span>心脏模型1
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>心脏模型1
                             </div>
-                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
-                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-gray-300"></span>心脏模型2
+                            <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-cyan-950/10 text-slate-500 opacity-70">
+                              <span className="w-1.5 h-1.5 rounded-full mr-2 bg-slate-700"></span>心脏模型2
                             </div>
                           </div>
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5 mb-1 pl-1">
-                            <Heart size={11} className="text-green-400" />
-                            <span className="text-[10px] font-black text-green-400/70 uppercase tracking-wider">病毒模型</span>
+                            <Heart size={11} className="text-cyan-500/70" />
+                            <span className="text-[10px] font-black text-cyan-500/70 uppercase tracking-wider">病毒模型</span>
                           </div>
                           <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.hiv, 'HIV 病毒模型', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-green-500 animate-pulse' : 'bg-green-300'}`}></span>HIV 病毒模型
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.hiv, 'HIV 病毒模型', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>HIV 病毒模型
                             </div>
                           </div>
                         </div>
@@ -1043,21 +1047,21 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                           return next;
                         });
                       }}
-                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-emerald-600 hover:bg-emerald-50/60 transition-colors rounded-2xl"
+                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-cyan-400 hover:bg-cyan-950/40 transition-colors rounded-2xl"
                     >
                       <div className="flex items-center gap-2.5">
-                        <Globe size={16} className="text-emerald-500" />
+                        <Globe size={16} className="text-cyan-400" />
                         <span>地理</span>
                       </div>
-                      <ChevronDown size={13} className={`text-emerald-300 transition-transform duration-200 ${expandedCategories.has('地理') ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={13} className={`text-cyan-500 transition-transform duration-200 ${expandedCategories.has('地理') ? 'rotate-180' : ''}`} />
                     </button>
                     {expandedCategories.has('地理') && (
                       <div className="px-2 pb-2 space-y-0.5">
-                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>地球内部结构
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>地球内部结构
                         </div>
-                        <div onClick={() => { showModelStage(); loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-300'}`}></span>地形地貌总览
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/terrain-topography.glb' ? 'bg-cyan-900/40 text-cyan-300' : 'text-slate-400 hover:bg-cyan-950/30'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/terrain-topography.glb' ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'}`}></span>地形地貌总览
                         </div>
                       </div>
                     )}
@@ -1077,16 +1081,16 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                         }
                       }
                     }}
-                    className="w-full resize-none rounded-2xl border border-gray-200/70 bg-white/80 px-3 py-2 text-xs font-medium leading-relaxed text-gray-700 outline-none transition focus:border-[#86e3ce] focus:ring-2 focus:ring-[#86e3ce]/20 disabled:opacity-60 h-16"
+                    className="w-full resize-none rounded-2xl border border-cyan-900/50 bg-cyan-950/20 px-3 py-2 text-xs font-medium leading-relaxed text-slate-300 placeholder-slate-500 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 disabled:opacity-60 h-16"
                     placeholder="输入教学需求，按 Enter 开始，Shift+Enter 换行"
                     title="按 Enter 开始，Shift+Enter 换行"
                   />
                   <div className="grid grid-cols-3 gap-1.5">
                     {(['planner', 'executor', 'evaluator'] as AgentRole[]).map((role) => {
                       const metas: Record<AgentRole, { title: string; color: string }> = {
-                        planner: { title: '理解规划', color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
-                        executor: { title: '演示执行', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
-                        evaluator: { title: '知识讲解', color: 'text-amber-600 bg-amber-50 border-amber-100' },
+                        planner: { title: '理解规划', color: 'text-cyan-400 bg-cyan-950/40 border-cyan-900/50' },
+                        executor: { title: '演示执行', color: 'text-cyan-400 bg-cyan-950/40 border-cyan-900/50' },
+                        evaluator: { title: '知识讲解', color: 'text-cyan-400 bg-cyan-950/40 border-cyan-900/50' },
                       };
                       const m = metas[role];
                       const statusMap: Record<AgentStatus, string> = { idle: '待命', thinking: '规划中', running: '执行中', done: '完成', error: '异常' };
@@ -1094,7 +1098,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                         <div key={role} className={`rounded-xl border p-1.5 ${m.color}`}>
                           <div className="text-[9px] font-bold truncate">{m.title}</div>
                           <div className="flex items-center gap-1 mt-0.5">
-                            <span className={`h-1.5 w-1.5 rounded-full ${agentStatuses[role] === 'running' || agentStatuses[role] === 'thinking' ? 'animate-pulse bg-current' : 'bg-current opacity-50'}`} />
+                            <span className={`h-1.5 w-1.5 rounded-full ${agentStatuses[role] === 'running' || agentStatuses[role] === 'thinking' ? 'animate-pulse bg-cyan-400 shadow-[0_0_5px_rgba(34,211,238,0.5)]' : 'bg-current opacity-50'}`} />
                             <span className="text-[8px] font-bold opacity-70">{statusMap[agentStatuses[role]]}</span>
                           </div>
                         </div>
@@ -1105,7 +1109,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                     type="button"
                     disabled={isAgentRunning || !sidebarAgentRequest.trim()}
                     onClick={() => handleAgentStart(sidebarAgentRequest.trim())}
-                    className="w-full py-2 rounded-xl bg-gray-900 text-white text-xs font-bold shadow-lg transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    className="w-full py-2 rounded-xl bg-cyan-900/40 border border-cyan-500/30 text-cyan-300 text-xs font-bold shadow-[0_0_10px_rgba(34,211,238,0.1)] transition hover:bg-cyan-900/60 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-cyan-900/20 disabled:shadow-none flex items-center justify-center gap-1.5"
                   >
                     {isAgentRunning ? (
                       <><Loader2 size={14} className="animate-spin" /> 运行中...</>
@@ -1114,42 +1118,42 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                     )}
                   </button>
                   {agentThinking && (
-                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/80 px-2.5 py-2">
-                      <p className="text-[10px] font-medium leading-relaxed text-gray-600">{agentThinking}</p>
+                    <div className="rounded-2xl border border-cyan-900/40 bg-cyan-950/30 px-2.5 py-2">
+                      <p className="text-[10px] font-medium leading-relaxed text-slate-400">{agentThinking}</p>
                     </div>
                   )}
                   <div className={`space-y-1 overflow-y-auto pr-0.5 ${agentTimeline.length > 0 ? 'max-h-24' : ''}`}>
                     {agentTimeline.length === 0 ? (
-                      <div className="rounded-xl bg-gray-50 px-2.5 py-2 text-[10px] font-medium text-gray-400">
+                      <div className="rounded-xl border border-cyan-900/20 bg-cyan-950/10 px-2.5 py-2 text-[10px] font-medium text-slate-500">
                         等待输入教学需求...
                       </div>
                     ) : (
                       agentTimeline.map((item) => (
-                        <div key={item.id} className="rounded-xl border border-gray-100 bg-white/70 px-2.5 py-1.5">
+                        <div key={item.id} className="rounded-xl border border-cyan-900/30 bg-cyan-950/20 px-2.5 py-1.5">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-[9px] font-bold text-gray-600 truncate">{item.title}</span>
+                            <span className="text-[9px] font-bold text-slate-300 truncate">{item.title}</span>
                             <span className={`text-[7px] font-black uppercase ${
-                              item.status === 'running' ? 'text-blue-500' :
-                              item.status === 'error' ? 'text-red-500' :
-                              item.status === 'done' ? 'text-emerald-500' : 'text-gray-400'
+                              item.status === 'running' ? 'text-cyan-400' :
+                              item.status === 'error' ? 'text-rose-400' :
+                              item.status === 'done' ? 'text-teal-400' : 'text-slate-500'
                             }`}>{item.status === 'running' ? '运行中' : item.status === 'error' ? '异常' : item.status === 'done' ? '完成' : '待命'}</span>
                           </div>
-                          <p className="mt-0.5 line-clamp-1 text-[9px] font-medium text-gray-400">{item.detail}</p>
+                          <p className="mt-0.5 line-clamp-1 text-[9px] font-medium text-slate-500">{item.detail}</p>
                         </div>
                       ))
                     )}
                   </div>
                   {(knowledgeContent || isKnowledgeStreaming) && (
-                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-2.5 py-2">
+                    <div className="rounded-2xl border border-cyan-900/40 bg-cyan-950/20 px-2.5 py-2">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         {isKnowledgeStreaming ? (
-                          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+                          <div className="w-1.5 h-1.5 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)] rounded-full animate-pulse" />
                         ) : (
-                          <ClipboardCheck size={11} className="text-indigo-600" />
+                          <ClipboardCheck size={11} className="text-cyan-400" />
                         )}
-                        <span className="text-[9px] font-bold text-indigo-600">知识讲解</span>
+                        <span className="text-[9px] font-bold text-cyan-400">知识讲解</span>
                       </div>
-                      <p className="text-[10px] font-medium leading-relaxed text-gray-600 line-clamp-3">{knowledgeContent || (isKnowledgeStreaming ? '正在生成知识讲解...' : '')}</p>
+                      <p className="text-[10px] font-medium leading-relaxed text-slate-400 line-clamp-3">{knowledgeContent || (isKnowledgeStreaming ? '正在生成知识讲解...' : '')}</p>
                     </div>
                   )}
                 </div>
@@ -1157,21 +1161,21 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
               </div>
 
               <div>
-                <h3 className="font-black text-xs text-gray-400 uppercase tracking-[0.2em] mb-4 border-l-4 border-pink-300 pl-3">全息指令表</h3>
+                <h3 className="font-black text-xs text-gray-400 uppercase tracking-[0.2em] mb-4 border-l-4 border-cyan-400 pl-3">全息指令表</h3>
                 <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-white/40 border border-white/50 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/50 p-1">
+                  <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-900/30 space-y-3">
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-cyan-950/40 p-1">
                       <button
                         type="button"
                         onClick={() => handleInteractionModeChange('dual')}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'text-gray-400 hover:bg-white/60'}`}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-cyan-900/50 text-cyan-300 shadow-sm' : 'text-slate-400 hover:bg-cyan-900/20'}`}
                       >
                         <Move3d size={13} /> 双手模式
                       </button>
                       <button
                         type="button"
                         onClick={() => handleInteractionModeChange('single')}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-[#86e3ce]/25 text-emerald-600 shadow-sm' : 'text-gray-400 hover:bg-white/60'}`}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-cyan-900/50 text-cyan-300 shadow-sm' : 'text-slate-400 hover:bg-cyan-900/20'}`}
                       >
                         <Hand size={13} /> 单手模式
                       </button>
@@ -1179,50 +1183,50 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
 
                     {interactionMode === 'dual' ? (
                       <>
-                        <div className="flex items-center gap-2 pb-2 border-b border-white/30">
-                          <div className="p-1.5 bg-indigo-100 rounded-lg"><Move3d size={14} className="text-indigo-400" /></div>
+                        <div className="flex items-center gap-2 pb-2 border-b border-cyan-900/40">
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">双手协同</span>
-                            <span className="text-[9px] text-indigo-500 font-bold">左手缩放 | 右手旋转/拖拽</span>
+                            <span className="text-[9px] text-cyan-300 font-bold">左手缩放 | 右手旋转/拖拽</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">左手缩放</span>
-                            <span className="text-[9px] text-gray-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                            <span className="text-[9px] text-slate-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">右手交互</span>
-                            <span className="text-[9px] text-purple-400 font-bold">捏合 → 拖拽零件</span>
-                            <span className="text-[9px] text-gray-400 font-bold">食指+中指并拢滑动 → 旋转画面</span>
+                            <span className="text-[9px] text-cyan-300 font-bold">捏合 → 拖拽零件</span>
+                            <span className="text-[9px] text-slate-400 font-bold">食指+中指并拢滑动 → 旋转画面</span>
                           </div>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="flex items-center gap-2 pb-2 border-b border-white/30">
-                          <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
+                        <div className="flex items-center gap-2 pb-2 border-b border-cyan-900/40">
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">右手优先</span>
-                            <span className="text-[9px] text-emerald-500 font-bold">张掌放大 | 握拳缩小</span>
+                            <span className="text-[9px] text-cyan-300 font-bold">张掌放大 | 握拳缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-amber-100 rounded-lg"><Hand size={14} className="text-amber-500" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">捏合拖拽</span>
-                            <span className="text-[9px] text-gray-400 font-bold">食指+拇指捏合 → 拖拽零件</span>
+                            <span className="text-[9px] text-slate-400 font-bold">食指+拇指捏合 → 拖拽零件</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan-400" /></div>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-gray-500 uppercase">互斥控制</span>
-                            <span className="text-[9px] text-purple-400 font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
+                            <span className="text-[9px] text-cyan-300 font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
                           </div>
                         </div>
                       </>
@@ -1231,27 +1235,27 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                     <div className="hidden">
 
                     {/* 组合指令 */}
-                    <div className="flex items-center gap-2 pb-2 border-b border-white/30">
-                      <div className="p-1.5 bg-indigo-100 rounded-lg"><Move3d size={14} className="text-indigo-400" /></div>
+                    <div className="flex items-center gap-2 pb-2 border-b border-cyan-900/40">
+                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan-400" /></div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-500 uppercase">双人/双手</span>
-                        <span className="text-[9px] text-indigo-500 font-bold">双手协同控制模型</span>
+                        <span className="text-[9px] text-cyan-300 font-bold">双手协同控制模型</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-[#86e3ce]/20 rounded-lg"><Hand size={14} className="text-[#86e3ce]" /></div>
+                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-500 uppercase">左手 (缩放)</span>
-                        <span className="text-[9px] text-gray-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                        <span className="text-[9px] text-slate-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-purple-100 rounded-lg"><ScanFace size={14} className="text-purple-400" /></div>
+                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan-400" /></div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-500 uppercase">右手 (拆解/旋转)</span>
-                        <span className="text-[9px] text-purple-400 font-bold">捏合 (食+拇) → 抓取零件</span>
-                        <span className="text-[9px] text-gray-400 font-bold">双指并拢 (食+中) → 旋转画面</span>
+                        <span className="text-[9px] text-cyan-300 font-bold">捏合 (食+拇) → 抓取零件</span>
+                        <span className="text-[9px] text-slate-400 font-bold">双指并拢 (食+中) → 旋转画面</span>
                       </div>
                     </div>
                   </div>
@@ -1266,24 +1270,24 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                       setCameraActive(!cameraActive);
                     }}
                     className={`w-full py-3 rounded-2xl text-[10px] font-black tracking-widest uppercase border transition-all ${activeContent === 'biodigital'
-                      ? 'bg-white/50 border-white/70 text-gray-400'
+                      ? 'bg-cyan-950/10 border-cyan-900/20 text-slate-500 cursor-not-allowed'
                       : cameraActive
-                      ? 'bg-red-50 border-red-100 text-red-600'
-                      : 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                      ? 'bg-rose-950/30 border-rose-900/50 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
+                      : 'bg-cyan-950/30 border-cyan-900/50 text-cyan-400 hover:bg-cyan-900/40 hover:text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.1)]'
                       }`}
                   >
-                    {activeContent === 'biodigital' ? '心脏模型2 URL 交互' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
+                    {activeContent === 'biodigital' ? '手势捕捉不可用' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
                   </button>
                 </div>
               </div>
 
-              <div className="mt-auto">
-                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 relative overflow-hidden">
+              <div className="mt-auto pt-4">
+                <div className="bg-cyan-950/20 p-4 rounded-2xl border border-cyan-900/40 relative overflow-hidden">
                   <div className="flex items-center gap-2 mb-2">
-                    <MessageSquare size={14} className="text-blue-400" />
-                    <p className="text-[10px] text-blue-400 font-bold uppercase">助教日志</p>
+                    <MessageSquare size={14} className="text-cyan-400" />
+                    <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider">助教日志</p>
                   </div>
-                  <p className="text-xs text-gray-600 leading-relaxed font-medium italic min-h-[3em]">
+                  <p className="text-xs text-slate-400 leading-relaxed font-medium italic min-h-[3em]">
                     "{aiAnalysis}"
                   </p>
                 </div>
@@ -1317,7 +1321,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
               />
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${showSettings ? 'bg-gray-800 text-white' : 'bg-white/80 text-gray-400 hover:text-gray-600'}`}
+                className={`p-3 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.15)] border transition-all active:scale-90 ${showSettings ? 'bg-cyan-900/60 border-cyan-500/50 text-cyan-300' : 'bg-cyan-950/40 border-cyan-900/50 text-cyan-500 hover:bg-cyan-900/60 hover:text-cyan-300'}`}
                 aria-label="交互速度设置"
                 title="交互速度设置"
               >
@@ -1468,10 +1472,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
           )}
 
           <div className="absolute top-6 right-6 flex gap-2 z-40">
-            {activeContent === 'model' && (
-              <div className={`lab-stage-chip ${cameraActive ? 'text-[#28f4d8]' : 'text-slate-400'}`}>
-                <div className={`h-2 w-2 rounded-full ${cameraActive ? 'bg-[#28f4d8] shadow-[0_0_10px_#28f4d8] animate-pulse' : 'bg-sky-400/50'}`}></div>
-                {cameraActive ? 'AI 动势追踪' : '手势已关闭'}
+            {activeContent === 'model' && cameraActive && (
+              <div className="lab-stage-chip text-cyan-400 border border-cyan-400/30 bg-cyan-950/40 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
+                <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)] animate-pulse"></div>
+                AI 动势追踪
               </div>
             )}
             <button
@@ -1498,7 +1502,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
                 </div>
                 <div className={`lab-welcome-copy ${introReady ? 'is-ready' : ''}`}>
                   <h2 className="lab-welcome-title">
-                    欢迎来到 <span>3D AI 实验室</span>
+                    欢迎来到 <span>数智课堂</span>
                   </h2>
                   <div className="lab-stream">
                     <b>交互指令：</b>
