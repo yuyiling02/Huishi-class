@@ -74,9 +74,7 @@ function HeartMockup() {
 
 // === Primitive UI Components ===
 const LogoMark = () => (
-  <svg viewBox="0 0 256 256" fill="white" className="w-8 h-8">
-    <path d="M 0 128 C 70.692 128 128 185.308 128 256 L 64 256 C 64 220.654 35.346 192 0 192 Z M 256 192 C 220.654 192 192 220.654 192 256 L 128 256 C 128 185.308 185.308 128 256 128 Z M 128 0 C 128 70.692 70.692 128 0 128 L 0 64 C 35.346 64 64 35.346 64 0 Z M 192 0 C 192 35.346 220.654 64 256 64 L 256 128 C 185.308 128 128 70.692 128 0 Z" />
-  </svg>
+  <img src="/brand/smart-cube-tech/mark.svg" alt="慧视课堂 Logo" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(0,210,255,0.4)]" />
 );
 
 const AppleLogo = ({ className = "w-3.5 h-3.5" }) => (
@@ -135,18 +133,20 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white selection:bg-[#3D81E3]/30">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#030712] text-white selection:bg-[#3D81E3]/30">
       
-      {/* 1. 全局背景 (3D + 纵向排版线) */}
+      {/* 1. 全局背景 (3D + 蓝光地平线) */}
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
-          <BackgroundScene />
-        </Canvas>
+        <div className="absolute inset-0 opacity-40">
+          <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
+            <BackgroundScene />
+          </Canvas>
+        </div>
       </div>
-      <div className="fixed inset-0 z-0 pointer-events-none bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#00d2ff]/10 via-[#0c0c0c]/80 to-[#0c0c0c]" />
       
-      <div className="hidden lg:block pointer-events-none fixed inset-y-0 left-1/2 -translate-x-[calc(50%+38rem)] w-px bg-white/[0.05] z-0" />
-      <div className="hidden lg:block pointer-events-none fixed inset-y-0 left-1/2 translate-x-[calc(-50%+38rem)] w-px bg-white/[0.05] z-0" />
+      {/* 底部巨大的蓝色行星弧线背景 */}
+      <div className="fixed bottom-[-10vh] left-1/2 -translate-x-1/2 w-[120vw] h-[40vh] bg-[radial-gradient(ellipse_at_top,_#00d2ff_0%,_transparent_70%)] opacity-30 pointer-events-none z-0 mix-blend-screen blur-[100px]" />
+      <div className="fixed bottom-[-40vh] left-1/2 -translate-x-1/2 w-[200vw] h-[60vh] rounded-[100%] border-t border-[#00d2ff]/50 shadow-[0_-10px_60px_rgba(0,210,255,0.4)] bg-gradient-to-t from-[#001a33]/90 to-[#030712]/10 pointer-events-none z-0" />
 
       {/* SVG Noise Filter */}
       <svg className="w-0 h-0 absolute pointer-events-none">
@@ -176,9 +176,12 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
                 key={item} href="#"
                 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + i * 0.1 }}
-                className="text-white/70 text-sm font-medium hover:text-white transition-colors"
+                className={`text-sm font-bold transition-colors relative pb-1 ${item === '教学方案' ? 'text-[#00d2ff]' : 'text-white/60 hover:text-white'}`}
               >
                 {item}
+                {item === '教学方案' && (
+                  <div className="absolute -bottom-1.5 left-0 w-full h-[2px] bg-[#00d2ff] shadow-[0_0_8px_#00d2ff] rounded-full"></div>
+                )}
               </motion.a>
             ))}
           </div>
@@ -230,7 +233,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
           >
             <button 
               onClick={onEnter}
-              className="group inline-flex items-center justify-center gap-2 rounded-full bg-white text-black font-bold text-base px-8 py-3.5 transition-all hover:bg-white/90 hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.4)] mt-2"
+              className="group inline-flex items-center justify-center gap-2 rounded-full border-2 border-[#00d2ff]/80 bg-[#001a33]/40 text-[#00d2ff] font-bold text-base px-10 py-3.5 transition-all hover:bg-[#00d2ff]/20 hover:scale-105 active:scale-95 shadow-[0_0_25px_rgba(0,210,255,0.4)] hover:shadow-[0_0_40px_rgba(0,210,255,0.7)] mt-2 backdrop-blur-sm"
             >
               立即体验
               <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />

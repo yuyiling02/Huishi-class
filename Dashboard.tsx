@@ -739,9 +739,7 @@ const App: React.FC = () => {
       {/* 顶部导航 */}
       <nav className="h-20 px-8 flex items-center justify-between z-50">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-[#86e3ce] rounded-full flex items-center justify-center text-white shadow-lg animate-pulse">
-            <Box size={20} />
-          </div>
+          <img src="/brand/smart-cube-tech/mark.svg" alt="慧视课堂 Logo" className="w-10 h-10 animate-pulse drop-shadow-md" />
           <div className="flex flex-col">
             <span className="text-xl font-black text-gray-700 tracking-tight">慧视课堂</span>
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">AI 沉浸式教学系统</span>
