@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1350" viewBox="0 0 2400 1350" role="img" aria-label="技术架构总览">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.52" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f3f7fb"/>
+    </linearGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#dbe5ef" stroke-width="1" opacity="0.38"/>
+    </pattern>
+  </defs>
+  <rect width="2400" height="1350" fill="url(#bg)"/>
+  <rect width="2400" height="1350" fill="url(#grid)"/>
+  <rect x="0" y="0" width="2400" height="18" fill="#2563eb"/>
+  <text x="112" y="116" fill="#14213d" font-size="56" font-weight="900">技术架构总览</text>
+  <text x="112" y="168" fill="#5f6c7b" font-size="30" font-weight="500">从多模态输入到 AI 编排、3D 渲染与课堂反馈的完整闭环</text>
+  
+    
+    <rect x="122" y="272" width="440" height="270" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="112" y="260" width="440" height="270" rx="30" fill="#f0fdfa" stroke="#00a6a6" stroke-width="5"/>
+    <rect x="112" y="260" width="14" height="270" rx="7" fill="#00a6a6"/>
+    <text x="158" y="318" fill="#14213d" font-size="36" font-weight="800">多模态输入层</text>
+    
+    <text x="158" y="372" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">摄像头手势识别</text>
+    <text x="158" y="406.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">语音指令与课堂问答</text>
+    <text x="158" y="441.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">GLB / GLTF / FBX 模型导入</text>
+    
+    <rect x="122" y="602" width="440" height="270" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="112" y="590" width="440" height="270" rx="30" fill="#f5f3ff" stroke="#7c3aed" stroke-width="5"/>
+    <rect x="112" y="590" width="14" height="270" rx="7" fill="#7c3aed"/>
+    <text x="158" y="648" fill="#14213d" font-size="36" font-weight="800">AI 能力层</text>
+    
+    <text x="158" y="702" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">大模型教学理解</text>
+    <text x="158" y="736.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">课堂知识生成</text>
+    <text x="158" y="771.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">Web Speech 本地语音控制</text>
+    
+    <rect x="122" y="932" width="440" height="210" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="112" y="920" width="440" height="210" rx="30" fill="#fffbeb" stroke="#f59e0b" stroke-width="5"/>
+    <rect x="112" y="920" width="14" height="210" rx="7" fill="#f59e0b"/>
+    <text x="158" y="978" fill="#14213d" font-size="36" font-weight="800">教师与学生端</text>
+    
+    <text x="158" y="1032" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">沉浸式观察</text>
+    <text x="158" y="1066.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">互动讲解</text>
+    <text x="158" y="1101.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">课堂反馈</text>
+
+    <rect x="768" y="312" width="520" height="770" rx="42" fill="#ffffff" stroke="#2563eb" stroke-width="7"/>
+    <text x="1028" y="384" fill="#14213d" font-size="45" font-weight="900" text-anchor="middle">应用编排中枢</text>
+    
+    <rect x="832" y="462" width="392" height="74" rx="28" fill="#eff6ff" stroke="#2563eb" stroke-width="4"/>
+    <circle cx="868" cy="499" r="10" fill="#2563eb"/>
+    <text x="896" y="509" fill="#14213d" font-size="30" font-weight="700">React 状态管理</text>
+    
+    <rect x="832" y="570" width="392" height="74" rx="28" fill="#ecfeff" stroke="#00a6a6" stroke-width="4"/>
+    <circle cx="868" cy="607" r="10" fill="#00a6a6"/>
+    <text x="896" y="616" fill="#14213d" font-size="27" font-weight="700">ControlRefs 高频控制总线</text>
+    
+    <rect x="832" y="678" width="392" height="74" rx="28" fill="#f0fdf4" stroke="#16a34a" stroke-width="4"/>
+    <circle cx="868" cy="715" r="10" fill="#16a34a"/>
+    <text x="896" y="725" fill="#14213d" font-size="30" font-weight="700">模型库与课堂脚本</text>
+    
+    <rect x="832" y="786" width="392" height="74" rx="28" fill="#f5f3ff" stroke="#7c3aed" stroke-width="4"/>
+    <circle cx="868" cy="823" r="10" fill="#7c3aed"/>
+    <text x="896" y="833" fill="#14213d" font-size="30" font-weight="700">多智能体任务调度</text>
+    
+    <rect x="832" y="894" width="392" height="74" rx="28" fill="#fffbeb" stroke="#f59e0b" stroke-width="4"/>
+    <circle cx="868" cy="931" r="10" fill="#f59e0b"/>
+    <text x="896" y="941" fill="#14213d" font-size="30" font-weight="700">教学 UI 与状态反馈</text>
+
+    
+    <rect x="1520" y="272" width="778" height="248" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1510" y="260" width="778" height="248" rx="30" fill="#f0fdf4" stroke="#16a34a" stroke-width="5"/>
+    <rect x="1510" y="260" width="14" height="248" rx="7" fill="#16a34a"/>
+    <text x="1556" y="318" fill="#14213d" font-size="36" font-weight="800">3D 渲染与互动层</text>
+    
+    <text x="1556" y="372" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">Three.js / React Three Fiber WebGL 视口</text>
+    <text x="1556" y="406.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">地球内部结构、地形地貌、心脏、病毒、晶体等模型</text>
+    <text x="1556" y="441.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">旋转、缩放、拖拽、拆解、标签与剖面</text>
+    
+    <rect x="1520" y="602" width="778" height="248" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1510" y="590" width="778" height="248" rx="30" fill="#fff1f2" stroke="#e11d48" stroke-width="5"/>
+    <rect x="1510" y="590" width="14" height="248" rx="7" fill="#e11d48"/>
+    <text x="1556" y="648" fill="#14213d" font-size="36" font-weight="800">智能执行与讲解层</text>
+    
+    <text x="1556" y="702" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">理解规划 Agent 生成演示步骤</text>
+    <text x="1556" y="736.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">演示执行 Agent 转换为模型工具调用</text>
+    <text x="1556" y="771.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">学情评估 Agent 汇总课堂观察与小结</text>
+    
+    <rect x="1520" y="932" width="778" height="210" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1510" y="920" width="778" height="210" rx="30" fill="#f8fafc" stroke="#334155" stroke-width="5"/>
+    <rect x="1510" y="920" width="14" height="210" rx="7" fill="#334155"/>
+    <text x="1556" y="978" fill="#14213d" font-size="36" font-weight="800">新闻稿可表达价值</text>
+    
+    <text x="1556" y="1032" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">AI 把教学意图转成可操作的 3D 演示</text>
+    <text x="1556" y="1066.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">手势、语音、模型渲染形成自然交互闭环</text>
+
+    
+    <defs>
+      <marker id="arrow-40450" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#00a6a6"/>
+      </marker>
+    </defs>
+    <path d="M 552 395 L 768 520" fill="none" stroke="#00a6a6" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-40450)"/>
+    <text x="660" y="439.5" fill="#00a6a6" font-size="25" font-weight="700" text-anchor="middle">输入信号</text>
+    
+    <defs>
+      <marker id="arrow-52270" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#7c3aed"/>
+      </marker>
+    </defs>
+    <path d="M 552 725 L 768 790" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-52270)"/>
+    <text x="660" y="739.5" fill="#7c3aed" font-size="25" font-weight="700" text-anchor="middle">AI 服务</text>
+    
+    <defs>
+      <marker id="arrow-61280" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#f59e0b"/>
+      </marker>
+    </defs>
+    <path d="M 552 1025 L 768 960" fill="none" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-61280)"/>
+    <text x="660" y="974.5" fill="#f59e0b" font-size="25" font-weight="700" text-anchor="middle">课堂反馈</text>
+    
+    <defs>
+      <marker id="arrow-63113" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#16a34a"/>
+      </marker>
+    </defs>
+    <path d="M 1288 520 L 1510 384" fill="none" stroke="#16a34a" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-63113)"/>
+    <text x="1399" y="434" fill="#16a34a" font-size="25" font-weight="700" text-anchor="middle">渲染指令</text>
+    
+    <defs>
+      <marker id="arrow-75293" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#e11d48"/>
+      </marker>
+    </defs>
+    <path d="M 1288 790 L 1510 714" fill="none" stroke="#e11d48" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-75293)"/>
+    <text x="1399" y="734" fill="#e11d48" font-size="25" font-weight="700" text-anchor="middle">智能体流程</text>
+    
+    <defs>
+      <marker id="arrow-85336" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#334155"/>
+      </marker>
+    </defs>
+    <path d="M 1288 960 L 1510 1025" fill="none" stroke="#334155" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-85336)"/>
+    <text x="1399" y="974.5" fill="#334155" font-size="25" font-weight="700" text-anchor="middle">结果输出</text>
+  
+  <text x="112" y="1282" fill="#5f6c7b" font-size="24" font-weight="600">慧视课堂 | 多智能体 3D 教学演示系统</text>
+  <text x="2288" y="1282" fill="#5f6c7b" font-size="24" font-weight="600" text-anchor="end">Press Architecture Diagram</text>
+</svg>

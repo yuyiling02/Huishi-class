@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1350" viewBox="0 0 2400 1350" role="img" aria-label="3D 模型渲染与教学管线">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.52" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f3f7fb"/>
+    </linearGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#dbe5ef" stroke-width="1" opacity="0.38"/>
+    </pattern>
+  </defs>
+  <rect width="2400" height="1350" fill="url(#bg)"/>
+  <rect width="2400" height="1350" fill="url(#grid)"/>
+  <rect x="0" y="0" width="2400" height="18" fill="#16a34a"/>
+  <text x="112" y="116" fill="#14213d" font-size="56" font-weight="900">3D 模型渲染与教学管线</text>
+  <text x="112" y="168" fill="#5f6c7b" font-size="30" font-weight="500">模型资产经过加载、结构增强、交互引擎和实时渲染，形成可发布的课堂视觉体验</text>
+  
+    <rect x="132" y="292" width="2136" height="198" rx="42" fill="#ffffff" stroke="#c8d2df" stroke-width="4"/>
+    <text x="208" y="370" fill="#14213d" font-size="38" font-weight="900">模型来源</text>
+    
+    <rect x="500" y="326" width="300" height="76" rx="28" fill="#eff6ff" stroke="#2563eb" stroke-width="4"/>
+    <circle cx="536" cy="364" r="10" fill="#2563eb"/>
+    <text x="564" y="373" fill="#14213d" font-size="27" font-weight="700">内置教学模型</text>
+    
+    <rect x="870" y="326" width="300" height="76" rx="28" fill="#f0fdf4" stroke="#16a34a" stroke-width="4"/>
+    <circle cx="906" cy="364" r="10" fill="#16a34a"/>
+    <text x="934" y="373" fill="#14213d" font-size="27" font-weight="700">GLB / FBX 导入</text>
+    
+    <rect x="1240" y="326" width="300" height="76" rx="28" fill="#fffbeb" stroke="#f59e0b" stroke-width="4"/>
+    <circle cx="1276" cy="364" r="10" fill="#f59e0b"/>
+    <text x="1304" y="373" fill="#14213d" font-size="27" font-weight="700">程序化地形</text>
+    
+    <rect x="1610" y="326" width="300" height="76" rx="28" fill="#f5f3ff" stroke="#7c3aed" stroke-width="4"/>
+    <circle cx="1646" cy="364" r="10" fill="#7c3aed"/>
+    <text x="1674" y="373" fill="#14213d" font-size="27" font-weight="700">图片 AI 分析</text>
+
+    
+    <rect x="170" y="662" width="430" height="285" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="160" y="650" width="430" height="285" rx="30" fill="#eff6ff" stroke="#2563eb" stroke-width="5"/>
+    <rect x="160" y="650" width="14" height="285" rx="7" fill="#2563eb"/>
+    <text x="206" y="708" fill="#14213d" font-size="36" font-weight="800">加载与归一化</text>
+    
+    <text x="206" y="762" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">GLTFLoader / FBXLoader</text>
+    <text x="206" y="796.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">BoundingBox 自动缩放</text>
+    <text x="206" y="831.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">材质与阴影增强</text>
+    
+    <rect x="710" y="662" width="430" height="285" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="700" y="650" width="430" height="285" rx="30" fill="#fffbeb" stroke="#f59e0b" stroke-width="5"/>
+    <rect x="700" y="650" width="14" height="285" rx="7" fill="#f59e0b"/>
+    <text x="746" y="708" fill="#14213d" font-size="36" font-weight="800">教学结构增强</text>
+    
+    <text x="746" y="762" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">地球 90° 切面</text>
+    <text x="746" y="796.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">地形分层剖面</text>
+    <text x="746" y="831.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">等高线与海拔标签</text>
+    
+    <rect x="1250" y="662" width="430" height="285" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1240" y="650" width="430" height="285" rx="30" fill="#f0fdf4" stroke="#16a34a" stroke-width="5"/>
+    <rect x="1240" y="650" width="14" height="285" rx="7" fill="#16a34a"/>
+    <text x="1286" y="708" fill="#14213d" font-size="36" font-weight="800">交互行为引擎</text>
+    
+    <text x="1286" y="762" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">旋转、缩放、拖拽</text>
+    <text x="1286" y="796.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">拆解与回位</text>
+    <text x="1286" y="831.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">物理抛掷与碰撞</text>
+    
+    <rect x="1790" y="662" width="430" height="285" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1780" y="650" width="430" height="285" rx="30" fill="#fff1f2" stroke="#e11d48" stroke-width="5"/>
+    <rect x="1780" y="650" width="14" height="285" rx="7" fill="#e11d48"/>
+    <text x="1826" y="708" fill="#14213d" font-size="36" font-weight="800">课堂可视输出</text>
+    
+    <text x="1826" y="762" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">WebGL 实时渲染</text>
+    <text x="1826" y="796.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">悬浮标签与讲解面板</text>
+    <text x="1826" y="831.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">新闻稿展示截图素材</text>
+
+    
+    <defs>
+      <marker id="arrow-46012" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#2563eb"/>
+      </marker>
+    </defs>
+    <path d="M 1200 490 L 375 650" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-46012)"/>
+    <text x="787.5" y="552" fill="#2563eb" font-size="25" font-weight="700" text-anchor="middle">载入</text>
+    
+    <defs>
+      <marker id="arrow-52657" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#f59e0b"/>
+      </marker>
+    </defs>
+    <path d="M 590 792 L 700 792" fill="none" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-52657)"/>
+    <text x="645" y="774" fill="#f59e0b" font-size="25" font-weight="700" text-anchor="middle">结构化</text>
+    
+    <defs>
+      <marker id="arrow-69937" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#16a34a"/>
+      </marker>
+    </defs>
+    <path d="M 1130 792 L 1240 792" fill="none" stroke="#16a34a" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-69937)"/>
+    <text x="1185" y="774" fill="#16a34a" font-size="25" font-weight="700" text-anchor="middle">交互化</text>
+    
+    <defs>
+      <marker id="arrow-87217" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#e11d48"/>
+      </marker>
+    </defs>
+    <path d="M 1670 792 L 1780 792" fill="none" stroke="#e11d48" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-87217)"/>
+    <text x="1725" y="774" fill="#e11d48" font-size="25" font-weight="700" text-anchor="middle">可视化</text>
+
+    <rect x="254" y="1058" width="1892" height="118" rx="36" fill="#ffffff" stroke="#334155" stroke-width="4"/>
+    <text x="1200" y="1128" fill="#14213d" font-size="33" font-weight="850" text-anchor="middle">对外表述：系统把静态教具升级为可拆、可看、可问、可控的三维课堂对象。</text>
+  
+  <text x="112" y="1282" fill="#5f6c7b" font-size="24" font-weight="600">慧视课堂 | 多智能体 3D 教学演示系统</text>
+  <text x="2288" y="1282" fill="#5f6c7b" font-size="24" font-weight="600" text-anchor="end">Press Architecture Diagram</text>
+</svg>

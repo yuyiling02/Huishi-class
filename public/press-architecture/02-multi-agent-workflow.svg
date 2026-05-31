@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1350" viewBox="0 0 2400 1350" role="img" aria-label="多智能体教学流程">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.52" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f3f7fb"/>
+    </linearGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#dbe5ef" stroke-width="1" opacity="0.38"/>
+    </pattern>
+  </defs>
+  <rect width="2400" height="1350" fill="url(#bg)"/>
+  <rect width="2400" height="1350" fill="url(#grid)"/>
+  <rect x="0" y="0" width="2400" height="18" fill="#e11d48"/>
+  <text x="112" y="116" fill="#14213d" font-size="56" font-weight="900">多智能体教学流程</text>
+  <text x="112" y="168" fill="#5f6c7b" font-size="30" font-weight="500">三类 Agent 协同，将教师意图转化为可执行的 3D 课堂演示</text>
+  
+    <rect x="160" y="298" width="2080" height="252" rx="44" fill="#ffffff" stroke="#c8d2df" stroke-width="4"/>
+    <text x="220" y="372" fill="#14213d" font-size="38" font-weight="900">课堂目标输入</text>
+    
+    <rect x="530" y="326" width="360" height="76" rx="28" fill="#eff6ff" stroke="#2563eb" stroke-width="4"/>
+    <circle cx="566" cy="364" r="10" fill="#2563eb"/>
+    <text x="594" y="373.3333333333333" fill="#14213d" font-size="28" font-weight="700">教师自然语言需求</text>
+    
+    <rect x="940" y="326" width="360" height="76" rx="28" fill="#f0fdf4" stroke="#16a34a" stroke-width="4"/>
+    <circle cx="976" cy="364" r="10" fill="#16a34a"/>
+    <text x="1004" y="373.3333333333333" fill="#14213d" font-size="28" font-weight="700">教材知识点 / 模型</text>
+    
+    <rect x="1350" y="326" width="360" height="76" rx="28" fill="#fffbeb" stroke="#f59e0b" stroke-width="4"/>
+    <circle cx="1386" cy="364" r="10" fill="#f59e0b"/>
+    <text x="1414" y="373.3333333333333" fill="#14213d" font-size="28" font-weight="700">学生互动反馈</text>
+    
+    <rect x="1760" y="326" width="360" height="76" rx="28" fill="#f5f3ff" stroke="#7c3aed" stroke-width="4"/>
+    <circle cx="1796" cy="364" r="10" fill="#7c3aed"/>
+    <text x="1824" y="373.3333333333333" fill="#14213d" font-size="28" font-weight="700">课堂场景约束</text>
+
+    
+    <rect x="192" y="704" width="560" height="270" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="182" y="692" width="560" height="270" rx="30" fill="#eff6ff" stroke="#2563eb" stroke-width="5"/>
+    <rect x="182" y="692" width="14" height="270" rx="7" fill="#2563eb"/>
+    <text x="228" y="750" fill="#14213d" font-size="36" font-weight="800">理解规划 Agent</text>
+    
+    <text x="228" y="804" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">解析教学目标</text>
+    <text x="228" y="838.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">拆分演示步骤</text>
+    <text x="228" y="873.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">生成讲解逻辑</text>
+    
+    <rect x="930" y="704" width="560" height="270" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="920" y="692" width="560" height="270" rx="30" fill="#f0fdf4" stroke="#16a34a" stroke-width="5"/>
+    <rect x="920" y="692" width="14" height="270" rx="7" fill="#16a34a"/>
+    <text x="966" y="750" fill="#14213d" font-size="36" font-weight="800">演示执行 Agent</text>
+    
+    <text x="966" y="804" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">选择 3D 模型</text>
+    <text x="966" y="838.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">调用旋转 / 缩放 / 拆解工具</text>
+    <text x="966" y="873.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">同步标签、剖面与视角</text>
+    
+    <rect x="1668" y="704" width="560" height="270" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1658" y="692" width="560" height="270" rx="30" fill="#fff1f2" stroke="#e11d48" stroke-width="5"/>
+    <rect x="1658" y="692" width="14" height="270" rx="7" fill="#e11d48"/>
+    <text x="1704" y="750" fill="#14213d" font-size="36" font-weight="800">学情评估 Agent</text>
+    
+    <text x="1704" y="804" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">记录互动轨迹</text>
+    <text x="1704" y="838.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">生成课堂小结</text>
+    <text x="1704" y="873.12" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">回传下一轮教学建议</text>
+
+    <rect x="560" y="1080" width="1280" height="104" rx="52" fill="#ffffff" stroke="#334155" stroke-width="4"/>
+    <text x="1200" y="1146" fill="#14213d" font-size="34" font-weight="800" text-anchor="middle">共享上下文：模型状态、教学脚本、交互记录、课堂反馈</text>
+
+    
+    <defs>
+      <marker id="arrow-49651" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#2563eb"/>
+      </marker>
+    </defs>
+    <path d="M 1200 550 L 462 692" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-49651)"/>
+    <text x="831" y="603" fill="#2563eb" font-size="25" font-weight="700" text-anchor="middle">目标解析</text>
+    
+    <defs>
+      <marker id="arrow-60213" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#16a34a"/>
+      </marker>
+    </defs>
+    <path d="M 742 827 L 920 827" fill="none" stroke="#16a34a" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-60213)"/>
+    <text x="831" y="809" fill="#16a34a" font-size="25" font-weight="700" text-anchor="middle">步骤转工具</text>
+    
+    <defs>
+      <marker id="arrow-83829" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#e11d48"/>
+      </marker>
+    </defs>
+    <path d="M 1480 827 L 1658 827" fill="none" stroke="#e11d48" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-83829)"/>
+    <text x="1569" y="809" fill="#e11d48" font-size="25" font-weight="700" text-anchor="middle">观察与评估</text>
+    
+    <defs>
+      <marker id="arrow-104413" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#e11d48"/>
+      </marker>
+    </defs>
+    <path d="M 1938 962 L 1938 1132" fill="none" stroke="#e11d48" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-104413)"/>
+    
+    
+    <defs>
+      <marker id="arrow-57435" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#2563eb"/>
+      </marker>
+    </defs>
+    <path d="M 560 1132 C 690 1132, 332 962, 462 962" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-dasharray="12 12" marker-end="url(#arrow-57435)"/>
+    <text x="511" y="1029" fill="#2563eb" font-size="25" font-weight="700" text-anchor="middle">策略回流</text>
+    
+    <defs>
+      <marker id="arrow-78893" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#334155"/>
+      </marker>
+    </defs>
+    <path d="M 1200 1080 L 1200 962" fill="none" stroke="#334155" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-78893)"/>
+    <text x="1200" y="1003" fill="#334155" font-size="25" font-weight="700" text-anchor="middle">状态同步</text>
+
+    <text x="1200" y="1238" fill="#5f6c7b" font-size="28" font-weight="600" text-anchor="middle">对外表述：系统不是单点问答，而是把“理解、执行、评估”串成可持续迭代的教学智能体流程。</text>
+  
+  <text x="112" y="1282" fill="#5f6c7b" font-size="24" font-weight="600">慧视课堂 | 多智能体 3D 教学演示系统</text>
+  <text x="2288" y="1282" fill="#5f6c7b" font-size="24" font-weight="600" text-anchor="end">Press Architecture Diagram</text>
+</svg>

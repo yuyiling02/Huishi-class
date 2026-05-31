@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1350" viewBox="0 0 2400 1350" role="img" aria-label="手势与语音交互数据流">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.52" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f3f7fb"/>
+    </linearGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#dbe5ef" stroke-width="1" opacity="0.38"/>
+    </pattern>
+  </defs>
+  <rect width="2400" height="1350" fill="url(#bg)"/>
+  <rect width="2400" height="1350" fill="url(#grid)"/>
+  <rect x="0" y="0" width="2400" height="18" fill="#00a6a6"/>
+  <text x="112" y="116" fill="#14213d" font-size="56" font-weight="900">手势与语音交互数据流</text>
+  <text x="112" y="168" fill="#5f6c7b" font-size="30" font-weight="500">高频控制信号直达 3D 渲染循环，实现自然、低延迟的课堂操作</text>
+  
+    
+    <rect x="128" y="278" width="448" height="205" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="118" y="266" width="448" height="205" rx="30" fill="#ecfeff" stroke="#00a6a6" stroke-width="5"/>
+    <rect x="118" y="266" width="14" height="205" rx="7" fill="#00a6a6"/>
+    <text x="164" y="324" fill="#14213d" font-size="36" font-weight="800">摄像头</text>
+    
+    <text x="164" y="378" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">MediaPipe Hands</text>
+    <text x="164" y="412.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">21 关键点实时检测</text>
+    
+    <rect x="128" y="560" width="448" height="205" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="118" y="548" width="448" height="205" rx="30" fill="#f5f3ff" stroke="#7c3aed" stroke-width="5"/>
+    <rect x="118" y="548" width="14" height="205" rx="7" fill="#7c3aed"/>
+    <text x="164" y="606" fill="#14213d" font-size="36" font-weight="800">麦克风</text>
+    
+    <text x="164" y="660" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">Web Speech API</text>
+    <text x="164" y="694.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">语音指令与问答</text>
+    
+    <rect x="128" y="842" width="448" height="205" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="118" y="830" width="448" height="205" rx="30" fill="#fffbeb" stroke="#f59e0b" stroke-width="5"/>
+    <rect x="118" y="830" width="14" height="205" rx="7" fill="#f59e0b"/>
+    <text x="164" y="888" fill="#14213d" font-size="36" font-weight="800">文件与图片</text>
+    
+    <text x="164" y="942" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">GLB / GLTF / FBX</text>
+    <text x="164" y="976.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">本地模型载入</text>
+
+    <rect x="754" y="286" width="892" height="700" rx="44" fill="#ffffff" stroke="#2563eb" stroke-width="6"/>
+    <text x="1200" y="366" fill="#14213d" font-size="45" font-weight="900" text-anchor="middle">高频交互数据通道</text>
+    <rect x="850" y="450" width="700" height="146" rx="28" fill="#eff6ff" stroke="#2563eb" stroke-width="4"/>
+    <text x="1200" y="514" fill="#14213d" font-size="36" font-weight="850" text-anchor="middle">controlRef.current</text>
+    <text x="1200" y="558" fill="#5f6c7b" font-size="26" font-weight="600" text-anchor="middle">绕过 React 重渲染，承载每帧控制信号</text>
+
+    
+    <rect x="850" y="660" width="314" height="72" rx="28" fill="#ffffff" stroke="#2563eb" stroke-width="4"/>
+    <circle cx="886" cy="696" r="10" fill="#2563eb"/>
+    <text x="914" y="704.3333333333334" fill="#14213d" font-size="25" font-weight="700">rotationVelocity</text>
+    
+    <rect x="1236" y="660" width="314" height="72" rx="28" fill="#ffffff" stroke="#00a6a6" stroke-width="4"/>
+    <circle cx="1272" cy="696" r="10" fill="#00a6a6"/>
+    <text x="1300" y="704.3333333333334" fill="#14213d" font-size="25" font-weight="700">zoomSpeed</text>
+    
+    <rect x="850" y="770" width="314" height="72" rx="28" fill="#ffffff" stroke="#16a34a" stroke-width="4"/>
+    <circle cx="886" cy="806" r="10" fill="#16a34a"/>
+    <text x="914" y="814.3333333333334" fill="#14213d" font-size="25" font-weight="700">panPosition</text>
+    
+    <rect x="1236" y="770" width="314" height="72" rx="28" fill="#ffffff" stroke="#e11d48" stroke-width="4"/>
+    <circle cx="1272" cy="806" r="10" fill="#e11d48"/>
+    <text x="1300" y="814.3333333333334" fill="#14213d" font-size="25" font-weight="700">handLandmarks</text>
+
+    
+    <rect x="1854" y="278" width="438" height="205" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1844" y="266" width="438" height="205" rx="30" fill="#f0fdf4" stroke="#16a34a" stroke-width="5"/>
+    <rect x="1844" y="266" width="14" height="205" rx="7" fill="#16a34a"/>
+    <text x="1890" y="324" fill="#14213d" font-size="36" font-weight="800">R3F useFrame</text>
+    
+    <text x="1890" y="378" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">60fps 读取控制总线</text>
+    <text x="1890" y="412.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">平滑插值与相机更新</text>
+    
+    <rect x="1854" y="560" width="438" height="205" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1844" y="548" width="438" height="205" rx="30" fill="#eff6ff" stroke="#2563eb" stroke-width="5"/>
+    <rect x="1844" y="548" width="14" height="205" rx="7" fill="#2563eb"/>
+    <text x="1890" y="606" fill="#14213d" font-size="36" font-weight="800">ModelViewer</text>
+    
+    <text x="1890" y="660" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">模型缩放 / 旋转 / 拖拽</text>
+    <text x="1890" y="694.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">标签、剖面、拆解动画</text>
+    
+    <rect x="1854" y="842" width="438" height="205" rx="30" fill="#0f172a" opacity="0.08"/>
+    <rect x="1844" y="830" width="438" height="205" rx="30" fill="#fff1f2" stroke="#e11d48" stroke-width="5"/>
+    <rect x="1844" y="830" width="14" height="205" rx="7" fill="#e11d48"/>
+    <text x="1890" y="888" fill="#14213d" font-size="36" font-weight="800">课堂画面</text>
+    
+    <text x="1890" y="942" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">三维模型即时响应</text>
+    <text x="1890" y="976.56" fill="#5f6c7b" font-size="27" font-weight="500" text-anchor="start" opacity="1">教师演示与学生观察</text>
+
+    
+    <defs>
+      <marker id="arrow-41501" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#00a6a6"/>
+      </marker>
+    </defs>
+    <path d="M 566 368 L 850 510" fill="none" stroke="#00a6a6" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-41501)"/>
+    <text x="708" y="421" fill="#00a6a6" font-size="25" font-weight="700" text-anchor="middle">30fps 手势</text>
+    
+    <defs>
+      <marker id="arrow-50803" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#7c3aed"/>
+      </marker>
+    </defs>
+    <path d="M 566 650 L 850 706" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-50803)"/>
+    <text x="708" y="660" fill="#7c3aed" font-size="25" font-weight="700" text-anchor="middle">语音工具调用</text>
+    
+    <defs>
+      <marker id="arrow-58127" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#f59e0b"/>
+      </marker>
+    </defs>
+    <path d="M 566 932 L 850 816" fill="none" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-58127)"/>
+    <text x="708" y="856" fill="#f59e0b" font-size="25" font-weight="700" text-anchor="middle">模型 / 图片</text>
+    
+    <defs>
+      <marker id="arrow-72548" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#16a34a"/>
+      </marker>
+    </defs>
+    <path d="M 1550 523 L 1844 368" fill="none" stroke="#16a34a" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-72548)"/>
+    <text x="1697" y="427.5" fill="#16a34a" font-size="25" font-weight="700" text-anchor="middle">每帧读取</text>
+    
+    <defs>
+      <marker id="arrow-82145" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#2563eb"/>
+      </marker>
+    </defs>
+    <path d="M 1550 706 L 1844 650" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-82145)"/>
+    <text x="1697" y="660" fill="#2563eb" font-size="25" font-weight="700" text-anchor="middle">状态驱动</text>
+    
+    <defs>
+      <marker id="arrow-90501" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L14,8 L2,14 Z" fill="#e11d48"/>
+      </marker>
+    </defs>
+    <path d="M 1550 816 L 1844 932" fill="none" stroke="#e11d48" stroke-width="5" stroke-linecap="round"  marker-end="url(#arrow-90501)"/>
+    <text x="1697" y="856" fill="#e11d48" font-size="25" font-weight="700" text-anchor="middle">视觉反馈</text>
+
+    <rect x="754" y="1082" width="892" height="106" rx="32" fill="#f8fafc" stroke="#c8d2df" stroke-width="3"/>
+    <text x="1200" y="1146" fill="#334155" font-size="31" font-weight="800" text-anchor="middle">技术亮点：高频控制用 Ref，低频 UI 用 State，兼顾流畅交互与清晰状态管理。</text>
+  
+  <text x="112" y="1282" fill="#5f6c7b" font-size="24" font-weight="600">慧视课堂 | 多智能体 3D 教学演示系统</text>
+  <text x="2288" y="1282" fill="#5f6c7b" font-size="24" font-weight="600" text-anchor="end">Press Architecture Diagram</text>
+</svg>
