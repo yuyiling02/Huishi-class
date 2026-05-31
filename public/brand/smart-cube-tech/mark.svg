@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <!-- Top Face Gradient -->
+    <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A4F4FD" />
+      <stop offset="100%" stop-color="#00D2FF" />
+    </linearGradient>
+    <!-- Left Face Gradient -->
+    <linearGradient id="leftGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3D81E3" />
+      <stop offset="100%" stop-color="#1B4990" />
+    </linearGradient>
+    <!-- Right Face Gradient -->
+    <linearGradient id="rightGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#001A33" />
+      <stop offset="100%" stop-color="#05070A" />
+    </linearGradient>
+    <!-- Inner Glow -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <g transform="translate(100, 100) scale(0.8)">
+    <!-- Top Face -->
+    <polygon points="0,-86.6 75,-43.3 0,0 -75,-43.3" fill="url(#topGrad)" stroke="#00D2FF" stroke-width="2" />
+    <!-- Left Face -->
+    <polygon points="-75,-43.3 0,0 0,86.6 -75,43.3" fill="url(#leftGrad)" stroke="#3D81E3" stroke-width="2" />
+    <!-- Right Face -->
+    <polygon points="0,0 75,-43.3 75,43.3 0,86.6" fill="url(#rightGrad)" stroke="#1B4990" stroke-width="2" />
+    
+    <!-- Central Core -->
+    <circle cx="0" cy="0" r="15" fill="#FFFFFF" filter="url(#glow)" />
+    <!-- Inner circuit lines -->
+    <path d="M 0,-20 L 0,-40 M -17,10 L -35,20 M 17,10 L 35,20" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity="0.8" />
+  </g>
+</svg>
