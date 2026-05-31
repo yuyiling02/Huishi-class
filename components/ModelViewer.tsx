@@ -1796,14 +1796,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
   }, [controlRef, lowerModelUrl]);
 
   return (
-    <div className="w-full h-full bg-white relative">
+    <div className="w-full h-full bg-transparent relative">
       <Canvas
         shadows
         dpr={[1, 2]}
         camera={{ position: [3.5, 4, 3.5], fov: 45, near: 0.1, far: 100 }}
-        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, alpha: false }}
+        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, alpha: true }}
         raycaster={{ far: 100 }}
-        onCreated={({ gl }) => { gl.setClearColor('#ffffff'); }}
+        onCreated={({ gl }) => { gl.setClearColor('#020812', 0); }}
       >
         <Suspense fallback={null}>
           {/* ---- Lighting — warm & soft (from 环境 package) ---- */}
@@ -1829,9 +1829,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
 
           {/* ---- Local environment reflections ---- */}
           <LocalEnvironment />
-
-          {/* ---- Grid Floor ---- */}
-          <GridFloor />
 
           {/* ---- Uploaded Model ---- */}
           {lowerModelUrl.includes('terrain-topography') ? (

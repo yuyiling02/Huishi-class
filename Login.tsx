@@ -104,7 +104,7 @@ const Login: React.FC<LoginProps> = ({ onStart }) => {
         <div className="flex flex-col items-center text-center">
 
           <h1 className="text-7xl md:text-8xl font-black tracking-[0.3em] mb-12 flex cursor-pointer" title="Hui Shi System">
-          {"慧视课堂".split('').map((char, index) => (
+          {"数智课堂".split('').map((char, index) => (
             <span 
               key={index} 
               className="inline-block text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-gray-400 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] transition-all duration-300 hover:text-white hover:drop-shadow-[0_0_30px_rgba(255,255,255,0.8)] relative"

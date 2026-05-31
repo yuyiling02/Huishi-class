@@ -1,5 +1,5 @@
 {
-  "name": "慧视课堂 | 多智能体 3D 教学演示系统",
+  "name": "数智课堂 | 多智能体 3D 教学演示系统",
   "description": "集成理解规划Agent、演示执行Agent、学情评估Agent的 3D 教具展示系统，支持模型工具调用、自动拆解、手势与语音控制。",
   "requestFramePermissions": [
     "camera",

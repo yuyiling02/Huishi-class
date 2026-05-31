@@ -74,7 +74,7 @@ function HeartMockup() {
 
 // === Primitive UI Components ===
 const LogoMark = () => (
-  <img src="/brand/smart-cube-tech/mark.svg" alt="慧视课堂 Logo" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(0,210,255,0.4)]" />
+  <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(0,210,255,0.4)]" />
 );
 
 const AppleLogo = ({ className = "w-3.5 h-3.5" }) => (
@@ -120,6 +120,12 @@ const HoverText = ({ text, className, style, charClassName, charStyle, gradientS
 // === Main Page Component ===
 export default function LandingPage({ onEnter }: { onEnter: () => void }) {
   const [time, setTime] = useState("");
+  const [isExiting, setIsExiting] = useState(false);
+
+  const handleEnterClick = () => {
+    setIsExiting(true);
+    setTimeout(onEnter, 800);
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -158,16 +164,16 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
         </filter>
       </svg>
 
-      <div className="relative z-10">
+      <div className={`relative z-10 transition-opacity duration-700 ease-in-out ${isExiting ? 'opacity-0' : 'opacity-100'}`}>
         
         {/* 2. Navbar */}
         <motion.nav 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="max-w-[76rem] mx-auto px-6 h-20 flex items-center relative sticky top-0 backdrop-blur-xl border-b border-white/[0.05] z-50 bg-[#0c0c0c]/50"
+          className="w-full px-10 h-20 flex items-center relative sticky top-0 backdrop-blur-xl border-b border-white/[0.05] z-50 bg-[#0c0c0c]/50"
         >
-          <div className="flex items-center gap-2 cursor-pointer absolute left-6">
+          <div className="flex items-center gap-2 cursor-pointer absolute left-10">
             <LogoMark />
           </div>
           <div className="hidden md:flex items-center justify-center gap-8 w-full">
@@ -176,35 +182,33 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
                 key={item} href="#"
                 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + i * 0.1 }}
-                className={`text-sm font-bold transition-colors relative pb-1 ${item === '教学方案' ? 'text-[#00d2ff]' : 'text-white/60 hover:text-white'}`}
+                className="text-sm font-bold text-white/60 hover:text-[#00d2ff] transition-colors relative pb-1 group"
               >
                 {item}
-                {item === '教学方案' && (
-                  <div className="absolute -bottom-1.5 left-0 w-full h-[2px] bg-[#00d2ff] shadow-[0_0_8px_#00d2ff] rounded-full"></div>
-                )}
+                <div className="absolute -bottom-1.5 left-0 w-full h-[2px] bg-[#00d2ff] shadow-[0_0_8px_#00d2ff] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
               </motion.a>
             ))}
           </div>
-          <button className="md:hidden w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10">
+          <button className="md:hidden absolute right-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10">
             <Menu className="w-5 h-5" />
           </button>
         </motion.nav>
 
         {/* 3. Hero 首屏 */}
-        <section className="pt-24 md:pt-36 pb-24 text-center px-4 flex flex-col items-center">
+        <section className="pt-16 md:pt-28 pb-20 text-center px-4 flex flex-col items-center">
           <motion.h1 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl md:text-[5.5rem] font-bold tracking-tight leading-[1.1] flex flex-col items-center"
+            className="flex flex-col items-center leading-[1.15]"
           >
             <HoverText 
-              text="你的专属 3D 互动教具库。" 
-              className="text-white drop-shadow-lg flex" 
+              text="你的专属 3D 互动教具库" 
+              className="text-5xl md:text-[5.5rem] font-bold text-white/90 drop-shadow-lg flex tracking-tight mb-2" 
             />
             <HoverText 
-              text="慧视课堂" 
-              className="mt-2 pb-2 flex" 
+              text="数智课堂" 
+              className="text-6xl md:text-[6.5rem] font-black mt-2 pb-2 flex tracking-wider" 
               charClassName="animate-shiny"
               gradientSpan={true}
               charStyle={{
@@ -232,7 +236,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
             className="mt-12 flex flex-col items-center gap-4"
           >
             <button 
-              onClick={onEnter}
+              onClick={handleEnterClick}
               className="group inline-flex items-center justify-center gap-2 rounded-full border-2 border-[#00d2ff]/80 bg-[#001a33]/40 text-[#00d2ff] font-bold text-base px-10 py-3.5 transition-all hover:bg-[#00d2ff]/20 hover:scale-105 active:scale-95 shadow-[0_0_25px_rgba(0,210,255,0.4)] hover:shadow-[0_0_40px_rgba(0,210,255,0.7)] mt-2 backdrop-blur-sm"
             >
               立即体验
@@ -244,29 +248,6 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
           </motion.div>
         </section>
 
-        {/* 4. macOS 风格系统条 */}
-        <motion.div 
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}
-          className="w-full h-8 bg-black/60 backdrop-blur-md border-t border-b border-white/10"
-        >
-          <div className="max-w-[76rem] mx-auto px-4 h-full flex items-center justify-between text-[13px] font-medium tracking-wide">
-            <div className="flex items-center gap-4">
-              <AppleLogo className="w-3.5 h-3.5" />
-              <span className="font-bold text-white pr-2">慧视课堂</span>
-              <div className="hidden sm:flex items-center gap-4 text-white/80">
-                {['文件', '编辑', '视图', '工具', '窗口', '帮助'].map(item => (
-                  <span key={item} className="hover:text-white hover:bg-white/10 px-2 py-0.5 rounded cursor-default transition-colors">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-4 text-white/80">
-              <Search className="w-4 h-4 hover:text-white cursor-pointer" />
-              <span className="hidden sm:inline">{time || "正在获取时间..."}</span>
-            </div>
-          </div>
-        </motion.div>
 
         {/* 5. 核心产品展示区 (3D 控制台 Mockup) */}
         <section className="max-w-[76rem] mx-auto px-6 py-20 relative z-20">
@@ -285,7 +266,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
                 <button className="w-3.5 h-3.5 rounded-full bg-[#28c840] flex items-center justify-center group hover:bg-[#28c840]/80"><Maximize2 className="w-2.5 h-2.5 text-black/50 opacity-0 group-hover:opacity-100 p-0.5" /></button>
               </div>
               <div className="w-full text-center text-xs font-semibold text-white/50 tracking-wider">
-                慧视课堂 — 教具库
+                数智课堂 — 教具库
               </div>
             </div>
 
@@ -426,10 +407,10 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
               <SectionEyebrow label="多模态智能" />
               <h2 className="mt-6 text-4xl md:text-5xl font-bold tracking-tight leading-[1.1]">
                 打破屏幕边界的<br/>
-                <span className="text-[#00d2ff]">沉浸教学体验。</span>
+                <span className="text-[#00d2ff]">沉浸教学体验</span>
               </h2>
               <p className="mt-6 text-white/60 text-lg leading-relaxed max-w-lg">
-                慧视课堂不仅是一个教具云盘，更是一个懂你的教学引擎。通过空间计算和 AI 大模型，让每个教具都“活”起来。
+                数智课堂不仅是一个教具云盘，更是一个懂你的教学引擎。通过空间计算和 AI 大模型，让每个教具都“活”起来。
               </p>
               
               <div className="mt-10 grid grid-cols-2 gap-4">
@@ -521,11 +502,11 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
         {/* 8. Testimonials */}
         <section className="max-w-[76rem] mx-auto px-6 py-24 border-t border-white/5">
           <SectionEyebrow label="教育者的声音" />
-          <h2 className="mt-4 text-3xl font-bold mb-12">一线名师的真实反馈。</h2>
+          <h2 className="mt-4 text-3xl font-bold mb-12">一线名师的真实反馈</h2>
           <div className="grid md:grid-cols-3 gap-6">
             {[
               {
-                quote: "慧视课堂让原本干瘪的 PPT 彻底进化。当我用手势在空中旋转地球仪，并放大地壳切面时，班里学生们的眼神里充满了震撼，专注度空前提高。",
+                quote: "数智课堂让原本干瘪的 PPT 彻底进化。当我用手势在空中旋转地球仪，并放大地壳切面时，班里学生们的眼神里充满了震撼，专注度空前提高。",
                 name: "张老师", role: "省级骨干教师", subject: "地理"
               },
               {
@@ -567,10 +548,10 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
           {/* 巨大的背景水印文字 */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[1200px] text-center z-0 pointer-events-none px-4">
             <div className="text-6xl md:text-[8rem] font-black tracking-tighter leading-[0.85] opacity-20 pricing-watermark">
-              慧视课堂
+              数智课堂
             </div>
             <div className="text-4xl md:text-[5rem] font-bold text-white/5 tracking-tight mt-4">
-              你的专属教具库。
+              你的专属教具库
             </div>
           </div>
           
@@ -637,7 +618,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
         <footer className="py-8 border-t border-white/5 text-center flex flex-col items-center">
           <LogoMark />
           <div className="mt-4 text-xs text-white/30 font-medium tracking-wide">
-            &copy; 2026 慧视课堂 · AI 互动教学平台. All rights reserved.
+            &copy; 2026 数智课堂 · AI 互动教学平台. All rights reserved.
           </div>
         </footer>
       </div>

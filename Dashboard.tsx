@@ -58,7 +58,14 @@ const RECONSTRUCTION_STEPS = [
   "导出交互式 GLB 模型"
 ];
 
-const App: React.FC = () => {
+const INTRO_INSTRUCTION =
+  '右手捏合：拖拽 | 右手食指中指并拢：控制旋转\n左手张开/闭合：缩放';
+
+interface DashboardProps {
+  playIntro?: boolean;
+}
+
+const App: React.FC<DashboardProps> = ({ playIntro = true }) => {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [modelType, setModelType] = useState<ModelType>('glb');
   const [modelAssetUrls, setModelAssetUrls] = useState<Record<string, string>>({});
@@ -75,6 +82,8 @@ const App: React.FC = () => {
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [introReady, setIntroReady] = useState(!playIntro);
+  const [streamedInstruction, setStreamedInstruction] = useState(playIntro ? '' : INTRO_INSTRUCTION);
   const [aiAnalysis, setAiAnalysis] = useState('等待指令中...');
 
   // Hand/Voice state
@@ -178,6 +187,36 @@ const App: React.FC = () => {
       label: ''
     }
   });
+
+  useEffect(() => {
+    if (!playIntro) {
+      setIntroReady(true);
+      setStreamedInstruction(INTRO_INSTRUCTION);
+      return;
+    }
+
+    setIntroReady(false);
+    setStreamedInstruction('');
+
+    let streamInterval: number | undefined;
+    const readyTimer = window.setTimeout(() => setIntroReady(true), 2000);
+    const streamStartTimer = window.setTimeout(() => {
+      let index = 0;
+      streamInterval = window.setInterval(() => {
+        index += 1;
+        setStreamedInstruction(INTRO_INSTRUCTION.slice(0, index));
+        if (index >= INTRO_INSTRUCTION.length && streamInterval) {
+          window.clearInterval(streamInterval);
+        }
+      }, 58);
+    }, 2100);
+
+    return () => {
+      window.clearTimeout(readyTimer);
+      window.clearTimeout(streamStartTimer);
+      if (streamInterval) window.clearInterval(streamInterval);
+    };
+  }, [playIntro]);
 
   useEffect(() => {
     if (expandedStructureImage && expandedStructureImage !== modelStructureImage) {
@@ -344,7 +383,6 @@ const App: React.FC = () => {
       setModelAssetUrls(nextAssetUrls);
       setFileName(modelFile.name);
       resetControls();
-      setCameraActive(true);
       setAiAnalysis(`模型已加载: ${modelFile.name}，将按内部层级自动启用拆解`);
       event.target.value = '';
     }
@@ -366,7 +404,6 @@ const App: React.FC = () => {
 
   const loadHeartFallbackModel = () => {
     loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb');
-    setCameraActive(true);
   };
 
   const loadTeachingModel = (modelId: TeachingModelId) => {
@@ -374,7 +411,6 @@ const App: React.FC = () => {
       case 'heart':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb');
-        setCameraActive(true);
         return;
       case 'biodigital_heart':
         showBioDigitalStage();
@@ -382,48 +418,39 @@ const App: React.FC = () => {
       case 'hiv':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.hiv, 'HIV 病毒模型', 'glb');
-        setCameraActive(true);
         return;
       case 'diamond':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb');
-        setCameraActive(true);
         return;
       case 'diamond_unit_cell':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb');
-        setCameraActive(true);
         return;
       case 'pubchem_6233':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb');
-        setCameraActive(true);
         return;
       case 'nacl':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.nacl, 'NaCl 离子晶体', 'glb');
-        setCameraActive(true);
         return;
       case 'sio2':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.sio2, 'SiO₂ 二氧化硅网络', 'glb');
-        setCameraActive(true);
         return;
       case 'nitrobenzene':
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb');
-        setCameraActive(true);
         return;
       case 'terrain':
         showModelStage();
         loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb');
-        setCameraActive(true);
         return;
       case 'earth_layers':
       default:
         showModelStage();
         loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb');
-        setCameraActive(true);
     }
   };
 
@@ -513,7 +540,6 @@ const App: React.FC = () => {
         }
         case 'enable_gesture':
           if (activeContent === 'model') {
-            setCameraActive(true);
           }
           await sleep(300);
           break;
@@ -735,18 +761,21 @@ const App: React.FC = () => {
   }, [zoomSpeedMultiplier, rotationSpeedMultiplier]);
 
   return (
-    <div className="flex flex-col h-screen text-slate-700">
+    <div className={`lab-shell flex h-screen flex-col overflow-hidden text-white ${playIntro ? 'lab-intro' : ''}`}>
+      <div className="lab-stars" aria-hidden="true" />
+      <div className="lab-ambient lab-ambient-left" aria-hidden="true" />
+      <div className="lab-ambient lab-ambient-bottom" aria-hidden="true" />
       {/* 顶部导航 */}
-      <nav className="h-20 px-8 flex items-center justify-between z-50">
+      <nav className="relative z-50 flex h-[84px] items-center justify-between px-7">
         <div className="flex items-center space-x-3">
-          <img src="/brand/smart-cube-tech/mark.svg" alt="慧视课堂 Logo" className="w-10 h-10 animate-pulse drop-shadow-md" />
+          <img src="/brand/smart-cube-tech/mark.svg" alt="慧视课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(39,242,255,0.46)]" />
           <div className="flex flex-col">
-            <span className="text-xl font-black text-gray-700 tracking-tight">慧视课堂</span>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">AI 沉浸式教学系统</span>
+            <span className="text-xl font-black tracking-tight text-white">慧视课堂</span>
+            <span className="text-xs font-semibold tracking-wide text-slate-400">AI 沉浸式教学系统</span>
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-5">
           <div className="relative group">
             <input
               type="file"
@@ -755,7 +784,7 @@ const App: React.FC = () => {
               disabled={isProcessing}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
-            <button className="px-6 py-2 rounded-full glass-panel text-gray-600 hover:bg-white flex items-center transition-all hover:scale-105 active:scale-95 shadow-sm">
+            <button className="lab-pill-button">
               <Sparkles className="mr-2 text-[#86e3ce]" size={18} /> 图片转 3D
             </button>
           </div>
@@ -768,27 +797,27 @@ const App: React.FC = () => {
               onChange={handleModelUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
-            <button className="px-6 py-2 rounded-full glass-panel text-orange-400 hover:text-orange-600 flex items-center transition-all hover:bg-orange-50">
+            <button className="lab-pill-button">
               <Download className="mr-2 text-orange-300" size={18} /> 导入模型
             </button>
           </div>
 
-          <div className="w-11 h-11 rounded-full border-4 border-white shadow-md overflow-hidden bg-white">
-            <div className="w-full h-full bg-[#86e3ce] text-white flex items-center justify-center font-black text-sm">AI</div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#3ff6ff]/70 bg-[#09222b]/80 text-lg font-black text-[#6dfcff] shadow-[0_0_24px_rgba(39,242,255,0.45),inset_0_0_18px_rgba(39,242,255,0.32)]">
+            AI
           </div>
         </div>
       </nav>
 
       {/* 主体区域 */}
-      <main className="flex-1 flex px-6 pb-6 gap-6 overflow-hidden">
+      <main className="relative z-10 flex flex-1 gap-5 overflow-hidden px-6 pb-6">
         {/* 侧边栏 */}
-        <aside className={`glass-panel rounded-[32px] flex shrink-0 flex-col animate-in slide-in-from-left-8 duration-700 transition-all ${isSidebarCollapsed ? 'w-20 items-center p-3 overflow-hidden' : 'w-72 p-6 overflow-y-auto'}`}>
+        <aside className={`lab-sidebar flex shrink-0 flex-col transition-all ${playIntro ? 'lab-sidebar-enter' : ''} ${isSidebarCollapsed ? 'w-[86px] items-center overflow-hidden p-3' : 'lab-sidebar-expanded w-72 overflow-y-auto p-6'}`}>
           {isSidebarCollapsed ? (
             <>
               <button
                 type="button"
                 onClick={() => setIsSidebarCollapsed(false)}
-                className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/70 text-gray-500 shadow-sm transition hover:bg-white hover:text-gray-800"
+                className="lab-icon-button mb-5"
                 aria-label="展开资源库"
                 title="展开资源库"
               >
@@ -798,28 +827,28 @@ const App: React.FC = () => {
               <div className="flex w-full flex-col items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); setCameraActive(true); }}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl text-blue-400 transition hover:bg-blue-50/60"
+                  onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); }}
+                  className="lab-icon-button text-[#09baff]"
                   aria-label="化学"
                   title="化学 · 金刚石模型"
                 >
                   <FlaskConical size={19} />
                 </button>
-                <div className="h-px w-6 bg-white/40" />
+                <div className="my-2 h-px w-8 bg-white/5" />
                 <button
                   type="button"
-                  onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); setCameraActive(true); }}
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition hover:bg-rose-50/60 ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-white/80 text-rose-500 shadow-sm' : 'text-rose-400'}`}
+                  onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); }}
+                  className={`lab-icon-button ${modelUrl === BUILT_IN_MODELS.heart ? 'is-active text-[#ff5f7f]' : 'text-[#ff5f7f]'}`}
                   aria-label="生物"
                   title="生物 · 心脏/HIV 病毒"
                 >
                   <Heart size={19} />
                 </button>
-                <div className="h-px w-6 bg-white/40" />
+                <div className="my-2 h-px w-8 bg-white/5" />
                 <button
                   type="button"
-                  onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }}
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition hover:bg-emerald-50/60 ${modelUrl === '/models/earth-layers.glb' ? 'bg-white/80 text-emerald-600 shadow-sm' : 'text-emerald-500'}`}
+                  onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); }}
+                  className={`lab-icon-button ${modelUrl === '/models/earth-layers.glb' ? 'is-active text-[#20e58d]' : 'text-[#20e58d]'}`}
                   aria-label="地理"
                   title="地理 · 地球内部结构/地形地貌"
                 >
@@ -837,11 +866,11 @@ const App: React.FC = () => {
                     }
                     setCameraActive(!cameraActive);
                   }}
-                  className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition ${activeContent === 'biodigital'
-                    ? 'border-white/70 bg-white/50 text-gray-400'
+                  className={`lab-icon-button h-14 w-14 ${activeContent === 'biodigital'
+                    ? 'text-slate-500'
                     : cameraActive
-                    ? 'border-red-100 bg-red-50 text-red-600'
-                    : 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                    ? 'is-active text-red-400'
+                    : 'text-slate-500 hover:text-[#22f4df]'
                     }`}
                   aria-label={activeContent === 'biodigital' ? '心脏模型2 URL 交互' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
                   title={activeContent === 'biodigital' ? '心脏模型2 URL 交互' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
@@ -929,16 +958,16 @@ const App: React.FC = () => {
                             <span className="text-[10px] font-black text-violet-400/70 uppercase tracking-wider">化学分子</span>
                           </div>
                           <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamond, '金刚石模型', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamond ? 'bg-violet-500 animate-pulse' : 'bg-violet-300'}`}></span>金刚石模型
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.diamondUnitCell, '金刚石晶胞', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.diamondUnitCell ? 'bg-fuchsia-500 animate-pulse' : 'bg-fuchsia-300'}`}></span>金刚石晶胞
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.pubchem6233, '1,4-二氯甲基苯', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.pubchem6233 ? 'bg-sky-500 animate-pulse' : 'bg-sky-300'}`}></span>1,4-二氯甲基苯
                             </div>
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-blue-100/60 text-blue-600' : 'text-gray-500 hover:bg-blue-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.nitrobenzene ? 'bg-orange-500 animate-pulse' : 'bg-orange-300'}`}></span>硝基苯
                             </div>
                             <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
@@ -980,7 +1009,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] font-black text-rose-400/70 uppercase tracking-wider">人体解剖</span>
                           </div>
                           <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.heart, '心脏模型1', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.heart ? 'bg-rose-500 animate-pulse' : 'bg-rose-300'}`}></span>心脏模型1
                             </div>
                             <div aria-disabled="true" title="暂不可用" className="py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-not-allowed transition-colors bg-gray-50/40 text-gray-300 opacity-70">
@@ -994,7 +1023,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] font-black text-green-400/70 uppercase tracking-wider">病毒模型</span>
                           </div>
                           <div className="space-y-0.5">
-                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.hiv, 'HIV 病毒模型', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
+                            <div onClick={() => { showModelStage(); loadDemoModel(BUILT_IN_MODELS.hiv, 'HIV 病毒模型', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-rose-100/60 text-rose-600' : 'text-gray-500 hover:bg-rose-50/40'}`}>
                               <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === BUILT_IN_MODELS.hiv ? 'bg-green-500 animate-pulse' : 'bg-green-300'}`}></span>HIV 病毒模型
                             </div>
                           </div>
@@ -1024,10 +1053,10 @@ const App: React.FC = () => {
                     </button>
                     {expandedCategories.has('地理') && (
                       <div className="px-2 pb-2 space-y-0.5">
-                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/earth-layers.glb', '地球内部结构', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/earth-layers.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}></span>地球内部结构
                         </div>
-                        <div onClick={() => { showModelStage(); loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb'); setCameraActive(true); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
+                        <div onClick={() => { showModelStage(); loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb'); }} className={`py-1.5 px-2.5 rounded-lg flex items-center text-xs font-medium cursor-pointer transition-colors ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-100/60 text-emerald-600' : 'text-gray-500 hover:bg-emerald-50/40'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full mr-2 ${modelUrl === '/models/terrain-topography.glb' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-300'}`}></span>地形地貌总览
                         </div>
                       </div>
@@ -1264,7 +1293,12 @@ const App: React.FC = () => {
         </aside>
 
         {/* 视口展示区 */}
-        <section ref={stageRef} className={`flex-1 glass-panel relative overflow-hidden group bg-white ${isStageFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-[32px]'}`}>
+        <section ref={stageRef} className={`lab-stage relative flex-1 overflow-hidden group ${isStageFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-[30px]'} ${playIntro ? 'lab-stage-enter' : ''}`}>
+          <div className="lab-stage-grid" aria-hidden="true" />
+          <div className="lab-orbit lab-orbit-one" aria-hidden="true" />
+          <div className="lab-orbit lab-orbit-two" aria-hidden="true" />
+          <div className="lab-wire-cube lab-wire-cube-left" aria-hidden="true" />
+          <div className="lab-wire-cube lab-wire-cube-right" aria-hidden="true" />
 
           {isProcessing && (
             <ProcessingOverlay
@@ -1435,15 +1469,15 @@ const App: React.FC = () => {
 
           <div className="absolute top-6 right-6 flex gap-2 z-40">
             {activeContent === 'model' && (
-              <div className={`px-4 py-2 rounded-xl bg-white/80 backdrop-blur-md text-[10px] font-bold shadow-sm flex items-center gap-2 ${cameraActive ? 'text-emerald-500' : 'text-gray-400'}`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${cameraActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></div>
+              <div className={`lab-stage-chip ${cameraActive ? 'text-[#28f4d8]' : 'text-slate-400'}`}>
+                <div className={`h-2 w-2 rounded-full ${cameraActive ? 'bg-[#28f4d8] shadow-[0_0_10px_#28f4d8] animate-pulse' : 'bg-sky-400/50'}`}></div>
                 {cameraActive ? 'AI 动势追踪' : '手势已关闭'}
               </div>
             )}
             <button
               type="button"
               onClick={toggleStageFullscreen}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-gray-500 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-gray-800"
+              className="lab-square-button"
               aria-label={isStageFullscreen ? '退出全屏' : '展示区全屏'}
               title={isStageFullscreen ? '退出全屏' : '展示区全屏'}
             >
@@ -1452,26 +1486,32 @@ const App: React.FC = () => {
           </div>
 
           {/* 3D 模型层 */}
-          <div className="w-full h-full transition-opacity duration-300 opacity-100">
+          <div className="relative z-10 w-full h-full transition-opacity duration-300 opacity-100">
             {activeContent === 'biodigital' ? (
               <BioDigitalViewer src={BIODIGITAL_HEART_URL} onFallback={loadHeartFallbackModel} />
             ) : modelUrl ? (
               <ModelViewer modelUrl={modelUrl} modelType={modelType} assetUrls={modelAssetUrls} controlRef={controlRef} showLabels={showLabels} onShowLabelsChange={setShowLabels} />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-white/20">
-                <div className="relative mb-8">
-                  <div className="absolute inset-0 bg-[#86e3ce]/10 blur-[80px] rounded-full"></div>
-                  <div className="relative w-40 h-40 bg-white/80 rounded-[40px] shadow-xl border border-white flex items-center justify-center">
-                    <Box className="text-[#86e3ce] w-20 h-20 animate-spin-slow" strokeWidth={1} />
-                  </div>
+              <div className="lab-welcome">
+                <div className={`lab-cube-card ${playIntro ? 'lab-cube-enter' : ''}`}>
+                  <Box className="lab-cube-icon" strokeWidth={1.55} />
                 </div>
-                <div className="text-center px-8">
-                  <h2 className="text-2xl font-black text-gray-700 mb-2">欢迎来到 3D AI 实验室</h2>
-                  <p className="text-gray-400 text-sm font-medium max-w-[360px] leading-relaxed">
-                    <b>交互指令更新：</b><br />
-                    右手捏合：拖拽 | 右手双指并拢+滑动：控制旋转<br />
-                    左手张开/闭合：缩放 | 双手协同：精细控制模型
-                  </p>
+                <div className={`lab-welcome-copy ${introReady ? 'is-ready' : ''}`}>
+                  <h2 className="lab-welcome-title">
+                    欢迎来到 <span>3D AI 实验室</span>
+                  </h2>
+                  <div className="lab-stream">
+                    <b>交互指令：</b>
+                    <p>
+                      {streamedInstruction.split('\n').map((line, index) => (
+                        <React.Fragment key={index}>
+                          {line}
+                          {index < streamedInstruction.split('\n').length - 1 && <br />}
+                        </React.Fragment>
+                      ))}
+                      {streamedInstruction.length < INTRO_INSTRUCTION.length && <span className="lab-stream-cursor" />}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -1490,7 +1530,7 @@ const App: React.FC = () => {
         </section>
       </main>
 
-      <footer className="h-8 px-10 flex items-center justify-between text-[10px] text-gray-400 uppercase tracking-widest font-bold bg-white/30 backdrop-blur-sm">
+      <footer className="relative z-10 flex h-8 items-center px-7 text-[11px] font-bold tracking-wider text-slate-500">
         <span>© 2026 慧视课堂 | 教育 AI 实验室</span>
       </footer>
     </div>

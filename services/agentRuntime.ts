@@ -310,7 +310,7 @@ export const buildTeachingPlan = async (request: string): Promise<AgentPlan> => 
       {
         role: 'system',
         content: [
-          '你是慧视课堂的理解规划Agent。',
+          '你是数智课堂的理解规划Agent。',
           '请把用户的教学需求转成可执行的3D教具演示计划。',
           '只能输出JSON对象，不要输出Markdown。',
           'modelId只能是 heart, biodigital_heart, hiv, diamond, diamond_unit_cell, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene 之一。',
@@ -348,7 +348,7 @@ export const buildKnowledgeExplanation = async (
         {
           role: 'system',
           content: [
-            '你是慧视课堂的知识讲解Agent。',
+            '你是数智课堂的知识讲解Agent。',
             '根据用户的教学需求和当前展示的3D模型，生成适合中学生理解的教学知识内容。',
             '语气像课堂老师讲解，通俗易懂，内容准确、有条理。',
             '用纯文本输出，不要使用JSON或Markdown格式。',

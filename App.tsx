@@ -2,12 +2,18 @@ import React, { useState } from 'react';
 import Landing from './Landing';
 import Dashboard from './Dashboard';
 
-export default function App() {
-  const [started, setStarted] = useState(false);
+type AppView = 'landing' | 'transitioning' | 'dashboard';
 
-  if (!started) {
-    return <Landing onEnter={() => setStarted(true)} />;
+export default function App() {
+  const [view, setView] = useState<AppView>('landing');
+
+  const handleEnter = () => {
+    setView('dashboard');
+  };
+
+  if (view === 'landing') {
+    return <Landing onEnter={handleEnter} />;
   }
 
-  return <Dashboard />;
+  return <Dashboard playIntro />;
 }
