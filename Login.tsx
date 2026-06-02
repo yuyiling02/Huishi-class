@@ -1,141 +1,244 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Fingerprint } from 'lucide-react';
+import React, { FormEvent, useMemo, useState } from 'react';
+import { ArrowLeft, Fingerprint, Lock, ShieldCheck, UserPlus } from 'lucide-react';
 
-interface LoginProps {
-  onStart: () => void;
+export type AuthRole = 'user' | 'admin';
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+  role: AuthRole;
+  status: 'active' | 'disabled';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-const Login: React.FC<LoginProps> = ({ onStart }) => {
-  const [mounted, setMounted] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
+interface LoginProps {
+  onAuthenticated: (user: AuthUser) => void;
+  onBack: () => void;
+}
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+type AuthMode = 'login' | 'register' | 'admin';
 
-  const handleStart = () => {
-    setIsStarting(true);
-    setTimeout(() => {
-      onStart();
-    }, 800);
+const modeConfig = {
+  login: {
+    title: '用户登录',
+    subtitle: '进入 3D 智慧课堂控制台',
+    icon: Fingerprint,
+    endpoint: '/api/auth/login',
+    submit: '登录',
+  },
+  register: {
+    title: '用户注册',
+    subtitle: '创建普通用户账号后直接进入课堂',
+    icon: UserPlus,
+    endpoint: '/api/auth/register',
+    submit: '注册并进入',
+  },
+  admin: {
+    title: '管理员登录',
+    subtitle: '进入用户管理后台',
+    icon: ShieldCheck,
+    endpoint: '/api/auth/admin/login',
+    submit: '管理员登录',
+  },
+} satisfies Record<AuthMode, {
+  title: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+  endpoint: string;
+  submit: string;
+}>;
+
+async function readError(response: Response) {
+  try {
+    const data = await response.json();
+    return data.message || '请求失败';
+  } catch {
+    return '请求失败';
+  }
+}
+
+const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const config = modeConfig[mode];
+  const ModeIcon = config.icon;
+  const helperText = useMemo(() => {
+    if (mode === 'register') return '用户名支持中文、字母、数字、下划线、短横线，或邮箱地址。';
+    if (mode === 'admin') return '管理员账号由系统管理员创建。';
+    return '使用已注册的普通用户账号登录。';
+  }, [mode]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setMessage('');
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+
+      const data = await response.json();
+      onAuthenticated(data.user);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '登录失败，请稍后重试');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-[#050914] flex flex-col items-center justify-center overflow-hidden font-sans select-none">
-      
-      {/* ================= 优雅渐变背景区 ================= */}
-      <div className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ${isStarting ? 'opacity-0' : 'opacity-100'}`}>
-        
-        {/* 左侧深紫晕染光效 */}
-        <div className="absolute top-[20%] left-[-10%] w-[60rem] h-[60rem] bg-purple-900/40 rounded-full blur-[150px] pointer-events-none mix-blend-screen"></div>
+    <div className="auth-login-page min-h-screen bg-[#030712] text-white overflow-hidden relative flex items-center justify-center px-5 py-10">
+      <div className="auth-login-bg absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(0,210,255,0.24),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(61,129,227,0.20),transparent_32%),linear-gradient(135deg,#030712_0%,#061326_48%,#04060d_100%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-[radial-gradient(ellipse_at_bottom,rgba(0,210,255,0.22),transparent_70%)]" />
 
-        {/* 右侧青色晕染光效 */}
-        <div className="absolute bottom-[10%] right-[-10%] w-[50rem] h-[50rem] bg-cyan-900/30 rounded-full blur-[150px] pointer-events-none mix-blend-screen"></div>
-        
-      </div>
+      <button
+        onClick={onBack}
+        className="fixed left-6 top-6 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition hover:bg-white/10 hover:text-white"
+        aria-label="返回首页"
+        title="返回首页"
+      >
+        <ArrowLeft className="h-5 w-5" />
+      </button>
 
-      {/* 科技感点缀元素 */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* 左上角十字准星 */}
-        <div className="absolute top-[15%] left-[10%] w-8 h-8 opacity-30">
-          <div className="absolute top-1/2 left-0 w-full h-[1px] bg-cyan-500/50"></div>
-          <div className="absolute top-0 left-1/2 w-[1px] h-full bg-cyan-500/50"></div>
-        </div>
-        {/* 右下角准星与刻度 */}
-        <div className="absolute bottom-[20%] right-[10%] opacity-20">
-          <div className="w-12 h-12 border-r border-b border-purple-500/50"></div>
-          <div className="text-purple-500/50 font-mono text-[10px] mt-2 tracking-widest">SYS.RDY // 90.2%</div>
-        </div>
-        {/* 散落的数据点 */}
-        <div className="absolute top-[30%] right-[25%] w-1 h-1 bg-cyan-400 rounded-full opacity-40 shadow-[0_0_8px_#00f0ff]"></div>
-        <div className="absolute bottom-[40%] left-[20%] w-1 h-1 bg-purple-400 rounded-full opacity-40 shadow-[0_0_8px_#a855f7]"></div>
-        <div className="absolute top-[60%] left-[8%] w-1.5 h-1.5 bg-white/40 rounded-full opacity-20"></div>
-        
-        {/* 顶部数据流条纹 */}
-        <div className="absolute top-[5%] left-1/2 -translate-x-1/2 flex gap-2 opacity-10">
-          <div className="w-8 h-1 bg-white"></div>
-          <div className="w-2 h-1 bg-white"></div>
-          <div className="w-1 h-1 bg-white"></div>
-          <div className="w-4 h-1 bg-white"></div>
-        </div>
-      </div>
-
-      {/* ================= 两侧全息结构投影区 (Holograms) ================= */}
-      <div className={`absolute inset-0 w-full h-full pointer-events-none transition-all duration-1000 ${mounted && !isStarting ? 'opacity-100' : 'opacity-0'}`}>
-        
-        {/* 左侧：金刚石结构与心脏结构 */}
-        <div className="absolute left-[3%] top-[8%] w-[280px] opacity-[0.05] mix-blend-screen animate-[float_15s_ease-in-out_infinite] blur-[1px]">
-          <img src="/images/diamond-structure.png" alt="Diamond Hologram" className="w-full h-auto drop-shadow-[0_0_15px_#00f0ff]" style={{ filter: 'hue-rotate(90deg) brightness(1.5)' }} />
-          <div className="mt-4 text-[#00f0ff] font-mono text-xs tracking-widest text-center border-t border-[#00f0ff]/30 pt-2">C-STRUCTURE // CARBON</div>
-        </div>
-        
-        <div className="absolute left-[6%] bottom-[8%] w-[250px] opacity-[0.05] mix-blend-screen animate-[float-delayed_12s_ease-in-out_infinite] blur-[1px]">
-          <img src="/images/heart-structure.png" alt="Heart Hologram" className="w-full h-auto drop-shadow-[0_0_15px_#ff0055]" style={{ filter: 'hue-rotate(180deg) brightness(1.2) sepia(0.5)' }} />
-          <div className="mt-4 text-[#00f0ff] font-mono text-xs tracking-widest text-center border-t border-[#00f0ff]/30 pt-2">BIO-M // HUMAN HEART</div>
-        </div>
-
-        {/* 右侧：地球结构与细胞(HIV)结构 */}
-        <div className="absolute right-[3%] top-[6%] w-[300px] opacity-[0.05] mix-blend-screen animate-[float-delayed_18s_ease-in-out_infinite] blur-[1px]">
-          <img src="/images/earth-layers-diagram.png" alt="Earth Hologram" className="w-full h-auto drop-shadow-[0_0_15px_#00f0ff]" style={{ filter: 'grayscale(0.8) sepia(1) hue-rotate(150deg) brightness(1.5)' }} />
-          <div className="mt-4 text-[#00f0ff] font-mono text-xs tracking-widest text-center border-t border-[#00f0ff]/30 pt-2">GEO-L // EARTH LAYERS</div>
-        </div>
-
-        <div className="absolute right-[6%] bottom-[10%] w-[260px] opacity-[0.05] mix-blend-screen animate-[float_14s_ease-in-out_infinite] blur-[1px]">
-          <img src="/images/hiv-structure.png" alt="Cell Hologram" className="w-full h-auto drop-shadow-[0_0_15px_#00f0ff]" style={{ filter: 'hue-rotate(200deg) brightness(1.3)' }} />
-          <div className="mt-4 text-[#00f0ff] font-mono text-xs tracking-widest text-center border-t border-[#00f0ff]/30 pt-2">MICRO // CELLULAR</div>
-        </div>
-      </div>
-
-      {/* ================= 中心主体内容 ================= */}
-      <div className={`relative z-10 flex flex-col items-center max-w-4xl w-full px-8 transition-all duration-1000 transform ${mounted && !isStarting ? 'translate-y-0 opacity-100 scale-100' : isStarting ? 'translate-y-[-2rem] opacity-0 scale-110' : 'translate-y-12 opacity-0 scale-95'}`}>
-        
-        {/* 01 标签 */}
-        <div className="flex items-center gap-4 mb-4 opacity-70">
-          <span className="text-cyan-500 text-sm font-mono tracking-widest">01</span>
-          <div className="h-[1px] w-16 bg-gradient-to-r from-cyan-500 to-transparent"></div>
-        </div>
-
-        {/* 引言 (单行) */}
-        <h2 className="text-lg md:text-xl font-serif text-white/30 tracking-widest leading-tight mb-12">
-          “真正的壁垒不再是冰冷的语法，而是打破常规的 <span className="font-sans italic font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400/50 to-purple-500/50 drop-shadow-[0_0_10px_rgba(0,240,255,0.2)]">Idea</span>”
-        </h2>
-
-        {/* 核心思路板块 */}
-        <div className="flex flex-col items-center text-center">
-
-          <h1 className="text-7xl md:text-8xl font-black tracking-[0.3em] mb-12 flex cursor-pointer" title="Hui Shi System">
-          {"数智课堂".split('').map((char, index) => (
-            <span 
-              key={index} 
-              className="inline-block text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-gray-400 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] transition-all duration-300 hover:text-white hover:drop-shadow-[0_0_30px_rgba(255,255,255,0.8)] relative"
-            >
-              {char}
-            </span>
-          ))}
-        </h1>
-
-          <div className="mt-4 text-white/90 text-lg md:text-2xl tracking-widest font-light leading-relaxed max-w-4xl">
-            <p>
-              致力于将灵感转化为现实。知识的广度与创新的深度，<br className="hidden md:block"/>远比单纯的技术堆砌更具力量。
-            </p>
+      <div className="relative z-10 w-full max-w-[980px] grid gap-8 lg:grid-cols-[1fr_420px] items-center">
+        <section className="auth-login-copy hidden lg:block">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100">
+            <Lock className="h-4 w-4" />
+            Secure Classroom Access
           </div>
-        </div>
-        
-        {/* 极简优雅风格“进入”按钮 */}
-        <button
-          onClick={handleStart}
-          className="group relative mt-20 px-12 py-4 rounded-full border border-gray-600 bg-white/5 text-gray-300 font-medium text-sm tracking-[0.3em] uppercase hover:bg-white/10 hover:text-white hover:border-cyan-500/50 hover:shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all duration-500 focus:outline-none overflow-hidden flex items-center justify-center gap-3"
-        >
-          <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></div>
-          <Fingerprint size={18} className="relative z-10 group-hover:text-cyan-400 transition-colors duration-300" />
-          <span className="relative z-10">探索数字世界</span>
-        </button>
+          <h1 className="mt-8 text-5xl font-black leading-tight tracking-normal">
+            数智课堂<br />
+            <span className="text-cyan-200">身份认证中心</span>
+          </h1>
+        </section>
+
+        <section className="auth-login-card rounded-lg border border-white/12 bg-black/35 p-6 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
+                <ModeIcon className="h-5 w-5" />
+              </div>
+              <h2 className="mt-5 text-2xl font-bold tracking-normal">{config.title}</h2>
+              <p className="mt-2 text-sm text-white/55">{config.subtitle}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+            {([
+              ['login', '用户登录'],
+              ['admin', '管理员'],
+            ] as const).map(([value, label]) => {
+              const isActive = value === 'admin' ? mode === 'admin' : mode !== 'admin';
+
+              return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setMode(value);
+                  setMessage('');
+                }}
+                className={`h-10 rounded-md text-sm font-semibold transition ${isActive ? 'bg-white text-black' : 'text-white/60 hover:bg-white/8 hover:text-white'}`}
+              >
+                {label}
+              </button>
+              );
+            })}
+          </div>
+
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium text-white/70">用户名</span>
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.07]"
+                placeholder={mode === 'admin' ? 'admin' : '请输入用户名'}
+                autoComplete="username"
+                required
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-white/70">密码</span>
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.07]"
+                placeholder="请输入密码"
+                type="password"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                required
+              />
+            </label>
+
+            <p className="min-h-5 text-sm text-white/45">{helperText}</p>
+
+            {message && (
+              <div className="rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {message}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-cyan-200 px-5 text-sm font-bold text-[#03111f] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ModeIcon className="h-4 w-4" />
+              {isSubmitting ? '处理中...' : config.submit}
+            </button>
+
+            {mode === 'login' && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('register');
+                    setMessage('');
+                  }}
+                  className="text-sm font-semibold text-cyan-100/80 transition hover:text-white"
+                >
+                  注册
+                </button>
+              </div>
+            )}
+
+            {mode === 'register' && (
+              <div className="text-center text-sm text-white/45">
+                已有账号？
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setMessage('');
+                  }}
+                  className="ml-1 font-semibold text-cyan-100/80 transition hover:text-white"
+                >
+                  登录
+                </button>
+              </div>
+            )}
+          </form>
+        </section>
       </div>
-      
     </div>
   );
 };
 
 export default Login;
-
-

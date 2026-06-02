@@ -8,8 +8,9 @@ import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
 import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation } from './services/agentRuntime';
-import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play, Download } from 'lucide-react';
+import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play, Download, LogOut, Upload } from 'lucide-react';
 import { ModelType } from './types';
+import type { AuthUser } from './Login';
 
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
 const BIODIGITAL_HEART_URL = 'https://human.biodigital.com/view?id=7F0a&lang=zh&ref=share';
@@ -64,9 +65,76 @@ const INTRO_INSTRUCTION =
 interface DashboardProps {
   playIntro?: boolean;
   onBack?: () => void;
+  currentUser: AuthUser;
+  onLogout: () => void;
+  onUserUpdated: (user: AuthUser) => void;
 }
 
-const App: React.FC<DashboardProps> = ({ playIntro = true, onBack }) => {
+async function readError(response: Response) {
+  try {
+    const data = await response.json();
+    return data.message || '请求失败';
+  } catch {
+    return '请求失败';
+  }
+}
+
+function userLabel(user: AuthUser) {
+  return user.displayName || user.username;
+}
+
+function userInitial(user: AuthUser) {
+  return userLabel(user).trim().slice(0, 1).toUpperCase() || 'U';
+}
+
+function resizeAvatarFile(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      reject(new Error('请选择 PNG、JPEG 或 WebP 图片'));
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error('头像图片不能超过 5MB'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('头像读取失败'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('头像解析失败'));
+      image.onload = () => {
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          reject(new Error('当前浏览器不支持头像处理'));
+          return;
+        }
+
+        canvas.width = size;
+        canvas.height = size;
+
+        const scale = Math.max(size / image.width, size / image.height);
+        const width = image.width * scale;
+        const height = image.height * scale;
+        const x = (size - width) / 2;
+        const y = (size - height) / 2;
+
+        context.fillStyle = '#071018';
+        context.fillRect(0, 0, size, size);
+        context.drawImage(image, x, y, width, height);
+        resolve(canvas.toDataURL('image/webp', 0.86));
+      };
+      image.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, onLogout, onUserUpdated }) => {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [modelType, setModelType] = useState<ModelType>('glb');
   const [modelAssetUrls, setModelAssetUrls] = useState<Record<string, string>>({});
@@ -94,6 +162,13 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack }) => {
 
   // Interaction speed settings
   const [showSettings, setShowSettings] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileName, setProfileName] = useState(userLabel(currentUser));
+  const [profileAvatar, setProfileAvatar] = useState(currentUser.avatarUrl || '');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isAvatarProcessing, setIsAvatarProcessing] = useState(false);
   const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(0.8);
   const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(0.5);
   const [showLabels, setShowLabels] = useState(false);
@@ -753,6 +828,58 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack }) => {
     );
   };
 
+  const openProfileSettings = () => {
+    setProfileName(userLabel(currentUser));
+    setProfileAvatar(currentUser.avatarUrl || '');
+    setProfileMessage('');
+    setIsAccountMenuOpen(false);
+    setIsProfileOpen(true);
+  };
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setProfileMessage('');
+    setIsAvatarProcessing(true);
+
+    try {
+      const dataUrl = await resizeAvatarFile(file);
+      setProfileAvatar(dataUrl);
+    } catch (error) {
+      setProfileMessage(error instanceof Error ? error.message : '头像处理失败');
+    } finally {
+      setIsAvatarProcessing(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    setProfileMessage('');
+    setIsSavingProfile(true);
+
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: profileName,
+          avatarUrl: profileAvatar,
+        }),
+      });
+
+      if (!response.ok) throw new Error(await readError(response));
+      const data = await response.json();
+      onUserUpdated(data.user);
+      setIsProfileOpen(false);
+    } catch (error) {
+      setProfileMessage(error instanceof Error ? error.message : '个人资料保存失败');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   // Sync interaction speed settings to controlRef
   useEffect(() => {
     controlRef.current.interactionSettings = {
@@ -806,11 +933,143 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack }) => {
             </button>
           </div>
 
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#3ff6ff]/70 bg-[#09222b]/80 text-lg font-black text-[#6dfcff] shadow-[0_0_24px_rgba(39,242,255,0.45),inset_0_0_18px_rgba(39,242,255,0.32)]">
-            AI
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsAccountMenuOpen((open) => !open)}
+              className="flex h-14 items-center gap-2 rounded-full border border-[#3ff6ff]/45 bg-[#09222b]/80 px-2.5 pr-4 text-white shadow-[0_0_24px_rgba(39,242,255,0.22),inset_0_0_18px_rgba(39,242,255,0.18)] transition hover:border-[#3ff6ff]/75 hover:bg-[#0b2d38]"
+              aria-label="打开个人中心"
+            >
+              <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-white/15 bg-cyan-200 text-sm font-black text-[#061626]">
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt={userLabel(currentUser)} className="h-full w-full object-cover" />
+                ) : (
+                  userInitial(currentUser)
+                )}
+              </span>
+              <span className="max-w-[120px] truncate text-sm font-black text-slate-100">{userLabel(currentUser)}</span>
+              <ChevronDown className={`h-4 w-4 text-cyan-100 transition ${isAccountMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isAccountMenuOpen && (
+              <div className="absolute right-0 top-[calc(100%+10px)] z-[80] w-44 overflow-hidden rounded-xl border border-white/12 bg-[#07121d]/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={openProfileSettings}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-white/82 transition hover:bg-cyan-300/10 hover:text-white"
+                >
+                  <Settings className="h-4 w-4" />
+                  个人设置
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    onLogout();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-white/82 transition hover:bg-red-400/10 hover:text-red-100"
+                >
+                  <LogOut className="h-4 w-4" />
+                  退出
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
+
+      {isProfileOpen && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/55 px-5 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-2xl border border-cyan-300/18 bg-[#07121d]/96 p-6 text-white shadow-2xl shadow-black/60">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-100/55">Profile</p>
+                <h2 className="mt-2 text-2xl font-black">个人设置</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen(false)}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                aria-label="关闭个人设置"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 flex items-center gap-4">
+              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border border-cyan-200/35 bg-cyan-200 text-2xl font-black text-[#061626] shadow-[0_0_28px_rgba(39,242,255,0.24)]">
+                {profileAvatar ? (
+                  <img src={profileAvatar} alt="头像预览" className="h-full w-full object-cover" />
+                ) : (
+                  userInitial(currentUser)
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/16">
+                  <Upload className="h-4 w-4" />
+                  {isAvatarProcessing ? '处理中...' : '上传头像'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleAvatarChange}
+                    className="sr-only"
+                    disabled={isAvatarProcessing}
+                  />
+                </label>
+                {profileAvatar && (
+                  <button
+                    type="button"
+                    onClick={() => setProfileAvatar('')}
+                    className="ml-3 text-sm font-semibold text-white/45 transition hover:text-white"
+                  >
+                    移除
+                  </button>
+                )}
+                <p className="mt-2 text-xs leading-5 text-white/42">支持 PNG、JPEG、WebP，保存前会自动压缩。</p>
+              </div>
+            </div>
+
+            <label className="mt-6 block">
+              <span className="text-sm font-bold text-white/70">昵称</span>
+              <input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                maxLength={32}
+                className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.05] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.08]"
+                placeholder="请输入昵称"
+              />
+            </label>
+
+            <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/48">
+              登录用户名：{currentUser.username}
+            </div>
+
+            {profileMessage && (
+              <div className="mt-4 rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {profileMessage}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen(false)}
+                className="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={saveProfile}
+                disabled={isSavingProfile || isAvatarProcessing}
+                className="h-10 rounded-lg bg-cyan-200 px-5 text-sm font-black text-[#061626] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-55"
+              >
+                {isSavingProfile ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 主体区域 */}
       <main className="relative z-10 flex flex-1 gap-5 overflow-hidden px-6 pb-6">

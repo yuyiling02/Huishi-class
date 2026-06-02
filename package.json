@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "vite",
+    "dev:api": "node server/index.js",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -15,8 +17,15 @@
     "@openglobus/openglobus-react": "^0.4.14",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.556.0",
     "motion": "^12.40.0",
+    "mysql2": "^3.22.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "three": "^0.181.2"
@@ -25,6 +34,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^10.0.3",
     "tailwindcss": "^4.2.4",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
