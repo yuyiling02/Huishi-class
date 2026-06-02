@@ -1,47 +1,121 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Stars, Float, Sphere, MeshDistortMaterial, OrbitControls } from '@react-three/drei';
+import { Float, OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
 import { 
   Search, ChevronRight, Sparkles, Folder, BarChart2, 
   Hand, Mic, Maximize2, FileText, Minus, X, Square,
   Menu, Cpu, Activity, Glasses, Box, Share2
 } from 'lucide-react';
 
-// === 3D Background Component ===
-function BackgroundScene() {
-  const sphereRef = useRef<any>(null);
-  
+// === 3D Neural Network Background Component ===
+function NeuralNetwork() {
+  const { particles, lines } = useMemo(() => {
+    const particleCount = 150;
+    const particles = new Float32Array(particleCount * 3);
+    const linePositions: number[] = [];
+    const maxDistance = 2.5;
+
+    for (let i = 0; i < particleCount; i++) {
+      particles[i * 3] = (Math.random() - 0.5) * 15;
+      particles[i * 3 + 1] = (Math.random() - 0.5) * 15;
+      particles[i * 3 + 2] = (Math.random() - 0.5) * 15;
+    }
+
+    for (let i = 0; i < particleCount; i++) {
+      for (let j = i + 1; j < particleCount; j++) {
+        const dx = particles[i * 3] - particles[j * 3];
+        const dy = particles[i * 3 + 1] - particles[j * 3 + 1];
+        const dz = particles[i * 3 + 2] - particles[j * 3 + 2];
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (dist < maxDistance) {
+          linePositions.push(
+            particles[i * 3], particles[i * 3 + 1], particles[i * 3 + 2],
+            particles[j * 3], particles[j * 3 + 1], particles[j * 3 + 2]
+          );
+        }
+      }
+    }
+
+    return { particles, lines: new Float32Array(linePositions) };
+  }, []);
+
+  const groupRef = useRef<any>(null);
+
   useFrame(({ clock }) => {
-    if (sphereRef.current) {
-      sphereRef.current.rotation.x = clock.getElapsedTime() * 0.1;
-      sphereRef.current.rotation.y = clock.getElapsedTime() * 0.15;
+    if (groupRef.current) {
+      groupRef.current.rotation.y = clock.getElapsedTime() * 0.03;
+      groupRef.current.rotation.x = clock.getElapsedTime() * 0.02;
     }
   });
 
   return (
+    <group ref={groupRef}>
+      <points>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={particles.length / 3} array={particles} itemSize={3} />
+        </bufferGeometry>
+        <pointsMaterial size={0.03} color="#ffffff" transparent opacity={0.5} sizeAttenuation />
+      </points>
+      <lineSegments>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={lines.length / 3} array={lines} itemSize={3} />
+        </bufferGeometry>
+        <lineBasicMaterial color="#ffffff" transparent opacity={0.08} />
+      </lineSegments>
+    </group>
+  );
+}
+
+function ParticleFlow() {
+  const pointsRef = useRef<any>(null);
+  const count = 1500;
+  
+  const particles = useMemo(() => {
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 20;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+    }
+    return positions;
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (pointsRef.current) {
+      pointsRef.current.rotation.y = clock.getElapsedTime() * 0.02;
+      pointsRef.current.position.y = Math.sin(clock.getElapsedTime() * 0.1) * 0.5;
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={particles} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial size={0.015} color="#00d2ff" transparent opacity={0.3} sizeAttenuation />
+    </points>
+  );
+}
+
+function BackgroundScene() {
+  return (
     <>
-      <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 10, 10]} intensity={1} color="#00d2ff" />
-      <directionalLight position={[-10, -10, -10]} intensity={0.5} color="#3D81E3" />
-      
-      <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
-        <group ref={sphereRef} position={[5, 2, -10]}>
-          <Sphere args={[3, 64, 64]}>
-            <MeshDistortMaterial 
-              color="#001a33" 
-              attach="material" 
-              distort={0.4} 
-              speed={1.5} 
-              roughness={0.2}
-              metalness={0.8}
-              wireframe={true}
-              transparent
-              opacity={0.3}
-            />
-          </Sphere>
-        </group>
+      <fog attach="fog" args={['#000000', 3, 12]} />
+      <NeuralNetwork />
+      <ParticleFlow />
+      {/* 3D 浮动发光体 - 模拟 3D 光效 */}
+      <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1}>
+        <mesh position={[3, 2, -4]}>
+          <sphereGeometry args={[1.5, 32, 32]} />
+          <meshBasicMaterial color="#3D81E3" transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
+        <mesh position={[-3, -2, -6]}>
+          <sphereGeometry args={[2, 32, 32]} />
+          <meshBasicMaterial color="#00d2ff" transparent opacity={0.05} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
       </Float>
     </>
   );
@@ -139,20 +213,23 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#030712] text-white selection:bg-[#3D81E3]/30">
+    <div className="relative min-h-screen overflow-x-hidden bg-black text-white selection:bg-[#3D81E3]/30">
       
-      {/* 1. 全局背景 (3D + 蓝光地平线) */}
+      {/* 1. 全局背景 (深空渐变 + 3D 神经网络粒子流 + 体积光) */}
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0 opacity-40">
+        {/* 深空渐变底色 */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#0a1220_0%,_#000000_100%)]" />
+        
+        {/* 微弱体积光晕 */}
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#3D81E3]/15 mix-blend-screen blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-[#00d2ff]/10 mix-blend-screen blur-[120px]" />
+
+        <div className="absolute inset-0 opacity-80">
           <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
             <BackgroundScene />
           </Canvas>
         </div>
       </div>
-      
-      {/* 底部巨大的蓝色行星弧线背景 */}
-      <div className="fixed bottom-[-10vh] left-1/2 -translate-x-1/2 w-[120vw] h-[40vh] bg-[radial-gradient(ellipse_at_top,_#00d2ff_0%,_transparent_70%)] opacity-30 pointer-events-none z-0 mix-blend-screen blur-[100px]" />
-      <div className="fixed bottom-[-40vh] left-1/2 -translate-x-1/2 w-[200vw] h-[60vh] rounded-[100%] border-t border-[#00d2ff]/50 shadow-[0_-10px_60px_rgba(0,210,255,0.4)] bg-gradient-to-t from-[#001a33]/90 to-[#030712]/10 pointer-events-none z-0" />
 
       {/* SVG Noise Filter */}
       <svg className="w-0 h-0 absolute pointer-events-none">
@@ -227,7 +304,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
             transition={{ delay: 0.8, duration: 1 }}
             className="mt-8 text-white/60 max-w-2xl text-lg md:text-xl leading-relaxed"
           >
-            结合强大的 AI 引擎与空间手势计算，重新定义智慧课堂。组织、展示、互动，一切都无比清晰。
+            让每个抽象知识点<br />都能被看见、触摸和理解
           </motion.p>
 
           <motion.div 

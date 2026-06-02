@@ -916,7 +916,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
             <button className="lab-pill-button">
-              <Sparkles className="mr-2 text-white/90" size={18} /> 图片转 3D
+              <Sparkles className="mr-1.5 text-white/90" size={14} /> 图片转 3D
             </button>
           </div>
 
@@ -929,7 +929,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
             <button className="lab-pill-button">
-              <Download className="mr-2 text-white/90" size={18} /> 导入模型
+              <Download className="mr-1.5 text-white/90" size={14} /> 导入模型
             </button>
           </div>
 
@@ -937,18 +937,18 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
             <button
               type="button"
               onClick={() => setIsAccountMenuOpen((open) => !open)}
-              className="flex h-14 items-center gap-2 rounded-full border border-[#3ff6ff]/45 bg-[#09222b]/80 px-2.5 pr-4 text-white shadow-[0_0_24px_rgba(39,242,255,0.22),inset_0_0_18px_rgba(39,242,255,0.18)] transition hover:border-[#3ff6ff]/75 hover:bg-[#0b2d38]"
+              className="flex h-10 items-center gap-1.5 rounded-full border border-[#3ff6ff]/45 bg-[#09222b]/80 px-2 pr-3 text-white shadow-[0_0_24px_rgba(39,242,255,0.22),inset_0_0_18px_rgba(39,242,255,0.18)] transition hover:border-[#3ff6ff]/75 hover:bg-[#0b2d38]"
               aria-label="打开个人中心"
             >
-              <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-white/15 bg-cyan-200 text-sm font-black text-[#061626]">
+              <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-white/15 bg-cyan-200 text-xs font-black text-[#061626]">
                 {currentUser.avatarUrl ? (
                   <img src={currentUser.avatarUrl} alt={userLabel(currentUser)} className="h-full w-full object-cover" />
                 ) : (
                   userInitial(currentUser)
                 )}
               </span>
-              <span className="max-w-[120px] truncate text-sm font-black text-slate-100">{userLabel(currentUser)}</span>
-              <ChevronDown className={`h-4 w-4 text-cyan-100 transition ${isAccountMenuOpen ? 'rotate-180' : ''}`} />
+              <span className="max-w-[100px] truncate text-xs font-bold text-slate-100">{userLabel(currentUser)}</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-cyan-100 transition ${isAccountMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isAccountMenuOpen && (
