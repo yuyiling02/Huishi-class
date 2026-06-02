@@ -1,5 +1,8 @@
-import React, { FormEvent, useMemo, useState } from 'react';
+import React, { FormEvent, useMemo, useState, useRef } from 'react';
 import { ArrowLeft, Fingerprint, Lock, ShieldCheck, UserPlus } from 'lucide-react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Float, Sphere, MeshDistortMaterial } from '@react-three/drei';
+import * as THREE from 'three';
 
 export type AuthRole = 'user' | 'admin';
 
@@ -60,6 +63,96 @@ async function readError(response: Response) {
   }
 }
 
+function ParticleFlow() {
+  const pointsRef = useRef<THREE.Points>(null);
+  const count = 1000;
+  
+  const particles = useMemo(() => {
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 10;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 10;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 10;
+    }
+    return positions;
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (pointsRef.current) {
+      pointsRef.current.rotation.y = clock.getElapsedTime() * 0.05;
+      pointsRef.current.position.y = Math.sin(clock.getElapsedTime() * 0.2) * 0.2;
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={particles} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial size={0.015} color="#00d2ff" transparent opacity={0.5} sizeAttenuation />
+    </points>
+  );
+}
+
+function NeuralNetwork() {
+  const { particles, lines } = useMemo(() => {
+    const particleCount = 150;
+    const particles = new Float32Array(particleCount * 3);
+    const linePositions: number[] = [];
+    const maxDistance = 2.5;
+
+    for (let i = 0; i < particleCount; i++) {
+      particles[i * 3] = (Math.random() - 0.5) * 15;
+      particles[i * 3 + 1] = (Math.random() - 0.5) * 15;
+      particles[i * 3 + 2] = (Math.random() - 0.5) * 15;
+    }
+
+    for (let i = 0; i < particleCount; i++) {
+      for (let j = i + 1; j < particleCount; j++) {
+        const dx = particles[i * 3] - particles[j * 3];
+        const dy = particles[i * 3 + 1] - particles[j * 3 + 1];
+        const dz = particles[i * 3 + 2] - particles[j * 3 + 2];
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (dist < maxDistance) {
+          linePositions.push(
+            particles[i * 3], particles[i * 3 + 1], particles[i * 3 + 2],
+            particles[j * 3], particles[j * 3 + 1], particles[j * 3 + 2]
+          );
+        }
+      }
+    }
+
+    return { particles, lines: new Float32Array(linePositions) };
+  }, []);
+
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = clock.getElapsedTime() * 0.03;
+      groupRef.current.rotation.x = clock.getElapsedTime() * 0.02;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <points>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={particles.length / 3} array={particles} itemSize={3} />
+        </bufferGeometry>
+        <pointsMaterial size={0.03} color="#00d2ff" transparent opacity={0.5} sizeAttenuation />
+      </points>
+      <lineSegments>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={lines.length / 3} array={lines} itemSize={3} />
+        </bufferGeometry>
+        <lineBasicMaterial color="#00d2ff" transparent opacity={0.15} />
+      </lineSegments>
+    </group>
+  );
+}
+
 const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
   const [mode, setMode] = useState<AuthMode>('login');
   const [username, setUsername] = useState('');
@@ -116,19 +209,37 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
       </button>
 
       <div className="relative z-10 w-full max-w-[980px] grid gap-8 lg:grid-cols-[1fr_420px] items-center">
-        <section className="auth-login-copy hidden lg:block">
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100">
-            <Lock className="h-4 w-4" />
-            Secure Classroom Access
+        <section className="auth-login-copy hidden lg:flex flex-col justify-center relative h-full min-h-[500px]">
+          {/* 3D Showcase */}
+          <div className="absolute inset-0 z-0 opacity-80 pointer-events-none">
+            <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
+              <NeuralNetwork />
+              <ParticleFlow />
+            </Canvas>
           </div>
-          <h1 className="mt-8 text-5xl font-black leading-tight tracking-normal">
-            数智课堂<br />
-            <span className="text-cyan-200">身份认证中心</span>
-          </h1>
+          
+          <div className="relative z-10 pl-8 border-l-2 border-cyan-400/30">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100 mb-6">
+              <Lock className="h-4 w-4" />
+              Secure Classroom Access
+            </div>
+            <h1 className="text-5xl font-black leading-tight tracking-normal text-white drop-shadow-lg">
+              探索微观与宏观<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">重塑教学体验</span>
+            </h1>
+            <p className="mt-6 text-lg text-cyan-100/70 max-w-md leading-relaxed font-medium">
+              结合空间手势与多模态AI大模型，将枯燥的抽象知识点转化为可触碰的 3D 互动教具，开启全息智慧课堂新纪元。
+            </p>
+          </div>
         </section>
 
-        <section className="auth-login-card rounded-lg border border-white/12 bg-black/35 p-6 shadow-2xl shadow-black/40 backdrop-blur-2xl">
-          <div className="flex items-start justify-between gap-4">
+        <section className="auth-login-card relative rounded-2xl border border-cyan-400/30 bg-white/[0.03] p-8 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,210,255,0.15)] ring-1 ring-white/10 overflow-hidden">
+          {/* 蓝色边缘光与半透明渐变 */}
+          <div className="absolute inset-x-0 -top-px h-px w-full bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent" />
+          <div className="absolute -left-px top-0 w-px h-full bg-gradient-to-b from-transparent via-cyan-400/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/10 to-transparent pointer-events-none mix-blend-screen" />
+          
+          <div className="relative z-10 flex items-start justify-between gap-4">
             <div>
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
                 <ModeIcon className="h-5 w-5" />
@@ -138,7 +249,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+          <div className="relative z-10 mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-1">
             {([
               ['login', '用户登录'],
               ['admin', '管理员'],
@@ -161,7 +272,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
             })}
           </div>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
+          <form onSubmit={submit} className="relative z-10 mt-6 space-y-4">
             <label className="block">
               <span className="text-sm font-medium text-white/70">用户名</span>
               <input
@@ -187,7 +298,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
               />
             </label>
 
-            <p className="min-h-5 text-sm text-white/45">{helperText}</p>
+            <p className="h-10 text-sm text-white/45 flex items-start">{helperText}</p>
 
             {message && (
               <div className="rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
@@ -204,8 +315,8 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
               {isSubmitting ? '处理中...' : config.submit}
             </button>
 
-            {mode === 'login' && (
-              <div className="text-center">
+            <div className="h-6 flex flex-col items-center justify-center">
+              {mode === 'login' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -216,24 +327,24 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
                 >
                   注册
                 </button>
-              </div>
-            )}
+              )}
 
-            {mode === 'register' && (
-              <div className="text-center text-sm text-white/45">
-                已有账号？
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('login');
-                    setMessage('');
-                  }}
-                  className="ml-1 font-semibold text-cyan-100/80 transition hover:text-white"
-                >
-                  登录
-                </button>
-              </div>
-            )}
+              {mode === 'register' && (
+                <div className="text-sm text-white/45">
+                  已有账号？
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('login');
+                      setMessage('');
+                    }}
+                    className="ml-1 font-semibold text-cyan-100/80 transition hover:text-white"
+                  >
+                    登录
+                  </button>
+                </div>
+              )}
+            </div>
           </form>
         </section>
       </div>

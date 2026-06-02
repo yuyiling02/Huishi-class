@@ -12,7 +12,7 @@ import {
 // === 3D Neural Network Background Component ===
 function NeuralNetwork() {
   const { particles, lines } = useMemo(() => {
-    const particleCount = 150;
+    const particleCount = 300;
     const particles = new Float32Array(particleCount * 3);
     const linePositions: number[] = [];
     const maxDistance = 2.5;
@@ -57,13 +57,13 @@ function NeuralNetwork() {
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={particles.length / 3} array={particles} itemSize={3} />
         </bufferGeometry>
-        <pointsMaterial size={0.03} color="#ffffff" transparent opacity={0.5} sizeAttenuation />
+        <pointsMaterial size={0.04} color="#00f0ff" transparent opacity={0.8} sizeAttenuation />
       </points>
       <lineSegments>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={lines.length / 3} array={lines} itemSize={3} />
         </bufferGeometry>
-        <lineBasicMaterial color="#ffffff" transparent opacity={0.08} />
+        <lineBasicMaterial color="#00d2ff" transparent opacity={0.25} blending={THREE.AdditiveBlending} />
       </lineSegments>
     </group>
   );
@@ -100,12 +100,70 @@ function ParticleFlow() {
   );
 }
 
+function EnergyCore() {
+  const groupRef = useRef<THREE.Group>(null);
+  const offset = useMemo(() => Math.random() * 100, []);
+  
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      const t = clock.getElapsedTime() + offset;
+      
+      // 自转
+      groupRef.current.rotation.y = t * 0.15;
+      groupRef.current.rotation.x = t * 0.2;
+      
+      // 全屏范围内的随机/平滑游走 (Lissajous curve)
+      // 左右大幅游走
+      const x = Math.sin(t * 0.12) * 14 + Math.cos(t * 0.08) * 4;
+      // 上下随机漂浮
+      const y = Math.cos(t * 0.15) * 8 + Math.sin(t * 0.1) * 3;
+      // 深度随机变化 (忽大忽小，忽远忽近)
+      const z = -6 + Math.sin(t * 0.09) * 8; 
+      
+      groupRef.current.position.set(x, y, z);
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {/* 外部辅助能量环 */}
+      <mesh>
+        <sphereGeometry args={[3.2, 32, 32]} />
+        <meshBasicMaterial 
+          color="#0066ff" 
+          transparent 
+          opacity={0.15} 
+          wireframe={true}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {/* 核心网格 */}
+      <mesh>
+        <sphereGeometry args={[2.8, 64, 64]} />
+        <meshBasicMaterial 
+          color="#4df8ff" 
+          transparent 
+          opacity={0.35} 
+          wireframe={true}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {/* 核心内发光 */}
+      <mesh>
+        <sphereGeometry args={[2.2, 32, 32]} />
+        <meshBasicMaterial color="#0066ff" transparent opacity={0.15} blending={THREE.AdditiveBlending} />
+      </mesh>
+    </group>
+  );
+}
+
 function BackgroundScene() {
   return (
     <>
       <fog attach="fog" args={['#000000', 3, 12]} />
       <NeuralNetwork />
       <ParticleFlow />
+      <EnergyCore />
       {/* 3D 浮动发光体 - 模拟 3D 光效 */}
       <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1}>
         <mesh position={[3, 2, -4]}>
@@ -194,14 +252,16 @@ const HoverText = ({ text, className, style, charClassName, charStyle, gradientS
 // === Main Page Component ===
 export default function LandingPage({ onEnter }: { onEnter: () => void }) {
   const [time, setTime] = useState("");
-  const [isExiting, setIsExiting] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const handleEnterClick = () => {
-    setIsExiting(true);
-    setTimeout(onEnter, 800);
+    onEnter();
   };
 
   useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll);
+    
     const updateTime = () => {
       const now = new Date();
       const options: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
@@ -209,7 +269,10 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
     };
     updateTime();
     const timer = setInterval(updateTime, 60000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   return (
@@ -217,12 +280,15 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
       
       {/* 1. 全局背景 (深空渐变 + 3D 神经网络粒子流 + 体积光) */}
       <div className="fixed inset-0 z-0 pointer-events-none">
-        {/* 深空渐变底色 */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#0a1220_0%,_#000000_100%)]" />
+        {/* 深海蓝 -> 黑色径向渐变，制造极致深邃感 */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#041029_0%,_#000000_80%)]" />
         
-        {/* 微弱体积光晕 */}
-        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#3D81E3]/15 mix-blend-screen blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-[#00d2ff]/10 mix-blend-screen blur-[120px]" />
+        {/* 强化微弱体积光晕 */}
+        <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-[#0066ff]/20 mix-blend-screen blur-[150px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#00f0ff]/15 mix-blend-screen blur-[130px]" />
+
+        {/* 底部补充环境光 */}
+        <div className="absolute inset-x-0 bottom-0 h-64 bg-[radial-gradient(ellipse_at_bottom,rgba(0,210,255,0.15),transparent_70%)]" />
 
         <div className="absolute inset-0 opacity-80">
           <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
@@ -241,14 +307,14 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
         </filter>
       </svg>
 
-      <div className={`relative z-10 transition-opacity duration-700 ease-in-out ${isExiting ? 'opacity-0' : 'opacity-100'}`}>
+      <div className="relative z-10">
         
         {/* 2. Navbar */}
         <motion.nav 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full px-10 h-20 flex items-center relative sticky top-0 backdrop-blur-xl border-b border-white/[0.05] z-50 bg-[#0c0c0c]/50"
+          className={`w-full px-10 h-20 flex items-center relative sticky top-0 z-50 transition-all duration-500 ${isScrolled ? 'bg-[#030712]/70 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]' : 'bg-transparent border-transparent'}`}
         >
           <div className="flex items-center gap-2 cursor-pointer absolute left-10">
             <LogoMark />
@@ -259,10 +325,10 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
                 key={item} href="#"
                 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + i * 0.1 }}
-                className="text-sm font-bold text-white/60 hover:text-[#00d2ff] transition-colors relative pb-1 group"
+                className="text-sm font-semibold text-white/70 hover:text-[#00d2ff] transition-colors relative group py-2"
               >
                 {item}
-                <div className="absolute -bottom-1.5 left-0 w-full h-[2px] bg-[#00d2ff] shadow-[0_0_8px_#00d2ff] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+                <div className="absolute bottom-0 left-0 w-full h-[2px] bg-[#00d2ff] scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300 shadow-[0_0_10px_#00d2ff]"></div>
               </motion.a>
             ))}
           </div>
@@ -272,54 +338,112 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
         </motion.nav>
 
         {/* 3. Hero 首屏 */}
-        <section className="pt-16 md:pt-28 pb-20 text-center px-4 flex flex-col items-center">
-          <motion.h1 
+        <section className="pt-20 md:pt-24 pb-24 text-center px-4 flex flex-col items-center relative z-20">
+          
+          {/* 浮动技术徽章 (填补两侧空洞) */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden max-w-[100vw] hidden md:block z-0 opacity-60">
+            <motion.div 
+              initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8, duration: 1 }}
+              className="absolute top-[15%] left-[2%] lg:left-[5%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+            >
+              <div className="w-2 h-2 rounded-full bg-[#00d2ff] shadow-[0_0_8px_#00d2ff] animate-pulse" />
+              <span className="text-xs font-semibold text-white/60 tracking-wider">AI 空间驱动</span>
+            </motion.div>
+            
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1, duration: 1 }}
+              className="absolute top-[20%] right-[2%] lg:right-[5%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+            >
+              <Activity className="w-3.5 h-3.5 text-[#00d2ff]" />
+              <span className="text-xs font-semibold text-white/60 tracking-wider">60FPS 实时渲染</span>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2, duration: 1 }}
+              className="absolute bottom-[25%] left-[4%] lg:left-[8%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+            >
+              <Hand className="w-3.5 h-3.5 text-[#00d2ff]" />
+              <span className="text-xs font-semibold text-white/60 tracking-wider">毫秒级手势交互</span>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4, duration: 1 }}
+              className="absolute bottom-[20%] right-[4%] lg:right-[8%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+            >
+              <Share2 className="w-3.5 h-3.5 text-[#00d2ff]" />
+              <span className="text-xs font-semibold text-white/60 tracking-wider">跨端无缝协同</span>
+            </motion.div>
+          </div>
+
+          <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 1, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ delay: 0.2, duration: 1, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col items-center leading-[1.15]"
           >
-            <HoverText 
-              text="你的专属 3D 互动教具库" 
-              className="text-5xl md:text-[5.5rem] font-bold text-white/90 drop-shadow-lg flex tracking-tight mb-2" 
-            />
-            <HoverText 
-              text="数智课堂" 
-              className="text-6xl md:text-[6.5rem] font-black mt-2 pb-2 flex tracking-wider" 
-              charClassName="animate-shiny"
-              gradientSpan={true}
+            <HoverText
+              text="你的专属 3D 互动教具库"
+              className="text-5xl md:text-[5.5rem] font-[900] tracking-tight mb-4 flex justify-center"
               charStyle={{
-                backgroundImage: 'linear-gradient(to right, #001a33 0%, #3D81E3 25%, #A4F4FD 50%, #00d2ff 75%, #001a33 100%)',
+                backgroundImage: 'linear-gradient(to bottom, #ffffff 30%, #a5d2ff 100%)',
                 WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
                 color: 'transparent',
-                WebkitTextFillColor: 'transparent',
-                filter: 'url(#noise-filter)'
-              }} 
+                WebkitTextStroke: '1px rgba(255,255,255,0.25)',
+                textShadow: '0 0 30px rgba(165, 210, 255, 0.4)'
+              }}
             />
-          </motion.h1>
+            <div className="relative mt-2 pb-4">
+              <HoverText
+                text="数智课堂"
+                className="text-6xl md:text-[6.5rem] font-black tracking-widest relative z-10 flex justify-center"
+                charClassName="animate-shiny"
+                gradientSpan={true}
+                charStyle={{
+                  backgroundImage: 'linear-gradient(to right, #00f0ff, #0055ff, #00f0ff)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  color: 'transparent',
+                  textShadow: '0 0 20px rgba(0, 210, 255, 0.3), 0 0 40px rgba(0, 85, 255, 0.2)'
+                }}
+              />
+              {/* 发光高亮背板加强 -> 柔和背板以减少视觉疲劳 */}
+              <div className="absolute inset-0 bg-[#00d2ff]/10 blur-[60px] rounded-full pointer-events-none z-0" />
+            </div>
+          </motion.div>
 
           <motion.p 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            transition={{ delay: 0.8, duration: 1 }}
-            className="mt-8 text-white/60 max-w-2xl text-lg md:text-xl leading-relaxed"
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 1, ease: "easeOut" }}
+            className="mt-8 text-white/60 max-w-2xl text-lg md:text-xl leading-relaxed font-medium"
           >
             让每个抽象知识点<br />都能被看见、触摸和理解
           </motion.p>
 
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1, duration: 0.8 }}
-            className="mt-12 flex flex-col items-center gap-4"
+            transition={{ delay: 0.8, duration: 0.8 }}
+            className="mt-14 flex flex-col items-center gap-6"
           >
-            <button 
+            <motion.button 
               onClick={handleEnterClick}
-              className="group inline-flex items-center justify-center gap-2 rounded-full border-2 border-[#00d2ff]/80 bg-[#001a33]/40 text-[#00d2ff] font-bold text-base px-10 py-3.5 transition-all hover:bg-[#00d2ff]/20 hover:scale-105 active:scale-95 shadow-[0_0_25px_rgba(0,210,255,0.4)] hover:shadow-[0_0_40px_rgba(0,210,255,0.7)] mt-2 backdrop-blur-sm"
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              className="relative group inline-flex items-center justify-center gap-3 rounded-full px-12 py-4 text-base font-bold text-white overflow-hidden transition-all duration-300 shadow-[0_0_30px_rgba(0,210,255,0.2)] hover:shadow-[0_0_50px_rgba(0,210,255,0.4)]"
             >
-              立即体验
-              <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-            </button>
-            <span className="text-sm font-medium tracking-widest uppercase text-white/30 mt-4">
+              <div className="absolute inset-0 bg-[#0a192f]/40 backdrop-blur-md rounded-full border border-white/10 group-hover:border-[#00d2ff]/50 transition-colors duration-300" />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#00d2ff]/0 via-[#00d2ff]/10 to-[#00d2ff]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-md" />
+              <div className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-[#00d2ff]/80 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-300" />
+              
+              <span className="relative z-10 flex items-center gap-2 drop-shadow-md group-hover:text-[#00d2ff] transition-colors duration-300">
+                立即体验
+                <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
+              </span>
+            </motion.button>
+
+            <span className="text-sm font-medium tracking-widest uppercase text-white/30">
               AI 教具管理 · 手势互动 · 智慧课堂
             </span>
           </motion.div>

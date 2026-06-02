@@ -5,7 +5,6 @@ import Landing from './Landing';
 import Login, { AuthUser } from './Login';
 
 type AppView = 'landing' | 'login' | 'dashboard' | 'admin';
-type AuthTransition = 'idle' | 'entering' | 'leaving';
 
 async function readError(response: Response) {
   try {
@@ -20,7 +19,6 @@ export default function App() {
   const [view, setView] = useState<AppView>('landing');
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [authTransition, setAuthTransition] = useState<AuthTransition>('idle');
 
   useEffect(() => {
     let isMounted = true;
@@ -57,12 +55,7 @@ export default function App() {
       setView(user.role === 'admin' ? 'admin' : 'dashboard');
       return;
     }
-
-    setAuthTransition('entering');
-    window.setTimeout(() => {
-      setView('login');
-      window.setTimeout(() => setAuthTransition('idle'), 720);
-    }, 360);
+    setView('login');
   };
 
   const handleAuthenticated = (nextUser: AuthUser) => {
@@ -75,11 +68,7 @@ export default function App() {
   };
 
   const handleBackToLanding = () => {
-    setAuthTransition('leaving');
-    window.setTimeout(() => {
-      setView('landing');
-      window.setTimeout(() => setAuthTransition('idle'), 260);
-    }, 220);
+    setView('landing');
   };
 
   const handleLogout = async () => {
@@ -106,10 +95,7 @@ export default function App() {
 
   if (view === 'login') {
     return (
-      <>
-        <Login onAuthenticated={handleAuthenticated} onBack={handleBackToLanding} />
-        {authTransition !== 'idle' && <div className={`auth-transition-veil ${authTransition}`} />}
-      </>
+      <Login onAuthenticated={handleAuthenticated} onBack={handleBackToLanding} />
     );
   }
 
@@ -130,9 +116,6 @@ export default function App() {
   }
 
   return (
-    <>
-      <Landing onEnter={handleEnter} />
-      {authTransition !== 'idle' && <div className={`auth-transition-veil ${authTransition}`} />}
-    </>
+    <Landing onEnter={handleEnter} />
   );
 }

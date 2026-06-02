@@ -20,7 +20,8 @@ html, body {
 }
 
 .animate-shiny {
-  animation: shiny 20s linear infinite;
+  background-size: 200% auto;
+  animation: shiny 10s linear infinite;
 }
 
 @keyframes shiny {
