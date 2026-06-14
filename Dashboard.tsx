@@ -185,6 +185,9 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
   const [isHandExpanded, setIsHandExpanded] = useState(false);
   const [loadProgress, setLoadProgress] = useState<{ loaded: number; total: number; percent: number } | null>(null);
   const [quizMode, setQuizMode] = useState(false);
+  const [quizSubjectFilter, setQuizSubjectFilter] = useState<string | undefined>(undefined);
+  const quizButtonRef = useRef<HTMLButtonElement>(null);
+  const [handNearQuizButton, setHandNearQuizButton] = useState(false);
   const structureImageRef = useRef<HTMLButtonElement>(null);
   const hasAutoOpenedCameraRef = useRef(false);
   const knowledgeSpeechBufferRef = useRef('');
@@ -365,6 +368,101 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
       setIsHandExpanded(false);
     }
   }, [handNearStructureImage, modelStructureImage, isHandExpanded]);
+
+  // Hand proximity: trigger quiz mode button loading
+  useEffect(() => {
+    if (!cameraActive || quizMode || !modelUrl) {
+      setHandNearQuizButton(false);
+      return;
+    }
+
+    const checkProximity = () => {
+      const handLm = controlRef.current.interactionHandLandmarks;
+      if (!handLm || handLm.length < 9) {
+        setHandNearQuizButton(false);
+        return;
+      }
+      const indexTip = handLm[8];
+      if (!indexTip) {
+        setHandNearQuizButton(false);
+        return;
+      }
+
+      const stageEl = stageRef.current;
+      if (!stageEl) {
+        setHandNearQuizButton(false);
+        return;
+      }
+
+      const stageRect = stageEl.getBoundingClientRect();
+      const screenX = stageRect.left + (1 - indexTip.x) * stageRect.width;
+      const screenY = stageRect.top + indexTip.y * stageRect.height;
+
+      const btnEl = quizButtonRef.current;
+      if (!btnEl) {
+        setHandNearQuizButton(false);
+        return;
+      }
+
+      const rect = btnEl.getBoundingClientRect();
+      const margin = 2;
+      const isNear = (
+        screenX >= rect.left - margin &&
+        screenX <= rect.right + margin &&
+        screenY >= rect.top - margin &&
+        screenY <= rect.bottom + margin
+      );
+
+      setHandNearQuizButton(isNear);
+    };
+
+    const intervalId = setInterval(checkProximity, 100);
+    return () => clearInterval(intervalId);
+  }, [cameraActive, controlRef, quizMode, modelUrl]);
+
+  // Loading progress timer for quiz button
+  const quizProgressRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let animFrame: number;
+    let startTime: number | null = null;
+    const duration = 2000;
+
+    if (handNearQuizButton) {
+      const animate = (timestamp: number) => {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        let progress = (elapsed / duration) * 100;
+
+        if (progress >= 100) {
+          progress = 100;
+          if (quizProgressRef.current) {
+            quizProgressRef.current.style.width = '100%';
+          }
+          setQuizSubjectFilter(modelUrl!);
+          setQuizMode(true);
+          setHandNearQuizButton(false);
+        } else {
+          if (quizProgressRef.current) {
+            quizProgressRef.current.style.width = `${progress}%`;
+          }
+          animFrame = requestAnimationFrame(animate);
+        }
+      };
+      animFrame = requestAnimationFrame(animate);
+      
+      return () => {
+        cancelAnimationFrame(animFrame);
+        if (quizProgressRef.current) {
+            quizProgressRef.current.style.width = '0%';
+        }
+      };
+    } else {
+      if (quizProgressRef.current) {
+          quizProgressRef.current.style.width = '0%';
+      }
+    }
+  }, [handNearQuizButton, modelUrl]);
 
   const resetControls = () => {
     const nextActionId = (controlRef.current.agentDisassembly?.actionId ?? 0) + 1;
@@ -1644,6 +1742,26 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
                 </button>
               )}
 
+              {/* 全局模型：答题模式入口 */}
+              {modelUrl && !quizMode && (
+                <button
+                  ref={quizButtonRef}
+                  onClick={() => {
+                    setQuizSubjectFilter(modelUrl);
+                    setQuizMode(true);
+                  }}
+                  className="relative overflow-hidden px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-full shadow-[0_0_15px_rgba(34,211,238,0.4)] text-xs font-black tracking-widest uppercase transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 sm:gap-2 border border-cyan-400/30"
+                >
+                  <div 
+                    ref={quizProgressRef}
+                    className="absolute left-0 top-0 bottom-0 bg-white/20"
+                    style={{ width: '0%' }}
+                  />
+                  <span className="relative z-10 animate-pulse">✨</span>
+                  <span className="relative z-10">答题模式</span>
+                </button>
+              )}
+
               {showSettings && (
                 <div className="absolute bottom-16 left-0 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/50 p-5 w-64">
                   <div className="flex items-center justify-between mb-4">
@@ -1881,6 +1999,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
           controlRef={controlRef}
           cameraActive={cameraActive}
           onExit={() => setQuizMode(false)}
+          subjectFilter={quizSubjectFilter}
         />
       )}
     </div>

@@ -1032,7 +1032,7 @@ html, body {
   transform: rotate(-90deg);
   transform-origin: center;
   filter: drop-shadow(0 0 6px rgba(63, 246, 255, 0.6));
-  transition: stroke-dasharray 60ms linear;
+  transition: stroke-dashoffset 100ms ease-out;
 }
 
 /* Result icon overlay */

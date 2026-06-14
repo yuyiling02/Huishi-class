@@ -9,6 +9,7 @@ interface QuizOverlayProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   cameraActive: boolean;
   onExit: () => void;
+  subjectFilter?: string;
 }
 
 type QuizPhase = 'intro' | 'reading' | 'answering' | 'result' | 'summary';
@@ -36,9 +37,9 @@ const cancelSpeech = () => {
 };
 
 // ─── Component ───────────────────────────────────────────
-const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraActive, onExit }) => {
+const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraActive, onExit, subjectFilter }) => {
   const [phase, setPhase] = useState<QuizPhase>('intro');
-  const [session, setSession] = useState<QuizSession>(() => createQuizSession(5));
+  const [session, setSession] = useState<QuizSession>(() => createQuizSession(5, subjectFilter));
   const [countdown, setCountdown] = useState(3);
   const [hoveredOption, setHoveredOption] = useState<0 | 1 | null>(null);
   const [hoverProgress, setHoverProgress] = useState(0); // 0 to 1
@@ -48,6 +49,10 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
   const optionLeftRef = useRef<HTMLDivElement>(null);
   const optionRightRef = useRef<HTMLDivElement>(null);
+  const restartBtnRef = useRef<HTMLButtonElement>(null);
+  const exitBtnRef = useRef<HTMLButtonElement>(null);
+  const restartProgressRef = useRef<HTMLDivElement>(null);
+  const exitProgressRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<HTMLDivElement>(null);
   const pointerSmoothRef = useRef({ x: 0, y: 0, initialized: false });
   const hoverStartRef = useRef<number>(0);
@@ -206,6 +211,123 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
     return () => cancelAnimationFrame(animFrame);
   }, [phase, cameraActive]);
 
+  // ─── Phase: SUMMARY — hand hover detection ───────────
+  useEffect(() => {
+    if (phase !== 'summary') return;
+    const HOVER_CONFIRM_MS = 2000;
+    let animFrame: number;
+    let restartHoverStart = 0;
+    let exitHoverStart = 0;
+
+    const checkHover = () => {
+      if (phaseRef.current !== 'summary') return;
+
+      if (cameraActive) {
+        const handLm = controlRef.current.interactionHandLandmarks;
+        if (handLm && handLm.length > 17) {
+          let centerX = 0;
+          let centerY = 0;
+          const palmPoints = [0, 5, 9, 13, 17];
+          palmPoints.forEach(idx => {
+            centerX += handLm[idx].x;
+            centerY += handLm[idx].y;
+          });
+          centerX /= palmPoints.length;
+          centerY /= palmPoints.length;
+
+          const stageEl = stageRef.current;
+          if (stageEl) {
+            const stageRect = stageEl.getBoundingClientRect();
+            let targetX = stageRect.left + (1 - centerX) * stageRect.width;
+            let targetY = stageRect.top + centerY * stageRect.height;
+            
+            if (!pointerSmoothRef.current.initialized) {
+              pointerSmoothRef.current.x = targetX;
+              pointerSmoothRef.current.y = targetY;
+              pointerSmoothRef.current.initialized = true;
+            } else {
+              pointerSmoothRef.current.x = pointerSmoothRef.current.x * 0.85 + targetX * 0.15;
+              pointerSmoothRef.current.y = pointerSmoothRef.current.y * 0.85 + targetY * 0.15;
+            }
+
+            const screenX = pointerSmoothRef.current.x;
+            const screenY = pointerSmoothRef.current.y;
+            
+            if (pointerRef.current) {
+              pointerRef.current.style.transform = `translate(${screenX}px, ${screenY}px)`;
+              pointerRef.current.style.opacity = '1';
+            }
+
+            const margin = 10;
+            let hitRestart = false;
+            let hitExit = false;
+
+            if (restartBtnRef.current) {
+              const rect = restartBtnRef.current.getBoundingClientRect();
+              if (screenX >= rect.left - margin && screenX <= rect.right + margin &&
+                  screenY >= rect.top - margin && screenY <= rect.bottom + margin) {
+                hitRestart = true;
+              }
+            }
+
+            if (exitBtnRef.current) {
+              const rect = exitBtnRef.current.getBoundingClientRect();
+              if (screenX >= rect.left - margin && screenX <= rect.right + margin &&
+                  screenY >= rect.top - margin && screenY <= rect.bottom + margin) {
+                hitExit = true;
+              }
+            }
+
+            const now = Date.now();
+
+            if (hitRestart) {
+              if (restartHoverStart === 0) restartHoverStart = now;
+              exitHoverStart = 0;
+              if (exitProgressRef.current) exitProgressRef.current.style.width = '0%';
+              const progress = Math.min((now - restartHoverStart) / HOVER_CONFIRM_MS, 1);
+              if (restartProgressRef.current) restartProgressRef.current.style.width = `${progress * 100}%`;
+              if (progress >= 1) {
+                // handleRestart will be called when click confirms, but it's defined later.
+                // We can't directly call it here because it's captured in the closure. 
+                // So we'll click the button ref instead.
+                restartBtnRef.current?.click();
+                restartHoverStart = 0;
+                if (restartProgressRef.current) restartProgressRef.current.style.width = '0%';
+              }
+            } else if (hitExit) {
+              if (exitHoverStart === 0) exitHoverStart = now;
+              restartHoverStart = 0;
+              if (restartProgressRef.current) restartProgressRef.current.style.width = '0%';
+              const progress = Math.min((now - exitHoverStart) / HOVER_CONFIRM_MS, 1);
+              if (exitProgressRef.current) exitProgressRef.current.style.width = `${progress * 100}%`;
+              if (progress >= 1) {
+                exitBtnRef.current?.click();
+                exitHoverStart = 0;
+                if (exitProgressRef.current) exitProgressRef.current.style.width = '0%';
+              }
+            } else {
+              restartHoverStart = 0;
+              exitHoverStart = 0;
+              if (restartProgressRef.current) restartProgressRef.current.style.width = '0%';
+              if (exitProgressRef.current) exitProgressRef.current.style.width = '0%';
+            }
+          }
+        } else {
+          if (pointerRef.current) pointerRef.current.style.opacity = '0';
+          restartHoverStart = 0;
+          exitHoverStart = 0;
+          if (restartProgressRef.current) restartProgressRef.current.style.width = '0%';
+          if (exitProgressRef.current) exitProgressRef.current.style.width = '0%';
+        }
+      }
+
+      animFrame = requestAnimationFrame(checkHover);
+    };
+
+    animFrame = requestAnimationFrame(checkHover);
+    return () => cancelAnimationFrame(animFrame);
+  }, [phase, cameraActive]);
+
   const checkHitOnOptions = (screenX: number, screenY: number): 0 | 1 | null => {
     const margin = 10;
     for (const [idx, ref] of [[0, optionLeftRef], [1, optionRightRef]] as const) {
@@ -316,7 +438,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
   const handleRestart = () => {
     cancelSpeech();
-    setSession(createQuizSession(5));
+    setSession(createQuizSession(5, subjectFilter));
     setPhase('intro');
     setCountdown(3);
   };
@@ -324,9 +446,16 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
   // ─── Subject emoji helper ─────────────────────────────
   const subjectEmoji = (subject: string) => {
     switch (subject) {
-      case '化学': return '⚗️';
-      case '生物': return '🧬';
-      case '地理': return '🌍';
+      case '心脏模型': return '🫀';
+      case 'HIV 病毒模型': return '🦠';
+      case '金刚石模型': return '💎';
+      case '金刚石晶胞': return '🧊';
+      case '1,4-二氯甲基苯': return '⚗️';
+      case 'NaCl 离子晶体': return '🧂';
+      case 'SiO₂ 二氧化硅': return '🪨';
+      case '硝基苯': return '🧪';
+      case '地球内部结构': return '🌍';
+      case '地形地貌': return '⛰️';
       default: return '📚';
     }
   };
@@ -443,21 +572,10 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
                         <circle
                           cx="50" cy="50" r="45"
                           className="quiz-hover-ring-fill"
-                          strokeDasharray={`${hoverProgress * 283} 283`}
+                          strokeDasharray="283"
+                          strokeDashoffset={283 - hoverProgress * 283}
                         />
                       </svg>
-                    )}
-
-                    {/* Result icon overlay */}
-                    {showCorrectMark && (
-                      <div className="quiz-result-icon quiz-correct-pop">
-                        <CheckCircle2 size={48} className="text-emerald-400" />
-                      </div>
-                    )}
-                    {showWrongMark && (
-                      <div className="quiz-result-icon quiz-wrong-shake">
-                        <XCircle size={48} className="text-red-400" />
-                      </div>
                     )}
 
                     <div className="quiz-option-label">{String.fromCharCode(65 + idx)}</div>
@@ -541,11 +659,29 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
             </div>
 
             <div className="quiz-summary-actions">
-              <button className="quiz-btn-restart" onClick={handleRestart}>
-                再来一轮
+              <button 
+                ref={restartBtnRef}
+                className="quiz-btn-restart relative overflow-hidden" 
+                onClick={handleRestart}
+              >
+                <div 
+                  ref={restartProgressRef}
+                  className="absolute left-0 top-0 bottom-0 bg-white/20"
+                  style={{ width: '0%' }}
+                />
+                <span className="relative z-10">再来一轮</span>
               </button>
-              <button className="quiz-btn-exit" onClick={handleExit}>
-                退出答题
+              <button 
+                ref={exitBtnRef}
+                className="quiz-btn-exit relative overflow-hidden" 
+                onClick={handleExit}
+              >
+                <div 
+                  ref={exitProgressRef}
+                  className="absolute left-0 top-0 bottom-0 bg-white/20"
+                  style={{ width: '0%' }}
+                />
+                <span className="relative z-10">退出答题</span>
               </button>
             </div>
           </div>
