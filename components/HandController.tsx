@@ -173,6 +173,17 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       }
       mediaStream?.getTracks().forEach((track) => track.stop());
       cancelAnimationFrame(requestRef.current);
+
+      if (controlRef.current) {
+        controlRef.current.handLandmarks = { left: null, right: null };
+        controlRef.current.interactionHandLandmarks = null;
+        controlRef.current.rotationVelocity = { x: 0, y: 0 };
+        controlRef.current.zoomSpeed = 0;
+        controlRef.current.isDragging = false;
+      }
+      if (onStateChangeRef.current) {
+        onStateChangeRef.current(GestureType.NONE, MoveDirection.CENTER, false);
+      }
     };
   }, []);
 

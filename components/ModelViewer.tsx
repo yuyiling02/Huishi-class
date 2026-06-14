@@ -29,6 +29,12 @@ declare global {
 
 type CameraTarget = [number, number, number];
 
+interface LoadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
 interface ModelViewerProps {
   modelUrl: string;
   modelType: ModelType;
@@ -36,11 +42,13 @@ interface ModelViewerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   showLabels?: boolean;
   onShowLabelsChange?: (val: boolean) => void;
+  onLoadProgress?: (progress: LoadProgress) => void;
+  onLoadComplete?: () => void;
 }
 
 const MODEL_BASE_Y = -0.49;
 const MODEL_TARGET_SIZE = 1.5;
-const EARTH_LAYERS_TARGET_SIZE = 3.8;
+const EARTH_LAYERS_TARGET_SIZE = 3.0;
 const EARTH_POLITICAL_TARGET_SIZE = 3.5;
 const PUBCHEM_6233_MODEL_KEY = 'pubchem-6233-bas-color-print_nih3d.glb';
 const NITROBENZENE_MODEL_KEY = '7416-bas-color-print_nih3d.glb';
@@ -729,6 +737,17 @@ const EarthLayerFollowLabels: React.FC<{
   const labelRefs = useRef<THREE.Group[]>([]);
   const [visibleLayerCount, setVisibleLayerCount] = useState(0);
   const visibleLayerCountRef = useRef(0);
+  const cachedSizesRef = useRef<number[]>([]);
+
+  // 预先计算包围盒大小，避免在每一帧中重复遍历网格顶点计算 Box3
+  useEffect(() => {
+    if (parts.length === 0) return;
+    cachedSizesRef.current = parts.map((part) => {
+      const box = new THREE.Box3().setFromObject(part);
+      const size = box.getSize(new THREE.Vector3());
+      return size.y;
+    });
+  }, [parts]);
 
   const updateVisibleLayerCount = (nextCount: number) => {
     if (visibleLayerCountRef.current === nextCount) return;
@@ -745,18 +764,8 @@ const EarthLayerFollowLabels: React.FC<{
 
     const maxLayers = Math.min(parts.length, 4);
 
-    // Compute world bounds for all concentric layers
-    const boundsInfo: { center: THREE.Vector3; size: THREE.Vector3 }[] = [];
-    for (let i = 0; i < maxLayers; i++) {
-      const box = new THREE.Box3().setFromObject(parts[i]);
-      boundsInfo.push({
-        center: box.getCenter(new THREE.Vector3()),
-        size: box.getSize(new THREE.Vector3()),
-      });
-    }
-
+    // 计算展开的层数 (每帧执行，只涉及 4 次 Vector3 距离计算，性能开销极低)
     let revealedCount = 1;
-
     for (let i = 0; i < maxLayers - 1; i++) {
       const distanceFromOriginal = parts[i].position.distanceTo(getOriginalPosition(parts[i]));
       if (distanceFromOriginal > EARTH_LAYER_LABEL_REVEAL_DISTANCE) {
@@ -767,6 +776,7 @@ const EarthLayerFollowLabels: React.FC<{
     }
     updateVisibleLayerCount(revealedCount);
 
+    // 每帧更新标签位置 (移除 80ms 节流限制，实现 60fps 丝滑跟随动效)
     parts.slice(0, maxLayers).forEach((part, index) => {
       const label = labelRefs.current[index];
       if (!label) return;
@@ -776,9 +786,13 @@ const EarthLayerFollowLabels: React.FC<{
         return;
       }
 
-      const { center, size } = boundsInfo[index];
-      const worldPosition = center.clone();
-      worldPosition.y += Math.max(0.35, size.y * 0.58);
+      // 直接获取部件的世界坐标 (不再遍历网格计算包围盒中心，改用 precomputed size.y)
+      const worldPosition = new THREE.Vector3();
+      part.getWorldPosition(worldPosition);
+
+      const sizeY = cachedSizesRef.current[index] || 1.0;
+      worldPosition.y += Math.max(0.35, sizeY * 0.58);
+      
       const localPosition = rootGroupRef.current!.worldToLocal(worldPosition);
       label.position.lerp(localPosition, 0.18);
       label.visible = true;
@@ -838,7 +852,7 @@ const LocalEnvironment: React.FC = () => {
 };
 
 // Unified model component. FBX / GLB / GLTF all use the same layer-based disassembly path.
-const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget; showEarthLabels?: boolean }> = ({ url, modelType, assetUrls, controlRef, cameraTarget, showEarthLabels = false }) => {
+const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget; showEarthLabels?: boolean; onLoadProgress?: (progress: LoadProgress) => void; onLoadComplete?: () => void }> = ({ url, modelType, assetUrls, controlRef, cameraTarget, showEarthLabels = false, onLoadProgress, onLoadComplete }) => {
   const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
   const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
   const [grabbableParts, setGrabbableParts] = useState<GrabbablePart[]>([]);
@@ -1001,16 +1015,31 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       console.error('模型加载失败:', error);
     };
 
+    const handleProgress = (event: ProgressEvent) => {
+      if (onLoadProgress && event.total > 0) {
+        onLoadProgress({
+          loaded: event.loaded,
+          total: event.total,
+          percent: Math.round((event.loaded / event.total) * 100),
+        });
+      }
+    };
+
+    const handleLoadedModelAndNotify = (root: THREE.Object3D) => {
+      handleLoadedModel(root);
+      onLoadComplete?.();
+    };
+
     if (modelType === 'fbx') {
       const loader = new FBXLoader(loadingManager);
-      loader.load(url, handleLoadedModel, undefined, handleLoadError);
+      loader.load(url, handleLoadedModelAndNotify, handleProgress, handleLoadError);
     } else {
       const loader = new GLTFLoader(loadingManager);
       dracoLoader = new DRACOLoader(loadingManager);
       dracoLoader.setDecoderPath('/draco/');
       dracoLoader.setDecoderConfig({ type: 'wasm' });
       loader.setDRACOLoader(dracoLoader);
-      loader.load(url, (gltf) => handleLoadedModel(gltf.scene), undefined, handleLoadError);
+      loader.load(url, (gltf) => handleLoadedModelAndNotify(gltf.scene), handleProgress, handleLoadError);
     }
 
     return () => {
@@ -1751,7 +1780,7 @@ const CameraInit: React.FC<{ modelUrl: string; target: CameraTarget }> = ({ mode
   return null;
 };
 
-const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange }) => {
+const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange, onLoadProgress, onLoadComplete }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const [internalShowLabels, setInternalShowLabels] = useState(false);
   const showLabels = externalShowLabels !== undefined ? externalShowLabels : internalShowLabels;
@@ -1842,6 +1871,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
                 controlRef={controlRef}
                 cameraTarget={cameraTarget}
                 showEarthLabels={lowerModelUrl.includes('earth-layers') && showLabels}
+                onLoadProgress={onLoadProgress}
+                onLoadComplete={onLoadComplete}
               />
             </>
           )}

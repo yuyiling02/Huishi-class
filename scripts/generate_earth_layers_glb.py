@@ -34,7 +34,7 @@ LAYER_SPECS = [
         "key": "Crust",
         "radius": 2.20,
         "material": "CrustSurface",
-        "children": ["Crust_Surface", "Atmosphere_Glow"],
+        "children": ["Crust_Surface"],
         "extras": {"label": "Crust", "teachingRole": "earth-internal-layer"},
     },
     {
@@ -279,7 +279,6 @@ def build_glb() -> bytes:
 
     geometries = [
         create_uv_sphere("Crust_Surface", 2.20, "CrustSurface", relief=0.0),
-        create_uv_sphere("Atmosphere_Glow", 2.255, "Atmosphere", relief=0.0),
         create_uv_sphere("Mantle_Surface", 1.72, "MantleSurface", relief=0.032, seed=4),
         create_uv_sphere("OuterCore_Surface", 1.02, "OuterCoreSurface", relief=0.018, seed=9),
         create_uv_sphere("InnerCore_Surface", 0.50, "InnerCoreSurface", relief=0.010, seed=15),

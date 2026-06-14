@@ -7,6 +7,7 @@ import HandController from './components/HandController';
 import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
+import QuizOverlay from './components/QuizOverlay';
 import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation } from './services/agentRuntime';
 import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, X, ClipboardCheck, Loader2, Play, Download, LogOut, Upload } from 'lucide-react';
 import { ModelType } from './types';
@@ -15,7 +16,7 @@ import type { AuthUser } from './Login';
 const ENABLE_GEMINI = (import.meta as any).env?.VITE_ENABLE_GEMINI === 'true';
 const BIODIGITAL_HEART_URL = 'https://human.biodigital.com/view?id=7F0a&lang=zh&ref=share';
 const BUILT_IN_MODELS = {
-  heart: '/models/心脏模型.glb',
+  heart: '/models/heart-optimized.glb',
   hiv: '/models/hiv-virus.glb',
   diamond: '/models/diamond.glb',
   diamondUnitCell: '/models/diamond-unit-cell_NIH3D.glb',
@@ -182,7 +183,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
   const [isKnowledgeStreaming, setIsKnowledgeStreaming] = useState(false);
   const [handNearStructureImage, setHandNearStructureImage] = useState(false);
   const [isHandExpanded, setIsHandExpanded] = useState(false);
+  const [loadProgress, setLoadProgress] = useState<{ loaded: number; total: number; percent: number } | null>(null);
+  const [quizMode, setQuizMode] = useState(false);
   const structureImageRef = useRef<HTMLButtonElement>(null);
+  const hasAutoOpenedCameraRef = useRef(false);
   const knowledgeSpeechBufferRef = useRef('');
   const knowledgeSpeechClosedRef = useRef(false);
   const knowledgeSpeechSessionRef = useRef(0);
@@ -394,6 +398,22 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
 
   useEffect(() => revokeObjectUrls, []);
 
+  // 低优先级预加载优化版心脏模型
+  useEffect(() => {
+    const prefetch = async () => {
+      try {
+        await fetch(BUILT_IN_MODELS.heart, {
+          cache: 'force-cache',
+          priority: 'low' as RequestPriority,
+        });
+      } catch {
+        // 预加载失败不影响主流程
+      }
+    };
+    const timer = setTimeout(prefetch, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     const syncFullscreenState = () => {
       setIsStageFullscreen(document.fullscreenElement === stageRef.current);
@@ -439,6 +459,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
     const files = Array.from(event.target.files || []);
     const modelFile = files.find((file) => /\.(glb|gltf|fbx)$/i.test(file.name));
     if (modelFile) {
+      if (!hasAutoOpenedCameraRef.current) {
+        hasAutoOpenedCameraRef.current = true;
+        setCameraActive(true);
+      }
       revokeObjectUrls();
       showModelStage();
 
@@ -458,6 +482,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
       setModelType(nextModelType);
       setModelAssetUrls(nextAssetUrls);
       setFileName(modelFile.name);
+      setLoadProgress(null);
       resetControls();
       setAiAnalysis(`模型已加载: ${modelFile.name}，将按内部层级自动启用拆解`);
       event.target.value = '';
@@ -465,6 +490,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
   };
 
   const loadDemoModel = (url: string, name: string, type: ModelType = 'glb') => {
+    if (!hasAutoOpenedCameraRef.current) {
+      hasAutoOpenedCameraRef.current = true;
+      setCameraActive(true);
+    }
     showModelStage();
     if (/^https?:\/\//i.test(url)) {
       setAiAnalysis('演示模型已切换为离线模式，请直接导入本地 GLB/GLTF/FBX 模型。');
@@ -474,6 +503,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
     setModelType(type);
     setModelAssetUrls({});
     setFileName(name);
+    setLoadProgress(null);
     resetControls();
     setAiAnalysis(`正在演示: ${name}`);
   };
@@ -895,15 +925,32 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
       <div className="lab-ambient lab-ambient-bottom" aria-hidden="true" />
       {/* 顶部导航 */}
       <nav className="relative z-50 flex h-[84px] items-center justify-between px-7">
-        <div 
-          className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={onBack}
-        >
-          <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(39,242,255,0.46)]" />
-          <div className="flex flex-col">
-            <span className="text-xl font-black tracking-tight text-white">数智课堂</span>
-            <span className="text-xs font-semibold tracking-wide text-slate-400">AI 沉浸式教学系统</span>
+        <div className="flex items-center gap-6">
+          <div 
+            className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={onBack}
+          >
+            <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(39,242,255,0.46)]" />
+            <div className="flex flex-col">
+              <span className="text-xl font-black tracking-tight text-white">数智课堂</span>
+              <span className="text-xs font-semibold tracking-wide text-slate-400">AI 沉浸式教学系统</span>
+            </div>
           </div>
+
+          {/* 答题模式按钮 */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!cameraActive) setCameraActive(true);
+              setQuizMode(true);
+            }}
+            className="lab-pill-button ml-2"
+            aria-label="答题挑战"
+            title="进入答题模式"
+          >
+            <ClipboardCheck className="mr-1 text-yellow-400" size={15} />
+            <span>答题挑战</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-5">
@@ -1753,7 +1800,37 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
             {activeContent === 'biodigital' ? (
               <BioDigitalViewer src={BIODIGITAL_HEART_URL} onFallback={loadHeartFallbackModel} />
             ) : modelUrl ? (
-              <ModelViewer modelUrl={modelUrl} modelType={modelType} assetUrls={modelAssetUrls} controlRef={controlRef} showLabels={showLabels} onShowLabelsChange={setShowLabels} />
+              <>
+                <ModelViewer
+                  modelUrl={modelUrl}
+                  modelType={modelType}
+                  assetUrls={modelAssetUrls}
+                  controlRef={controlRef}
+                  showLabels={showLabels}
+                  onShowLabelsChange={setShowLabels}
+                  onLoadProgress={(progress) => setLoadProgress(progress)}
+                  onLoadComplete={() => setLoadProgress(null)}
+                />
+                {/* 模型加载进度遮罩 */}
+                {loadProgress !== null && loadProgress.percent < 100 && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity duration-300">
+                    <div className="bg-slate-900/80 backdrop-blur-xl border border-cyan-500/20 rounded-2xl px-8 py-6 shadow-2xl max-w-xs w-full text-center">
+                      <div className="text-cyan-400 text-sm font-bold mb-1">🫀 正在加载模型</div>
+                      <div className="text-slate-400 text-xs mb-4">{fileName || '3D 模型'}</div>
+                      <div className="w-full bg-slate-700/60 rounded-full h-2.5 mb-3 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300 ease-out"
+                          style={{ width: `${loadProgress.percent}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>{loadProgress.total > 0 ? `${(loadProgress.loaded / 1024 / 1024).toFixed(1)}MB / ${(loadProgress.total / 1024 / 1024).toFixed(1)}MB` : '计算中...'}</span>
+                        <span className="text-cyan-400 font-semibold">{loadProgress.percent}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="lab-welcome">
                 <div className={`lab-cube-card ${playIntro ? 'lab-cube-enter' : ''}`}>
@@ -1782,7 +1859,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
 
           {/* 摄像头预览区 */}
           {activeContent === 'model' && cameraActive && (
-            <div className="absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-black z-30 transition-all hover:scale-105">
+            <div className={`absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-black transition-all hover:scale-105 ${quizMode ? 'z-[9001]' : 'z-30'}`}>
               <HandController controlRef={controlRef} onStateChange={handleGestureUpdate} interactionMode={interactionMode} />
               <div className="absolute top-3 left-3 flex items-center gap-2">
                 <div className="bg-[#86e3ce] w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_#86e3ce]"></div>
@@ -1796,6 +1873,16 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
       <footer className="relative z-10 flex h-8 items-center px-7 text-[11px] font-bold tracking-wider text-slate-500">
         <span>© 2026 慧视课堂 | 教育 AI 实验室</span>
       </footer>
+
+      {/* 答题模式全屏浮层 */}
+      {quizMode && (
+        <QuizOverlay
+          stageRef={stageRef}
+          controlRef={controlRef}
+          cameraActive={cameraActive}
+          onExit={() => setQuizMode(false)}
+        />
+      )}
     </div>
   );
 };
