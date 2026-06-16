@@ -6,6 +6,7 @@ interface HandControllerProps {
   controlRef: React.MutableRefObject<ControlRefs>;
   onStateChange: (gesture: GestureType, direction: MoveDirection, isDragging: boolean) => void;
   interactionMode: InteractionMode;
+  quizMode?: boolean;  // 新增：是否处于答题模式
 }
 
 // Simple Low-Pass Filter for smoothing coordinates
@@ -38,7 +39,7 @@ const createHandLandmarker = async (wasmPath: string, modelAssetPath: string) =>
   });
 };
 
-const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChange, interactionMode }) => {
+const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChange, interactionMode, quizMode = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
@@ -65,6 +66,12 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
     controlRef.current.isDragging = false;
     controlRef.current.interactionHandLandmarks = null;
   }, [controlRef, interactionMode]);
+
+  // Keep latest quizMode to avoid stale closures in RAF loop
+  const quizModeRef = useRef(quizMode);
+  useEffect(() => {
+    quizModeRef.current = quizMode;
+  }, [quizMode]);
 
   // Smoothing refs
   const smoothDragPinchRef = useRef({ x: 0.5, y: 0.5 });
@@ -440,9 +447,19 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
       const finalRotY = Math.abs(smoothRotVelRef.current.y) > 0.001 ? smoothRotVelRef.current.y : 0;
       const finalZoomSpeed = Math.abs(smoothZoomRef.current) > 0.01 ? smoothZoomRef.current : 0;
 
-      controlRef.current.rotationVelocity = { x: finalRotX, y: finalRotY };
-      controlRef.current.zoomSpeed = finalZoomSpeed;
-      controlRef.current.isDragging = isDragging;
+      // 答题模式下：冻结模型控制，但保留手势位置数据
+      if (quizModeRef.current) {
+        controlRef.current.rotationVelocity = { x: 0, y: 0 };
+        controlRef.current.zoomSpeed = 0;
+        controlRef.current.isDragging = false;
+        controlRef.current.panPosition = { x: 0, y: 0 };
+      } else {
+        // 正常模式：按手势更新
+        controlRef.current.rotationVelocity = { x: finalRotX, y: finalRotY };
+        controlRef.current.zoomSpeed = finalZoomSpeed;
+        controlRef.current.isDragging = isDragging;
+        // panPosition 已在 applyPinchDrag 内部更新，这里不需要重复设置
+      }
 
       // 传递手部关节数据到3D场景
       const isSingleMode = interactionModeRef.current === 'single';
@@ -460,6 +477,7 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
         ? activeSingleHandLandmarks
         : dualManipulationHandLandmarks;
 
+      // 手势位置数据始终更新（答题和非答题都需要）
       controlRef.current.handLandmarks = {
         left: visibleLeftHandLandmarks ? toPointList(visibleLeftHandLandmarks) : null,
         right: visibleRightHandLandmarks ? toPointList(visibleRightHandLandmarks) : null

@@ -44,6 +44,7 @@ interface ModelViewerProps {
   onShowLabelsChange?: (val: boolean) => void;
   onLoadProgress?: (progress: LoadProgress) => void;
   onLoadComplete?: () => void;
+  quizMode?: boolean;  // 新增：是否处于答题模式
 }
 
 const MODEL_BASE_Y = -0.49;
@@ -1780,7 +1781,7 @@ const CameraInit: React.FC<{ modelUrl: string; target: CameraTarget }> = ({ mode
   return null;
 };
 
-const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange, onLoadProgress, onLoadComplete }) => {
+const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange, onLoadProgress, onLoadComplete, quizMode = false }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const [internalShowLabels, setInternalShowLabels] = useState(false);
   const showLabels = externalShowLabels !== undefined ? externalShowLabels : internalShowLabels;
@@ -1878,7 +1879,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
           )}
 
           {/* 3D虚拟手骨架可视化 */}
-          <VirtualHand controlRef={controlRef} />
+          {!quizMode && <VirtualHand controlRef={controlRef} />}
 
           {/* ---- Contact shadows on floor ---- */}
           <ContactShadows

@@ -160,9 +160,9 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
             const screenX = pointerSmoothRef.current.x;
             const screenY = pointerSmoothRef.current.y;
-            
+
             hitOption = checkHitOnOptions(screenX, screenY);
-            
+
             // Update virtual pointer position
             if (pointerRef.current) {
               pointerRef.current.style.transform = `translate(${screenX}px, ${screenY}px)`;
@@ -252,7 +252,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
             const screenX = pointerSmoothRef.current.x;
             const screenY = pointerSmoothRef.current.y;
-            
+
             if (pointerRef.current) {
               pointerRef.current.style.transform = `translate(${screenX}px, ${screenY}px)`;
               pointerRef.current.style.opacity = '1';
@@ -465,8 +465,8 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
     <div className="quiz-overlay">
       {/* Virtual Hand Pointer */}
       {cameraActive && (
-        <div 
-          ref={pointerRef} 
+        <div
+          ref={pointerRef}
           className="fixed top-0 left-0 w-8 h-8 pointer-events-none z-[9999] opacity-0 transition-opacity duration-200 ease-out"
           style={{ willChange: 'transform', transform: 'translate(-100px, -100px)' }}
         >

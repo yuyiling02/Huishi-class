@@ -1928,6 +1928,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
                   onShowLabelsChange={setShowLabels}
                   onLoadProgress={(progress) => setLoadProgress(progress)}
                   onLoadComplete={() => setLoadProgress(null)}
+                  quizMode={quizMode}
                 />
                 {/* 模型加载进度遮罩 */}
                 {loadProgress !== null && loadProgress.percent < 100 && (
@@ -1977,12 +1978,14 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, onBack, currentUser, 
 
           {/* 摄像头预览区 */}
           {activeContent === 'model' && cameraActive && (
-            <div className={`absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-black transition-all hover:scale-105 ${quizMode ? 'z-[9001]' : 'z-30'}`}>
-              <HandController controlRef={controlRef} onStateChange={handleGestureUpdate} interactionMode={interactionMode} />
-              <div className="absolute top-3 left-3 flex items-center gap-2">
-                <div className="bg-[#86e3ce] w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_#86e3ce]"></div>
-                <span className="text-[8px] font-black text-white/70 uppercase tracking-widest">Vision Sensor</span>
-              </div>
+            <div className={`absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-black transition-all hover:scale-105 ${quizMode ? 'opacity-0 pointer-events-none -z-10' : 'z-30'}`}>
+              <HandController controlRef={controlRef} onStateChange={handleGestureUpdate} interactionMode={interactionMode} quizMode={quizMode} />
+              {!quizMode && (
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <div className="bg-[#86e3ce] w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_#86e3ce]"></div>
+                  <span className="text-[8px] font-black text-white/70 uppercase tracking-widest">Vision Sensor</span>
+                </div>
+              )}
             </div>
           )}
         </section>
