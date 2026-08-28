@@ -1682,6 +1682,191 @@ html, body {
   transform: translateY(-2px);
 }
 
+/* Options row (2 options) */
+.quiz-options-row {
+  display: flex;
+  gap: 32px;
+  width: 100%;
+  max-width: 720px;
+  justify-content: center;
+}
+
+/* Options grid (4 options) - 2x2 布局 */
+.quiz-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 20px 28px;
+  width: 100%;
+  max-width: 760px;
+  justify-content: center;
+}
+
+.quiz-options-grid .quiz-option-card {
+  flex: none;
+  max-width: none;
+  min-height: 140px;
+  padding: 22px 20px;
+}
+
+.quiz-options-grid .quiz-option-card.quiz-card-enter:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.quiz-options-grid .quiz-option-card.quiz-card-enter:nth-child(4) {
+  animation-delay: 300ms;
+}
+
+/* Wrong questions list - 错题小结 */
+.quiz-wrong-list {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.quiz-wrong-item {
+  border-radius: 14px;
+  background: rgba(248, 113, 113, 0.04);
+  border: 1px solid rgba(248, 113, 113, 0.1);
+  overflow: hidden;
+  transition: all 200ms ease;
+}
+
+.quiz-wrong-item:hover {
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.quiz-wrong-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.quiz-wrong-idx {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(248, 113, 113, 0.12);
+  font-size: 12px;
+  font-weight: 800;
+  color: #fda4af;
+  flex-shrink: 0;
+}
+
+.quiz-wrong-q {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-wrong-body {
+  padding: 10px 14px 14px;
+  border-top: 1px solid rgba(248, 113, 113, 0.08);
+  animation: quiz-fade-in 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Xiaozhi explain button - 小智讲解按钮 */
+.quiz-xiaozhi-explain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(39, 242, 255, 0.3);
+  background: linear-gradient(135deg, rgba(39, 242, 255, 0.14), rgba(168, 85, 247, 0.1));
+  color: #7dd3fc;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.quiz-xiaozhi-explain-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(39, 242, 255, 0.22), rgba(168, 85, 247, 0.16));
+  border-color: rgba(39, 242, 255, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(39, 242, 255, 0.14);
+}
+
+.quiz-xiaozhi-explain-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.quiz-xiaozhi-explain-btn.is-loading {
+  opacity: 0.85;
+  cursor: progress;
+  color: #a78bfa;
+  border-color: rgba(168, 85, 247, 0.4);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.14), rgba(39, 242, 255, 0.1));
+}
+
+.quiz-xiaozhi-skip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.16), rgba(249, 115, 22, 0.12));
+  color: #fcd34d;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 180ms ease;
+  cursor: pointer;
+}
+.quiz-xiaozhi-skip-btn:hover {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.28), rgba(249, 115, 22, 0.2));
+  border-color: rgba(251, 191, 36, 0.7);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(251, 191, 36, 0.16);
+}
+.quiz-xiaozhi-skip-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Skip/next button shown in quiz RESULT phase */
+.quiz-skip-advance-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(249, 115, 22, 0.14));
+  color: #fcd34d;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 180ms ease;
+  box-shadow: 0 4px 18px rgba(251, 191, 36, 0.1);
+}
+.quiz-skip-advance-btn:hover {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.3), rgba(249, 115, 22, 0.22));
+  border-color: rgba(251, 191, 36, 0.75);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 26px rgba(251, 191, 36, 0.2);
+}
+.quiz-skip-advance-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
 /* Generic fade-in */
 .quiz-fade-in {
   animation: quiz-fade-in 400ms cubic-bezier(0.16, 1, 0.3, 1) both;

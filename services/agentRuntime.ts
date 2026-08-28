@@ -782,12 +782,15 @@ const fallbackFollowUpQuestion = (context: FollowUpContext = {}): FollowUpQuesti
   const session = createQuizSession(1, context.modelUrl || undefined);
   const quizQuestion = session.questions[0] || createQuizSession(1, '/models/earth-layers.glb').questions[0];
 
+  const fallbackOptions = (quizQuestion.options || []).slice(0, 2) as [string, string];
+  const safeCorrect = quizQuestion.correctIndex >= 0 && quizQuestion.correctIndex < 2 ? quizQuestion.correctIndex as 0 | 1 : 0;
+
   return {
     id: `fallback-${quizQuestion.id}`,
     subject: quizQuestion.subject,
     question: quizQuestion.question,
-    options: quizQuestion.options,
-    correctIndex: quizQuestion.correctIndex,
+    options: fallbackOptions,
+    correctIndex: safeCorrect,
     explanation: quizQuestion.explanation,
   };
 };

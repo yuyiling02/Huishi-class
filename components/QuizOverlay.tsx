@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ControlRefs } from '../types';
 import { createQuizSession, getQuizResult, QuizSession, QuizQuestion } from '../services/quizData';
 import { prepareXiaozhiSpeech, speakXiaozhi, stopXiaozhiSpeech } from '../services/xiaozhiSpeechService';
-import { X, Trophy, Star, Clock, CheckCircle2, XCircle, Zap } from 'lucide-react';
+import { X, Trophy, Star, Clock, CheckCircle2, XCircle, Zap, Sparkles, Loader2, SkipForward } from 'lucide-react';
 
 interface QuizOverlayProps {
   stageRef: React.RefObject<HTMLElement>;
@@ -21,12 +21,14 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
   const [phase, setPhase] = useState<QuizPhase>('intro');
   const [session, setSession] = useState<QuizSession>(() => createQuizSession(5, subjectFilter));
   const [countdown, setCountdown] = useState(3);
-  const [hoveredOption, setHoveredOption] = useState<0 | 1 | null>(null);
+  const [hoveredOption, setHoveredOption] = useState<number | null>(null);
   const [hoverProgress, setHoverProgress] = useState(0); // 0 to 1
-  const [selectedAnswer, setSelectedAnswer] = useState<0 | 1 | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [expandedWrongId, setExpandedWrongId] = useState<string | null>(null);
+  const [xiaozhiExplainingId, setXiaozhiExplainingId] = useState<string | null>(null);
 
   const speakQuiz = useCallback((text: string) => speakXiaozhi(text, {
     onStart: () => setVoiceError(''),
@@ -36,8 +38,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
     },
   }), []);
 
-  const optionLeftRef = useRef<HTMLDivElement>(null);
-  const optionRightRef = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restartBtnRef = useRef<HTMLButtonElement>(null);
   const exitBtnRef = useRef<HTMLButtonElement>(null);
   const restartProgressRef = useRef<HTMLDivElement>(null);
@@ -45,7 +46,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
   const pointerRef = useRef<HTMLDivElement>(null);
   const pointerSmoothRef = useRef({ x: 0, y: 0, initialized: false });
   const hoverStartRef = useRef<number>(0);
-  const hoverOptionRef = useRef<0 | 1 | null>(null);
+  const hoverOptionRef = useRef<number | null>(null);
   const phaseRef = useRef(phase);
   const sessionRef = useRef(session);
   const reportedSessionRef = useRef<number | null>(null);
@@ -112,14 +113,15 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
   // ─── Phase: ANSWERING — hand hover detection ───────────
   useEffect(() => {
-    if (phase !== 'answering') return;
+    if (phase !== 'answering' || !currentQuestion) return;
     const HOVER_CONFIRM_MS = 1200;
     let animFrame: number;
+    const optionCount = currentQuestion.options.length;
 
     const checkHover = () => {
       if (phaseRef.current !== 'answering') return;
 
-      let hitOption: 0 | 1 | null = null;
+      let hitOption: number | null = null;
 
       // 1. Check hand landmark (use palm centroid instead of index tip for stability)
       if (cameraActive) {
@@ -155,7 +157,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
             const screenX = pointerSmoothRef.current.x;
             const screenY = pointerSmoothRef.current.y;
 
-            hitOption = checkHitOnOptions(screenX, screenY);
+            hitOption = checkHitOnOptions(screenX, screenY, optionCount);
 
             // Update virtual pointer position
             if (pointerRef.current) {
@@ -203,7 +205,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
     animFrame = requestAnimationFrame(checkHover);
     return () => cancelAnimationFrame(animFrame);
-  }, [phase, cameraActive]);
+  }, [phase, cameraActive, currentQuestion]);
 
   // ─── Phase: SUMMARY — hand hover detection ───────────
   useEffect(() => {
@@ -322,10 +324,10 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
     return () => cancelAnimationFrame(animFrame);
   }, [phase, cameraActive]);
 
-  const checkHitOnOptions = (screenX: number, screenY: number): 0 | 1 | null => {
+  const checkHitOnOptions = (screenX: number, screenY: number, count: number): number | null => {
     const margin = 10;
-    for (const [idx, ref] of [[0, optionLeftRef], [1, optionRightRef]] as const) {
-      const el = ref.current;
+    for (let idx = 0; idx < count; idx++) {
+      const el = optionRefs.current[idx];
       if (!el) continue;
       const rect = el.getBoundingClientRect();
       if (
@@ -341,7 +343,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
   };
 
   // ─── Answer confirmation ───────────────────────────────
-  const confirmAnswer = useCallback((optionIndex: 0 | 1) => {
+  const confirmAnswer = useCallback((optionIndex: number) => {
     if (phaseRef.current !== 'answering' || !currentQuestion) return;
     
     phaseRef.current = 'result'; // Synchronously block duplicate calls
@@ -362,6 +364,23 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
     });
   }, [currentQuestion]);
 
+  // ─── Advance to next question (shared by auto-advance & skip) ───
+  const advanceToNextQuestion = useCallback(() => {
+    const nextIndex = sessionRef.current.currentIndex + 1;
+    if (nextIndex >= sessionRef.current.questions.length) {
+      setPhase('summary');
+    } else {
+      setSession(prev => ({ ...prev, currentIndex: nextIndex }));
+      setPhase('reading');
+    }
+  }, []);
+
+  // Skip the current result narration: stop speaking and jump to the next question.
+  const skipResult = useCallback(() => {
+    stopXiaozhiSpeech();
+    advanceToNextQuestion();
+  }, [advanceToNextQuestion]);
+
   // ─── Phase: RESULT ───────────────────────────────────────
   useEffect(() => {
     if (phase !== 'result' || !currentQuestion || selectedAnswer === null) return;
@@ -372,13 +391,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
     
     const advanceNext = () => {
       if (cancelled) return;
-      const nextIndex = sessionRef.current.currentIndex + 1;
-      if (nextIndex >= sessionRef.current.questions.length) {
-        setPhase('summary');
-      } else {
-        setSession(prev => ({ ...prev, currentIndex: nextIndex }));
-        setPhase('reading');
-      }
+      advanceToNextQuestion();
     };
 
     if (correct) {
@@ -396,7 +409,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
           new Promise<void>(r => setTimeout(r, maxWait))
         ]);
 
-        await safeSpeak(`很遗憾，正确答案是：${currentQuestion.options[currentQuestion.correctIndex]}`, 4000);
+        await safeSpeak(`很遗憾，正确答案是 ${String.fromCharCode(65 + currentQuestion.correctIndex)}：${currentQuestion.options[currentQuestion.correctIndex]}`, 4000);
         if (cancelled) return;
         
         setShowExplanation(true);
@@ -411,7 +424,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
         if (advanceTimer !== null) window.clearTimeout(advanceTimer);
       };
     }
-  }, [phase, currentQuestion, selectedAnswer, speakQuiz]);
+  }, [phase, currentQuestion, selectedAnswer, speakQuiz, advanceToNextQuestion]);
 
   // ─── Speak summary on enter ────────────────────────────
   useEffect(() => {
@@ -421,9 +434,25 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
   }, [phase, speakQuiz]);
 
   // ─── Click fallback for non-camera mode ────────────────
-  const handleOptionClick = (index: 0 | 1) => {
+  const handleOptionClick = (index: number) => {
     if (phase !== 'answering') return;
     confirmAnswer(index);
+  };
+
+  // ─── Xiaozhi explain wrong question ────────────────────
+  const handleXiaozhiExplain = (q: QuizQuestion) => {
+    // 正在讲解这道题时再点一次 = 跳过播报
+    if (xiaozhiExplainingId === q.id) {
+      stopXiaozhiSpeech();
+      setXiaozhiExplainingId(null);
+      return;
+    }
+    setXiaozhiExplainingId(q.id);
+    const text = `这道题「${q.question}」的正确答案是 ${String.fromCharCode(65 + q.correctIndex)}：${q.options[q.correctIndex]}。${q.explanation}`;
+    speakXiaozhi(text, {
+      onEnd: () => setXiaozhiExplainingId(null),
+      onError: () => setXiaozhiExplainingId(null),
+    });
   };
 
   // ─── Exit handler ──────────────────────────────────────
@@ -510,7 +539,11 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
       {/* ─── READING / ANSWERING / RESULT ─── */}
       {(phase === 'reading' || phase === 'answering' || phase === 'result') && currentQuestion && (
-        <div className="quiz-game-container quiz-fade-in">
+        <div
+          className="quiz-game-container quiz-fade-in"
+          onClick={phase === 'result' ? skipResult : undefined}
+          title={phase === 'result' ? '点击屏幕任意处跳过播报' : undefined}
+        >
           {/* Progress bar */}
           <div className="quiz-progress-bar">
             {session.questions.map((_, i) => (
@@ -547,10 +580,10 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
 
           {/* Options (always rendered to reserve exact layout space) */}
           <div 
-            className="quiz-options-row" 
+            className={currentQuestion.options.length === 4 ? 'quiz-options-grid' : 'quiz-options-row'} 
           >
               {currentQuestion.options.map((option, idx) => {
-                const optIdx = idx as 0 | 1;
+                const optIdx = idx;
                 const isHovered = hoveredOption === optIdx && phase === 'answering';
                 const isSelected = selectedAnswer === optIdx;
                 const isCorrectOption = currentQuestion.correctIndex === optIdx;
@@ -560,7 +593,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
                 return (
                   <div
                     key={idx}
-                    ref={idx === 0 ? optionLeftRef : optionRightRef}
+                    ref={(el) => { optionRefs.current[idx] = el; }}
                     className={`quiz-option-card ${
                       phase === 'answering' ? 'quiz-card-enter' : ''
                     } ${isHovered ? 'is-hovered' : ''} ${
@@ -596,6 +629,19 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
             <div className="quiz-explanation quiz-fade-in">
               <p>{currentQuestion.explanation}</p>
             </div>
+          )}
+
+          {/* Skip / next button */}
+          {phase === 'result' && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); skipResult(); }}
+              className="quiz-skip-advance-btn"
+              title="跳过播报，进入下一题"
+            >
+              <SkipForward size={15} />
+              <span>跳过 · 下一题</span>
+            </button>
           )}
 
           {/* Gesture hint */}
@@ -643,6 +689,80 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
                 <span>用时 {quizResult.totalTime} 秒</span>
               </div>
             </div>
+
+            {/* Wrong questions summary — 错题小结 */}
+            {(() => {
+              const wrongList = session.questions
+                .map((q, i) => ({ q, i, userAns: session.answers[i] }))
+                .filter(({ q, userAns }) => userAns !== q.correctIndex);
+              if (wrongList.length === 0) return null;
+              return (
+                <div className="mt-4 border-t border-slate-700/50 pt-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-bold text-amber-300">
+                    <XCircle size={16} /> 错题小结（{wrongList.length} 题）
+                  </div>
+                  <div className="quiz-wrong-list">
+                    {wrongList.map(({ q, i, userAns }) => {
+                      const isExpanded = expandedWrongId === q.id;
+                      const isExplaining = xiaozhiExplainingId === q.id;
+                      return (
+                        <div key={q.id} className="quiz-wrong-item">
+                          <div
+                            className="quiz-wrong-header"
+                            onClick={() => setExpandedWrongId(isExpanded ? null : q.id)}
+                          >
+                            <span className="quiz-wrong-idx">{i + 1}</span>
+                            <span className="quiz-wrong-q truncate">{q.question}</span>
+                            <span className="ml-auto text-xs text-slate-400">{isExpanded ? '▲' : '▼'}</span>
+                          </div>
+                          {isExpanded && (
+                            <div className="quiz-wrong-body">
+                              <div className="mb-2 text-xs text-slate-300">
+                                <div><span className="text-rose-400 font-semibold">你的答案：</span>
+                                  {userAns !== null && userAns !== undefined
+                                    ? `${String.fromCharCode(65 + userAns)}. ${q.options[userAns]}`
+                                    : '未作答'}
+                                </div>
+                                <div><span className="text-emerald-400 font-semibold">正确答案：</span>
+                                  {String.fromCharCode(65 + q.correctIndex)}. {q.options[q.correctIndex]}
+                                </div>
+                              </div>
+                              <div className="mb-3 rounded-lg border border-slate-700/40 bg-slate-800/60 p-2 text-xs text-slate-200 leading-relaxed">
+                                {q.explanation}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleXiaozhiExplain(q); }}
+                                  className={`quiz-xiaozhi-explain-btn ${isExplaining ? 'is-loading' : ''}`}
+                                  title={isExplaining ? '再点一次停止播报' : '让小智讲解'}
+                                >
+                                  {isExplaining ? (
+                                    <><Loader2 size={14} className="animate-spin" /><span>小智讲解中…</span></>
+                                  ) : (
+                                    <><Sparkles size={14} /><span>让小智讲解</span></>
+                                  )}
+                                </button>
+                                {isExplaining && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); stopXiaozhiSpeech(); setXiaozhiExplainingId(null); }}
+                                    className="quiz-xiaozhi-skip-btn"
+                                    title="跳过播报"
+                                  >
+                                    <SkipForward size={14} /><span>跳过</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Answer detail list */}
             <div className="quiz-summary-detail">

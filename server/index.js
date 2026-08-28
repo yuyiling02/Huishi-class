@@ -28,6 +28,7 @@ import {
 } from './activityLog.js';
 import { attachAsrWebSocketServer, createAsrService } from './asr.js';
 import { initializeLearningMemory, registerLearningMemoryRoutes, startLearningMemoryJobs } from './learningMemory.js';
+import { initializeQuizWrongBook, registerQuizWrongBookRoutes } from './quizWrongBook.js';
 import { applyOrganResourceSeed } from './resourceLibrarySeeds.js';
 import { attachVolcTtsWebSocketServer, createVolcTtsService } from './volcTts.js';
 
@@ -721,6 +722,7 @@ async function initializeDatabase() {
 
   await initializeResourceLibrary();
   await initializeLearningMemory(pool);
+  await initializeQuizWrongBook(pool);
 
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123456';
@@ -751,6 +753,11 @@ app.get('/api/health', (_req, res) => {
 });
 
 registerLearningMemoryRoutes(app, {
+  getPool: () => pool,
+  requireAuth,
+});
+
+registerQuizWrongBookRoutes(app, {
   getPool: () => pool,
   requireAuth,
 });

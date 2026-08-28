@@ -7,19 +7,21 @@ import ModelViewer from './components/ModelViewer';
 import BioDigitalViewer from './components/BioDigitalViewer';
 import VoiceController from './components/VoiceController';
 import QuizOverlay from './components/QuizOverlay';
+import WrongQuestionBook from './components/WrongQuestionBook';
 import XiaozhiAssistant, { XiaozhiVisualState } from './components/XiaozhiAssistant';
 import XiaozhiMascot from './components/XiaozhiMascot';
 import FollowUpQuestionOverlay from './components/FollowUpQuestionOverlay';
 import MultiAgentPanel from './components/MultiAgentPanel';
 import ModelDetailPanel, { type DetailPanelTab } from './components/ModelDetailPanel';
 import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation, buildOrchestratorDecision, buildFollowUpQuestion, getAutonomousDisassemblyArgs } from './services/agentRuntime';
-import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen } from 'lucide-react';
+import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen, BookOpenCheck } from 'lucide-react';
 import { ModelType } from './types';
 import type { AuthUser } from './Login';
 import { getLocalModel, listLocalModels, deleteLocalModel, hideStaticModel, listHiddenStaticModelIds, saveUploadedModel, type LocalModelSummary } from './services/localModelLibrary';
 import { fetchResourceLibrary, type ResourceIconKey, type ResourceTag } from './services/resourceLibrary';
 import { createXiaozhiSpeechSession, isXiaozhiSpeechActive, prepareXiaozhiSpeech, speakXiaozhi, stopXiaozhiSpeech, setXiaozhiVoicePreference, subscribeXiaozhiSpeechActivity, type VoicePreference, type XiaozhiSpeechSession } from './services/xiaozhiSpeechService';
 import { appendLearningMessage, clearLearningMemories, deleteLearningMemory, listLearningMemories, openLearningSession, updateLearningMemory, updateMemorySettings } from './services/learningMemory';
+import { submitWrongQuestions } from './services/quizWrongBook';
 import { logUserActivity } from './services/userActivityLog';
 import { shouldNarrateKnowledgeAfterFollowUp, type PendingKnowledgeNarration } from './services/followUpAnswer';
 import { getAssistantStateAfterKnowledgeClose, isVoiceInputLockedByAssistantState, shouldFinishVoiceTurnAfterKnowledgeClose, shouldInterruptTeachingPresentationForFinalUtterance, type VoiceActivationRequest, type VoiceRecognitionState } from './services/voiceInputLifecycle';
@@ -362,6 +364,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const [modelLoadError, setModelLoadError] = useState<{ title: string; detail: string } | null>(null);
   const [quizMode, setQuizMode] = useState(false);
   const [quizSubjectFilter, setQuizSubjectFilter] = useState<string | undefined>(undefined);
+  const [wrongBookOpen, setWrongBookOpen] = useState(false);
   const quizButtonRef = useRef<HTMLButtonElement>(null);
   const [handNearQuizButton, setHandNearQuizButton] = useState(false);
   const structureImageRef = useRef<HTMLButtonElement>(null);
@@ -3322,6 +3325,15 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </button>
               <button
                 type="button"
+                onClick={() => setWrongBookOpen(true)}
+                className="lab-stage-tool relative overflow-hidden"
+                title="打开错题本"
+                data-testid="open-wrong-book"
+              >
+                <BookOpenCheck className="relative z-10" size={18} /> <span className="relative z-10">错题本</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowSettings((open) => !open)}
                 aria-pressed={showSettings}
                 className={`lab-stage-tool ${showSettings ? 'is-active' : ''}`}
@@ -3512,10 +3524,28 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               onExit={() => setQuizMode(false)}
               subjectFilter={quizSubjectFilter}
               onComplete={(result, session) => {
+                const wrongEntries = session.questions
+                  .map((question, index) => ({ question, answer: session.answers[index] }))
+                  .filter(({ question, answer }) => answer !== null && answer !== question.correctIndex)
+                  .map(({ question, answer }) => ({
+                    questionId: question.id,
+                    subject: question.subject,
+                    category: question.category,
+                    question: question.question,
+                    options: question.options,
+                    userAnswerIndex: answer as number,
+                    correctIndex: question.correctIndex,
+                    explanation: question.explanation,
+                  }));
+
+                if (wrongEntries.length > 0) {
+                  void submitWrongQuestions(wrongEntries).catch((error) =>
+                    console.warn('[Wrong book] save failed:', error),
+                  );
+                }
+
                 if (!learningSessionId || !memorySettings.memoryEnabled) return;
-                const wrongQuestionIds = session.questions
-                  .filter((question, index) => session.answers[index] !== question.correctIndex)
-                  .map((question) => question.id);
+                const wrongQuestionIds = wrongEntries.map((entry) => entry.questionId);
                 void appendLearningMessage(
                   learningSessionId,
                   'event',
@@ -3532,6 +3562,15 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               }}
             />
           )}
+
+          <AnimatePresence initial={false}>
+            {wrongBookOpen && (
+              <WrongQuestionBook
+                key="wrong-book"
+                onBack={() => setWrongBookOpen(false)}
+              />
+            )}
+          </AnimatePresence>
 
           <AnimatePresence initial={false}>
             {followUpQuestion && (
