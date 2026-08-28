@@ -246,9 +246,10 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
   }, []);
 
   useFrame((state, delta) => {
-    if (groupRef.current && !controlRef.current.rotationLocked && controlRef.current.rotationVelocity.x === 0 && controlRef.current.rotationVelocity.y === 0) {
-      groupRef.current.rotation.y += 0.0015;
-    }
+    // 关闭默认自转，只响应语音/手势指令
+    // if (groupRef.current && !controlRef.current.rotationLocked && controlRef.current.rotationVelocity.x === 0 && controlRef.current.rotationVelocity.y === 0) {
+    //   groupRef.current.rotation.y += 0.0015;
+    // }
 
     const { rotationVelocity, zoomSpeed } = controlRef.current;
     
@@ -267,7 +268,7 @@ export const ProceduralTerrain: React.FC<ProceduralTerrainProps> = ({ controlRef
     const sph = sphericalRef.current;
 
     if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
-      const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
+      const sensitivity = 0.5 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
       const frameScale = Math.min(delta * 60, 2);
       sph.theta -= rotationVelocity.y * sensitivity * frameScale;
       sph.phi -= rotationVelocity.x * sensitivity * frameScale;

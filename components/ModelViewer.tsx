@@ -1477,6 +1477,11 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     const { rotationVelocity, rotationLocked, zoomSpeed, interactionHandLandmarks } = controlRef.current;
 
+    // 调试：每 60 帧打一次 rotationVelocity
+    if (Math.floor(state.clock.elapsedTime * 10) % 60 === 0 && (rotationVelocity.x !== 0 || rotationVelocity.y !== 0)) {
+      console.log('[ModelViewer] rotationVelocity=', rotationVelocity, 'rotationLocked=', rotationLocked, 'smoothRotY=', smoothedRotVelRef.current.y);
+    }
+
     // Smooth rotation/zoom velocity to avoid abrupt camera start/stop stutter
     const smoothFactor = 1 - Math.exp(-delta * 18);
     if (rotationLocked) {
@@ -1511,7 +1516,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
 
     // 旋转 — modify angles on persistent spherical (uses smoothed velocity)
     if (hasCameraGestureInput && (Math.abs(smoothRotX) > 0.0001 || Math.abs(smoothRotY) > 0.0001)) {
-      const sensitivity = 3.1 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
+      const sensitivity = 0.31 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
       sph.theta -= smoothRotY * sensitivity * frameScale;
       sph.phi -= smoothRotX * sensitivity * frameScale;
       sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
@@ -1657,10 +1662,10 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       }
     }
 
-    // 待机动画
-    if (!rotationLocked && !hasCameraGestureInput && !isGrabbingRef.current) {
-      groupRef.current.rotation.y += Math.sin(state.clock.elapsedTime * 0.3) * 0.001 * frameScale;
-    }
+    // 待机动画 — 关闭默认自转，模型静止展示，只响应语音/手势指令
+    // if (!rotationLocked && !hasCameraGestureInput && !isGrabbingRef.current) {
+    //   groupRef.current.rotation.y += Math.sin(state.clock.elapsedTime * 0.3) * 0.001 * frameScale;
+    // }
   }, -1);
 
   if (!modelScene) {
