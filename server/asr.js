@@ -40,7 +40,7 @@ export function createAsrService(options = {}) {
   const numThreads = positiveInteger(options.numThreads ?? process.env.ASR_NUM_THREADS, 1);
   const endpointSilenceSeconds = positiveNumber(
     options.endpointSilenceSeconds ?? process.env.ASR_ENDPOINT_SILENCE_SECONDS,
-    1,
+    2.5,
   );
   const maxUtteranceSeconds = positiveNumber(options.maxUtteranceSeconds, 20);
   const files = modelFiles(modelDir);
@@ -70,7 +70,7 @@ export function createAsrService(options = {}) {
           debug: false,
         },
         enableEndpoint: true,
-        rule1MinTrailingSilence: Math.max(2.4, endpointSilenceSeconds),
+        rule1MinTrailingSilence: Math.max(3, endpointSilenceSeconds),
         rule2MinTrailingSilence: endpointSilenceSeconds,
         rule3MinUtteranceLength: maxUtteranceSeconds,
         decodingMethod: 'greedy_search',

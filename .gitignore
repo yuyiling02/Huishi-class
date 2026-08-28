@@ -34,3 +34,9 @@ server/storage/resource-models/
 *.njsproj
 *.sln
 *.sw?
+
+# 一次性迁移脚本（旧品牌“慧视课堂”批量替换，非运行所需）
+update_theme.py
+
+# .env.example 的冗余副本（模板以 .env.example 为准，真实配置走 .env.local）
+.env - 副本.example

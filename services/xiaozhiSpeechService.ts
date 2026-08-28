@@ -76,10 +76,20 @@ const socketUrl = () => {
   return `${protocol}//${window.location.host}/api/tts`;
 };
 const browserVoice = () => {
+  const synthesis = getSynthesis();
+  if (!synthesis?.getVoices) return null;
+  const voices = synthesis.getVoices();
   const uri = voicePreference.systemVoiceUri;
-  return getSynthesis()?.getVoices?.().find((voice) => voice.voiceURI === uri)
-    || getSynthesis()?.getVoices?.().find((voice) => voice.lang.toLowerCase().startsWith('zh'))
-    || null;
+  if (uri) {
+    const matched = voices.find((voice) => voice.voiceURI === uri);
+    if (matched) return matched;
+  }
+  const zhVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith('zh-cn'));
+  if (zhVoices.length === 0) return null;
+  const natural = zhVoices.find((voice) => /natural|online|huiyu|xiaoxiao|yunxi/i.test(voice.name));
+  if (natural) return natural;
+  const female = zhVoices.find((voice) => /female|女|hui|xiao|ya|ting/i.test(voice.name));
+  return female || zhVoices[0] || null;
 };
 
 /** Convert elapsed (played) audio time into a safe character offset for TTS providers without word marks. */
@@ -159,17 +169,20 @@ class BrowserSpeechSession implements XiaozhiSpeechSession {
     const synthesis = getSynthesis();
     if (!synthesis || !window.SpeechSynthesisUtterance) { this.options.onError?.(new Error('当前浏览器不支持语音播报')); return this.finish(); }
     const utterance = new window.SpeechSynthesisUtterance(segment.text);
-    utterance.lang = 'zh-CN'; utterance.rate = 1; utterance.pitch = 1; utterance.volume = 1;
+    utterance.lang = 'zh-CN'; utterance.rate = 1.1; utterance.pitch = 1.15; utterance.volume = 1;
     const selectedVoice = browserVoice(); if (selectedVoice) utterance.voice = selectedVoice;
     this.speaking = true;
     let boundaryReceived = false;
     let fallbackDelayTimer: ReturnType<typeof setTimeout> | null = null;
     let fallbackProgressTimer: ReturnType<typeof setInterval> | null = null;
+    let stuckTimer: ReturnType<typeof setTimeout> | null = null;
     const clearProgressTimers = () => {
       if (fallbackDelayTimer) clearTimeout(fallbackDelayTimer);
       if (fallbackProgressTimer) clearInterval(fallbackProgressTimer);
+      if (stuckTimer) clearTimeout(stuckTimer);
       fallbackDelayTimer = null;
       fallbackProgressTimer = null;
+      stuckTimer = null;
     };
     this.clearCurrentProgressTimers = clearProgressTimers;
     const startFallbackProgress = () => {
@@ -187,6 +200,13 @@ class BrowserSpeechSession implements XiaozhiSpeechSession {
       this.markStarted();
       this.emitProgress(segment.start, 'estimated');
       fallbackDelayTimer = setTimeout(startFallbackProgress, BROWSER_BOUNDARY_FALLBACK_DELAY_MS);
+      const estimatedMs = estimateNarrationDuration(segment.text) * 1000;
+      stuckTimer = setTimeout(() => {
+        if (!this.speaking || this.stopped) return;
+        try { getSynthesis()?.cancel(); } catch { /* synthesis may already be gone */ }
+        this.speaking = false;
+        this.pump();
+      }, estimatedMs * 2 + 3000);
     };
     utterance.onboundary = (event) => {
       if (this.stopped) return;
@@ -361,6 +381,11 @@ export const createXiaozhiSpeechSession = (options: SpeakOptions = {}): XiaozhiS
   previousSession?.stop();
   return session;
 };
-export const stopXiaozhiSpeech = () => { activeSession?.stop(); };
+export const stopXiaozhiSpeech = () => {
+  activeSession?.stop();
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  activeSession = null;
+  publishSpeechActivity(false);
+};
 export const prepareXiaozhiSpeech = () => { const context = getAudioContext(); if (context?.state === 'suspended') void context.resume(); };
 export const speakXiaozhi = (text: string, options: SpeakOptions = {}) => { const session = createXiaozhiSpeechSession(options); session.push(String(text || '').trim()); session.flush(); return session.done; };

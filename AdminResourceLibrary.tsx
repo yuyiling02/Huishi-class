@@ -250,21 +250,21 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] shadow-2xl shadow-black/25">
+    <section className="overflow-hidden rounded-lg border border-line/10 bg-white/[0.03] shadow-2xl shadow-black/25">
       {notice && (
-        <div className={`border-b px-5 py-3 text-sm ${notice.type === 'error' ? 'border-red-300/20 bg-red-500/10 text-red-100' : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'}`}>
+        <div className={`border-b px-5 py-3 text-sm ${notice.type === 'error' ? 'border-red-300/20 bg-red-500/10 text-red-100' : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-700'}`}>
           {notice.text}
         </div>
       )}
 
       <div className="grid min-h-[620px] lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-b border-white/10 bg-black/10 p-4 lg:border-b-0 lg:border-r">
+        <aside className="border-b border-line/10 bg-cyan/10 p-4 lg:border-b-0 lg:border-r">
           <div className="mb-3 flex items-center justify-between px-1">
-            <h2 className="text-sm font-bold text-white">资源标签</h2>
-            <span className="text-xs text-white/40">{tags.length}</span>
+            <h2 className="text-sm font-bold text-ink">资源标签</h2>
+            <span className="text-xs text-ink/55">{tags.length}</span>
           </div>
 
-          <div className="mb-3 flex items-center gap-2 rounded-md border border-violet-300/15 bg-violet-300/[0.06] px-3 py-2.5 text-sm text-violet-100/80">
+          <div className="mb-3 flex items-center gap-2 rounded-md border border-violet-300/15 bg-violet-300/[0.06] px-3 py-2.5 text-sm text-violet-700">
             <FolderOpen className="h-4 w-4" />
             <span className="min-w-0 flex-1 truncate font-semibold">我的模型</span>
             <LockKeyhole className="h-3.5 w-3.5 text-violet-200/50" aria-label="浏览器本地固定标签" />
@@ -272,14 +272,14 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
 
           <div className="space-y-1">
             {isLoading && tags.length === 0 ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-sm text-white/45">
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-ink/45">
                 <Loader2 className="h-4 w-4 animate-spin" /> 正在加载
               </div>
             ) : tags.map((tag) => {
               const TagIcon = ICONS[tag.iconKey] || Box;
               const isEditing = editingTagId === tag.id;
               return (
-                <div key={tag.id} className={`rounded-md border ${selectedTagId === tag.id ? 'border-cyan-300/25 bg-cyan-300/10' : 'border-transparent hover:bg-white/[0.04]'}`}>
+                <div key={tag.id} className={`rounded-md border ${selectedTagId === tag.id ? 'border-cyan/25 bg-cyan-300/10' : 'border-transparent hover:bg-white/[0.04]'}`}>
                   {isEditing ? (
                     <div className="flex items-center gap-1 p-1.5">
                       <input
@@ -290,21 +290,21 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                           if (event.key === 'Enter') void saveTagName(tag);
                           if (event.key === 'Escape') setEditingTagId(null);
                         }}
-                        className="h-8 min-w-0 flex-1 rounded-md border border-white/15 bg-black/25 px-2 text-sm text-white outline-none focus:border-cyan-300/50"
+                        className="h-8 min-w-0 flex-1 rounded-md border border-line/15 bg-cyan/25 px-2 text-sm text-ink outline-none focus:border-cyan/50"
                       />
                       <button type="button" onClick={() => void saveTagName(tag)} className="grid h-8 w-8 place-items-center rounded-md text-emerald-200 hover:bg-emerald-300/10" title="保存">
                         <Check className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => setEditingTagId(null)} className="grid h-8 w-8 place-items-center rounded-md text-white/50 hover:bg-white/10" title="取消">
+                      <button type="button" onClick={() => setEditingTagId(null)} className="grid h-8 w-8 place-items-center rounded-md text-ink/50 hover:bg-white/10" title="取消">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 p-1">
                       <button type="button" onClick={() => setSelectedTagId(tag.id)} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left text-sm">
-                        <TagIcon className="h-4 w-4 shrink-0 text-cyan-200/80" />
-                        <span className="min-w-0 flex-1 truncate font-semibold text-white/80">{tag.name}</span>
-                        <span className="text-xs text-white/35">{tag.models.length}</span>
+                        <TagIcon className="h-4 w-4 shrink-0 text-cyan/80" />
+                        <span className="min-w-0 flex-1 truncate font-semibold text-ink/80">{tag.name}</span>
+                        <span className="text-xs text-ink/35">{tag.models.length}</span>
                       </button>
                       <button
                         type="button"
@@ -313,7 +313,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                           setEditingTagName(tag.name);
                         }}
                         disabled={busyKey !== null}
-                        className="grid h-8 w-8 place-items-center rounded-md text-white/35 hover:bg-white/10 hover:text-white/75 disabled:opacity-40"
+                        className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white/10 hover:text-ink/75 disabled:opacity-40"
                         title="重命名标签"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -322,7 +322,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                         type="button"
                         onClick={() => void deleteTag(tag)}
                         disabled={tag.models.length > 0 || busyKey !== null}
-                        className="grid h-8 w-8 place-items-center rounded-md text-white/35 hover:bg-red-400/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-25"
+                        className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-red-400/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-25"
                         title={tag.models.length > 0 ? '请先移动或删除标签内模型' : '删除标签'}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -334,26 +334,26 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
             })}
           </div>
 
-          <form onSubmit={createTag} className="mt-4 space-y-2 border-t border-white/10 pt-4">
+          <form onSubmit={createTag} className="mt-4 space-y-2 border-t border-line/10 pt-4">
             <input
               value={newTagName}
               onChange={(event) => setNewTagName(event.target.value)}
               placeholder="新标签名称"
               maxLength={64}
-              className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-300/45"
+              className="h-10 w-full rounded-md border border-line/10 bg-cyan/20 px-3 text-sm text-ink outline-none placeholder:text-ink/30 focus:border-cyan/45"
             />
             <div className="flex gap-2">
               <select
                 value={newTagIcon}
                 onChange={(event) => setNewTagIcon(event.target.value as ResourceIconKey)}
-                className="h-10 min-w-0 flex-1 rounded-md border border-white/10 bg-[#0b1720] px-2 text-sm text-white/70 outline-none focus:border-cyan-300/45"
+                className="h-10 min-w-0 flex-1 rounded-md border border-line/10 bg-cyan-50 px-2 text-sm text-ink/70 outline-none focus:border-cyan/45"
               >
                 {ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
               </select>
               <button
                 type="submit"
                 disabled={!newTagName.trim() || busyKey !== null}
-                className="inline-flex h-10 items-center gap-1.5 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center gap-1.5 rounded-md border border-cyan/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus className="h-4 w-4" /> 添加
               </button>
@@ -363,28 +363,28 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
 
         <div className="min-w-0 p-5 lg:p-6">
           {!selectedTag ? (
-            <div className="grid min-h-[480px] place-items-center text-sm text-white/40">请先添加资源标签</div>
+            <div className="grid min-h-[480px] place-items-center text-sm text-ink/55">请先添加资源标签</div>
           ) : (
             <>
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-white">{selectedTag.name}</h2>
-                  <p className="mt-1 text-sm text-white/40">{selectedTag.models.length} 个模型</p>
+                  <h2 className="text-lg font-bold text-ink">{selectedTag.name}</h2>
+                  <p className="mt-1 text-sm text-ink/55">{selectedTag.models.length} 个模型</p>
                 </div>
               </div>
 
-              <form onSubmit={uploadModel} className="mb-6 grid gap-3 rounded-lg border border-white/10 bg-black/15 p-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+              <form onSubmit={uploadModel} className="mb-6 grid gap-3 rounded-lg border border-line/10 bg-cyan/15 p-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
                 <label className="block min-w-0">
-                  <span className="mb-1.5 block text-xs font-semibold text-white/45">模型名称</span>
+                  <span className="mb-1.5 block text-xs font-semibold text-ink/45">模型名称</span>
                   <input
                     value={modelName}
                     onChange={(event) => setModelName(event.target.value)}
                     placeholder="默认使用文件名"
                     maxLength={64}
-                    className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-300/45"
+                    className="h-10 w-full rounded-md border border-line/10 bg-cyan/20 px-3 text-sm text-ink outline-none placeholder:text-ink/30 focus:border-cyan/45"
                   />
                 </label>
-                <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white/65 transition hover:bg-white/[0.08] hover:text-white">
+                <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-line/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink/65 transition hover:bg-white/[0.08] hover:text-ink">
                   <Upload className="h-4 w-4" />
                   <span className="max-w-[180px] truncate">{modelFiles.length > 0 ? `已选 ${modelFiles.length} 个文件` : '选择模型文件'}</span>
                   <input
@@ -411,9 +411,9 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                 </button>
               </form>
 
-              <div className="overflow-x-auto rounded-lg border border-white/10">
+              <div className="overflow-x-auto rounded-lg border border-line/10">
                 <div className="min-w-[760px]">
-                  <div className="grid grid-cols-[minmax(220px,1.5fr)_90px_100px_170px_100px] gap-3 border-b border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white/40">
+                  <div className="grid grid-cols-[minmax(220px,1.5fr)_90px_100px_170px_100px] gap-3 border-b border-line/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-ink/55">
                     <span>模型</span>
                     <span>格式</span>
                     <span>大小</span>
@@ -421,7 +421,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                     <span className="text-right">操作</span>
                   </div>
                   {selectedTag.models.length === 0 ? (
-                    <div className="px-4 py-14 text-center text-sm text-white/40">暂无模型</div>
+                    <div className="px-4 py-14 text-center text-sm text-ink/55">暂无模型</div>
                   ) : (
                     <div className="divide-y divide-white/8">
                       {selectedTag.models.map((model) => {
@@ -429,7 +429,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                         return (
                           <div key={model.id} className="grid grid-cols-[minmax(220px,1.5fr)_90px_100px_170px_100px] items-center gap-3 px-4 py-3 text-sm">
                             <div className="flex min-w-0 items-center gap-3">
-                              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-100">
+                              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan">
                                 <FileBox className="h-4 w-4" />
                               </span>
                               {isEditing ? (
@@ -442,7 +442,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                                       if (event.key === 'Enter' && editingModelName.trim()) void updateModel(model, { name: editingModelName.trim() });
                                       if (event.key === 'Escape') setEditingModelId(null);
                                     }}
-                                    className="h-8 min-w-0 flex-1 rounded-md border border-white/15 bg-black/25 px-2 text-sm text-white outline-none focus:border-cyan-300/50"
+                                    className="h-8 min-w-0 flex-1 rounded-md border border-line/15 bg-cyan/25 px-2 text-sm text-ink outline-none focus:border-cyan/50"
                                   />
                                   <button type="button" onClick={() => void updateModel(model, { name: editingModelName.trim() })} className="grid h-8 w-8 place-items-center rounded-md text-emerald-200 hover:bg-emerald-300/10" title="保存">
                                     <Check className="h-4 w-4" />
@@ -450,18 +450,18 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                                 </div>
                               ) : (
                                 <div className="min-w-0">
-                                  <div className="truncate font-semibold text-white/85" title={model.name}>{model.name}</div>
-                                  <div className="mt-0.5 text-xs text-white/35">{model.sourceKind === 'builtin' ? '内置资源' : '管理员上传'}</div>
+                                  <div className="truncate font-semibold text-ink/85" title={model.name}>{model.name}</div>
+                                  <div className="mt-0.5 text-xs text-ink/35">{model.sourceKind === 'builtin' ? '内置资源' : '管理员上传'}</div>
                                 </div>
                               )}
                             </div>
-                            <span className="font-mono text-xs uppercase text-cyan-100/70">{model.type}</span>
-                            <span className="text-xs text-white/45">{formatSize(model.size)}</span>
+                            <span className="font-mono text-xs uppercase text-cyan/70">{model.type}</span>
+                            <span className="text-xs text-ink/45">{formatSize(model.size)}</span>
                             <select
                               value={model.tagId}
                               disabled={busyKey !== null}
                               onChange={(event) => void updateModel(model, { tagId: Number(event.target.value) })}
-                              className="h-9 w-full rounded-md border border-white/10 bg-[#0b1720] px-2 text-xs text-white/70 outline-none focus:border-cyan-300/45 disabled:opacity-40"
+                              className="h-9 w-full rounded-md border border-line/10 bg-cyan-50 px-2 text-xs text-ink/70 outline-none focus:border-cyan/45 disabled:opacity-40"
                             >
                               {tags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
                             </select>
@@ -473,7 +473,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                                   setEditingModelName(model.name);
                                 }}
                                 disabled={busyKey !== null}
-                                className="grid h-8 w-8 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                                className="grid h-8 w-8 place-items-center rounded-md text-ink/55 hover:bg-white/10 hover:text-ink disabled:opacity-40"
                                 title="重命名模型"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
@@ -482,7 +482,7 @@ const AdminResourceLibrary: React.FC<AdminResourceLibraryProps> = ({ refreshKey 
                                 type="button"
                                 onClick={() => void deleteModel(model)}
                                 disabled={busyKey !== null}
-                                className="grid h-8 w-8 place-items-center rounded-md text-white/40 hover:bg-red-400/10 hover:text-red-200 disabled:opacity-40"
+                                className="grid h-8 w-8 place-items-center rounded-md text-ink/55 hover:bg-red-400/10 hover:text-red-600 disabled:opacity-40"
                                 title="删除模型"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />

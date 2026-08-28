@@ -475,6 +475,17 @@ export function registerLearningMemoryRoutes(app, { getPool, requireAuth }) {
 
   app.use('/api/memory', router);
 
+  app.get('/api/ai/debug-config', (req, res) => {
+    const config = deepSeekConfig();
+    res.json({
+      hasKey: Boolean(config.apiKey),
+      keyPrefix: config.apiKey ? config.apiKey.slice(0, 12) + '...' : 'EMPTY',
+      model: config.model,
+      endpoint: config.endpoint,
+      cwd: process.cwd(),
+    });
+  });
+
   app.post('/api/ai/completion', requireAuth, requireStandardUser, async (req, res) => {
     const task = String(req.body?.task || '');
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
@@ -486,7 +497,11 @@ export function registerLearningMemoryRoutes(app, { getPool, requireAuth }) {
     const normalized = normalizeAiMessages(task, messages, memory);
     if (normalized.every((message) => message.role === 'system')) return res.status(400).json({ message: 'AI 任务缺少输入' });
     const response = await callDeepSeek(normalized, { jsonMode: Boolean(req.body?.jsonMode) });
-    if (!response) return res.status(503).json({ message: 'DeepSeek 未配置' });
+    if (!response) {
+      const config = deepSeekConfig();
+      console.error('[DeepSeek] callDeepSeek returned null. apiKey:', config.apiKey ? config.apiKey.slice(0, 12) + '...' : 'EMPTY', 'cwd:', process.cwd());
+      return res.status(503).json({ message: 'DeepSeek 未配置' });
+    }
     const data = await response.json();
     return res.json({ content: data?.choices?.[0]?.message?.content || '' });
   });

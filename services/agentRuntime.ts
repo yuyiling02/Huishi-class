@@ -9,6 +9,36 @@ import type {
 } from '../types.ts';
 import { createQuizSession } from './quizData.ts';
 import { readPartialJsonString } from './speechTextProcessing.ts';
+import { getModelInfoProfile, type ModelInfoProfile } from './modelInfoProfiles.ts';
+
+const MODEL_ID_TO_SEED_KEY: Partial<Record<TeachingModelId, string>> = {
+  heart: 'bio-heart',
+  biodigital_heart: 'bio-heart',
+  hiv: 'bio-hiv',
+  diamond: 'chem-diamond',
+  diamond_unit_cell: 'chem-diamond-cell',
+  pubchem_6233: 'chem-dichlorotoluene',
+  earth_layers: 'geo-earth-layers',
+  terrain: 'geo-terrain',
+  nitrobenzene: 'chem-nitrobenzene',
+  brain: 'bio-organ-brain',
+  nacl: 'chem-nacl',
+  sio2: 'chem-sio2',
+  organ_heart: 'bio-organ-heart',
+  lungs: 'bio-organ-lungs',
+  liver: 'bio-organ-liver',
+  kidneys: 'bio-organ-kidneys',
+  eyeball: 'bio-organ-eyeball',
+  intestine: 'bio-organ-intestine',
+  pancreas: 'bio-organ-pancreas',
+  skin: 'bio-organ-skin',
+};
+
+const buildProfileKnowledge = (profile: ModelInfoProfile): string => {
+  const metricsText = profile.metrics.map(m => `${m.label}：${m.value}`).join('；');
+  const tipsText = profile.tips.map(t => `${t.title}：${t.content}`).join(' ');
+  return `${profile.title}——${profile.subtitle}。${profile.description} 关键信息：${metricsText}。${tipsText}`;
+};
 
 type DeepSeekMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -29,6 +59,15 @@ const modelNames: Record<TeachingModelId, string> = {
   nacl: 'NaCl 离子晶体',
   sio2: 'SiO₂ 二氧化硅网络',
   nitrobenzene: '硝基苯',
+  brain: '大脑模型',
+  organ_heart: '心脏（解剖）',
+  lungs: '肺',
+  liver: '肝脏',
+  kidneys: '肾脏',
+  eyeball: '眼球',
+  intestine: '肠',
+  pancreas: '胰腺',
+  skin: '皮肤',
 };
 
 const tool = (id: string, name: AgentToolCall['name'], label: string, args: Record<string, unknown> = {}): AgentToolCall => ({
@@ -47,6 +86,15 @@ const createStep = (id: string, title: string, narration: string, toolCalls: Age
 
 const detectRequestedModel = (request: string): TeachingModelId | null => {
   if (/心脏(?:模型)?2|BioDigital|网页/i.test(request)) return 'biodigital_heart';
+  if (/大脑|脑部|脑组织|神经|brain|cerebr/i.test(request)) return 'brain';
+  if (/心脏解剖|解剖心脏|心脏器官|organ.?heart/i.test(request)) return 'organ_heart';
+  if (/肺|肺部|肺脏|呼吸|lung/i.test(request)) return 'lungs';
+  if (/肝|肝脏|肝胆|liver/i.test(request)) return 'liver';
+  if (/肾|肾脏|腰子|kidney/i.test(request)) return 'kidneys';
+  if (/眼球|眼睛|eyeball/i.test(request)) return 'eyeball';
+  if (/肠|肠道|小肠|大肠|intestine/i.test(request)) return 'intestine';
+  if (/胰|胰腺|pancrea/i.test(request)) return 'pancreas';
+  if (/皮肤|表皮|真皮|skin/i.test(request)) return 'skin';
   if (/心脏|心房|心室|瓣膜|主动脉|静脉|动脉|心肌|冠状|血液|循环|人体|生物/.test(request)) return 'heart';
   if (/地形|地貌|高原|山地|盆地|平原|丘陵|河流|三角洲/.test(request)) return 'terrain';
   if (/地球|地壳|地幔|外核|内核|板块/.test(request)) return 'earth_layers';
@@ -88,8 +136,8 @@ export const getAutonomousDisassemblyArgs = (
   };
 };
 
-const createFallbackPlan = (request: string): AgentPlan => {
-  const modelId = pickModel(request);
+const createFallbackPlan = (request: string, modelOverride?: TeachingModelId | null): AgentPlan => {
+  const modelId = modelOverride || pickModel(request);
   const modelName = modelNames[modelId];
   const supportsDisassembly = supportsModelDisassembly(modelId);
 
@@ -144,9 +192,9 @@ const createFallbackPlan = (request: string): AgentPlan => {
   };
 };
 
-const normalizePlan = (raw: any, request: string): AgentPlan => {
-  const fallback = createFallbackPlan(request);
-  const requestedModelId = detectRequestedModel(request);
+const normalizePlan = (raw: any, request: string, modelOverride?: TeachingModelId | null): AgentPlan => {
+  const fallback = createFallbackPlan(request, modelOverride);
+  const requestedModelId = modelOverride ?? detectRequestedModel(request);
   const rawModelId = (raw?.modelId && modelNames[raw.modelId as TeachingModelId])
     ? raw.modelId as TeachingModelId
     : null;
@@ -320,8 +368,8 @@ const callDeepSeekStream = async (
   }
 };
 
-export const buildTeachingPlan = async (request: string, signal?: AbortSignal): Promise<AgentPlan> => {
-  const fallback = createFallbackPlan(request);
+export const buildTeachingPlan = async (request: string, signal?: AbortSignal, modelOverride?: TeachingModelId | null): Promise<AgentPlan> => {
+  const fallback = createFallbackPlan(request, modelOverride);
   const fallbackText = JSON.stringify(fallback);
 
   try {
@@ -332,7 +380,7 @@ export const buildTeachingPlan = async (request: string, signal?: AbortSignal): 
           '你是数智课堂的理解规划Agent。',
           '请把用户的教学需求转成可执行的3D教具演示计划。',
           '只能输出JSON对象，不要输出Markdown。',
-          'modelId只能是 heart, biodigital_heart, hiv, diamond, diamond_unit_cell, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene 之一。',
+          'modelId只能是 heart, biodigital_heart, hiv, diamond, diamond_unit_cell, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene, brain, organ_heart, lungs, liver, kidneys, eyeball, intestine, pancreas, skin 之一。',
           '工具名只能是 load_model, auto_rotate, auto_zoom, explode_model, enable_gesture, set_teacher_log。',
           'explode_model用于自主拆解散开，必须给 strength 和 spacing。',
           '金刚石模型和金刚石晶胞是完整结构展示，禁止调用explode_model。',
@@ -342,11 +390,12 @@ export const buildTeachingPlan = async (request: string, signal?: AbortSignal): 
       },
       {
         role: 'user',
-        content: `教学需求：${request}`,
+        content: `教学需求：${request}${modelOverride ? `\n当前已加载模型：${modelNames[modelOverride]}（modelId: ${modelOverride}），请使用这个模型。` : ''}`,
       },
     ], fallbackText, signal);
 
-    return normalizePlan(JSON.parse(content), request);
+    const plan = normalizePlan(JSON.parse(content), request, modelOverride);
+    return plan;
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
     console.warn('Planner Agent fallback:', error);
@@ -357,6 +406,7 @@ export const buildTeachingPlan = async (request: string, signal?: AbortSignal): 
 type OrchestratorContext = {
   currentModelId?: TeachingModelId | null;
   currentModelName?: string;
+  currentModelSeedKey?: string | null;
   hasModel?: boolean;
   sessionId?: number | null;
 };
@@ -487,6 +537,22 @@ export const detectDirectClassroomCommand = (request: string): OrchestratorDecis
   directClassroomDecision(request)
 );
 
+const applyCurrentModelContext = (
+  decision: OrchestratorDecision,
+  request: string,
+  context: OrchestratorContext,
+): OrchestratorDecision => {
+  if (
+    context.currentModelId
+    && (decision.action === 'teach_demo' || decision.action === 'switch_model')
+    && detectRequestedModel(request) === null
+    && /这|当前|现在|屏幕|目前/.test(request)
+  ) {
+    return { ...decision, modelId: context.currentModelId };
+  }
+  return decision;
+};
+
 const normalizeOrchestratorDecision = (raw: any, request: string): OrchestratorDecision => {
   const fallbackModelId = inferTeachingModel(request);
   const action = String(raw?.action || '').trim();
@@ -611,13 +677,29 @@ const createFallbackOrchestratorDecision = (
   }
 
   if (/讲解|展示|演示|学习|看看|介绍|结构|模型/.test(text)) {
-    const modelId = inferTeachingModel(text);
+    const modelId = context.currentModelId || inferTeachingModel(text);
     return {
       action: 'teach_demo',
       response: `好呀，小智会先规划路线，再带你观察${modelNames[modelId]}。`,
       request: text,
       modelId,
     };
+  }
+
+  if (context.hasModel && context.currentModelSeedKey) {
+    const profile = getModelInfoProfile(context.currentModelSeedKey);
+    if (profile) {
+      const isAskingAboutCurrent = /^(这|它|当前|这个|那个).*(是什|是什么|叫什|叫什么|怎样|怎么样|如何|啥|结构|组成|成分|功能|特点)|^(介绍|讲讲|说说|讲一下|说一下|了解一下|了解|详情|详细).*(这|它|当前|模型)?$|什么(是|叫|叫什么)|这是什么|这是什么模型|这是什么结构/.test(text);
+      if (isAskingAboutCurrent) {
+        const metricsText = profile.metrics.map(m => `${m.label}：${m.value}`).join('；');
+        const tipsText = profile.tips.map(t => `${t.title}：${t.content}`).join(' ');
+        return {
+          action: 'answer',
+          response: `${profile.title}——${profile.subtitle}。${profile.description} 关键信息：${metricsText}。${tipsText}`,
+          request: text,
+        };
+      }
+    }
   }
 
   return {
@@ -650,6 +732,26 @@ export const buildOrchestratorDecision = async (
     return fallback;
   }
 
+  // Local model Q&A: when a model is loaded and the user asks about it,
+  // answer directly from the model profile data without calling DeepSeek.
+  if (context.hasModel && context.currentModelSeedKey) {
+    const profile = getModelInfoProfile(context.currentModelSeedKey);
+    if (profile) {
+      const isAskingAboutCurrent = /^(这|它|当前|这个|那个).*(是什|是什么|叫什|叫什么|怎样|怎么样|如何|啥|结构|组成|成分|功能|特点)|^(介绍|讲讲|说说|讲一下|说一下|了解一下|了解|详情|详细).*(这|它|当前|模型)?$|什么(是|叫|叫什么)|这是什么|这是什么模型|这是什么结构/.test(request.trim());
+      if (isAskingAboutCurrent) {
+        const metricsText = profile.metrics.map(m => `${m.label}：${m.value}`).join('；');
+        const tipsText = profile.tips.map(t => `${t.title}：${t.content}`).join(' ');
+        const localAnswer: OrchestratorDecision = {
+          action: 'answer',
+          response: `${profile.title}——${profile.subtitle}。${profile.description} 关键信息：${metricsText}。${tipsText}`,
+          request,
+        };
+        onResponseToken?.(localAnswer.response);
+        return localAnswer;
+      }
+    }
+  }
+
   const messages: DeepSeekMessage[] = [
       {
         role: 'system',
@@ -666,7 +768,7 @@ export const buildOrchestratorDecision = async (
           '用户说切换、切到、换成、打开、加载、载入或调出某个内置模型，且没有讲解意图时，必须使用switch_model，只切换模型，不调用其他agent或工具。',
           '用户说讲解、介绍、演示、教学、分析、展示、学习或查看某个模型时，必须使用teach_demo；同时出现切换词和讲解词时，teach_demo优先。',
           '只有用户明确说建模、生成模型或创建模型时，才能使用open_model_generation。',
-          'modelId只能是 heart, biodigital_heart, hiv, diamond, diamond_unit_cell, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene 之一。',
+          'modelId只能是 heart, biodigital_heart, hiv, diamond, diamond_unit_cell, pubchem_6233, earth_layers, terrain, nacl, sio2, nitrobenzene, brain, organ_heart, lungs, liver, kidneys, eyeball, intestine, pancreas, skin 之一。',
           'control_model 的 toolCalls 工具名只能是 auto_rotate, auto_zoom, explode_model, reset_model_layout, enable_gesture, disable_gesture, enter_fullscreen, exit_fullscreen, switch_sidebar, set_teacher_log。',
           '用户要求开启或关闭手势时分别调用enable_gesture或disable_gesture；用户要求全屏展示时调用enter_fullscreen，要求取消全屏、退出全屏、小屏或恢复窗口时调用exit_fullscreen；用户要求切换学科资源库或多智能体平台时调用switch_sidebar，tab分别为resource或agent。',
           '普通知识问答、课外问题、身份问题和闲聊必须使用answer，并在response中直接回答；不要用“我听到啦”开头复述用户原话。',
@@ -696,7 +798,11 @@ export const buildOrchestratorDecision = async (
         },
         (fullText) => {
           try {
-            const decision = normalizeOrchestratorDecision(JSON.parse(fullText), request);
+            const decision = applyCurrentModelContext(
+              normalizeOrchestratorDecision(JSON.parse(fullText), request),
+              request,
+              context,
+            );
             if (decision.response.length > emittedResponse.length && decision.response.startsWith(emittedResponse)) {
               onResponseToken(decision.response.slice(emittedResponse.length));
             }
@@ -726,7 +832,11 @@ export const buildOrchestratorDecision = async (
   try {
     const content = await callDeepSeek(messages, fallbackText, signal, 'orchestrator', context.sessionId);
 
-    return normalizeOrchestratorDecision(JSON.parse(content), request);
+    return applyCurrentModelContext(
+      normalizeOrchestratorDecision(JSON.parse(content), request),
+      request,
+      context,
+    );
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
     console.warn('Orchestrator Agent fallback:', error);
@@ -741,7 +851,11 @@ export const buildKnowledgeExplanation = async (
   signal?: AbortSignal,
 ): Promise<string> => {
   const modelName = modelNames[modelId] || '3D模型';
-  const fallback = `${modelName}是一个用于教学演示的三维模型。它展示了内部结构和层次关系，可以帮助学生建立空间认知。请结合3D演示进行观察，注意各部件之间的位置关系和连接方式。拆解展示可以更清晰地看到内部细节。`;
+  const seedKey = MODEL_ID_TO_SEED_KEY[modelId];
+  const profile = seedKey ? getModelInfoProfile(seedKey) : null;
+  const profileKnowledge = profile ? buildProfileKnowledge(profile) : '';
+  const fallback = profileKnowledge
+    || `${modelName}是一个用于教学演示的三维模型。它展示了内部结构和层次关系，可以帮助学生建立空间认知。请结合3D演示进行观察，注意各部件之间的位置关系和连接方式。拆解展示可以更清晰地看到内部细节。`;
 
   return new Promise<string>((resolve, reject) => {
     callDeepSeekStream(
@@ -751,6 +865,10 @@ export const buildKnowledgeExplanation = async (
           content: [
             '你是数智课堂的知识讲解Agent。',
             '根据用户的教学需求和当前展示的3D模型，生成适合中学生理解的教学知识内容。',
+            '讲解内容必须包含三个方面：',
+            '1. 这个模型是什么——说明模型的名称、类别和基本定义；',
+            '2. 结构是什么——说明模型的组成部件、层次关系或空间排列方式；',
+            '3. 有什么功能和作用——说明这个结构在实际中的功能、意义或应用价值。',
             '语气像课堂老师讲解，通俗易懂，内容准确、有条理。',
             '用纯文本输出，不要使用JSON或Markdown格式。',
             '控制在200-400字之间。',
@@ -758,7 +876,7 @@ export const buildKnowledgeExplanation = async (
         },
         {
           role: 'user',
-          content: `当前模型：${modelName}\n教学需求：${request}\n请生成知识讲解内容。`,
+          content: `当前模型：${modelName}\n教学需求：${request}\n${profileKnowledge ? `参考资料：${profileKnowledge}\n` : ''}请围绕"这是什么、结构是什么、有什么功能和作用"三个方面生成知识讲解内容。`,
         },
       ],
       onToken,

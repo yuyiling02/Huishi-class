@@ -9,6 +9,7 @@ import {
   Menu, Cpu, Activity, Glasses, Box, Share2, BookOpen,
   Users, Download, ArrowUpRight
 } from 'lucide-react';
+import { useTheme } from './components/ThemeProvider';
 
 export type MarketingPage = 'home' | 'solutions' | 'cases' | 'pricing' | 'docs' | 'join';
 
@@ -54,7 +55,7 @@ const PAGE_INTROS: Record<Exclude<MarketingPage, 'home'>, { eyebrow: string; tit
 };
 
 // === 3D Neural Network Background Component ===
-function NeuralNetwork() {
+function NeuralNetwork({ accent }: { accent: string }) {
   const { particles, lines } = useMemo(() => {
     const particleCount = 300;
     const particles = new Float32Array(particleCount * 3);
@@ -101,19 +102,19 @@ function NeuralNetwork() {
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={particles.length / 3} array={particles} itemSize={3} />
         </bufferGeometry>
-        <pointsMaterial size={0.04} color="#00f0ff" transparent opacity={0.8} sizeAttenuation />
+        <pointsMaterial size={0.04} color={accent} transparent opacity={0.8} sizeAttenuation />
       </points>
       <lineSegments>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={lines.length / 3} array={lines} itemSize={3} />
         </bufferGeometry>
-        <lineBasicMaterial color="#00d2ff" transparent opacity={0.25} blending={THREE.AdditiveBlending} />
+        <lineBasicMaterial color={accent} transparent opacity={0.25} blending={THREE.AdditiveBlending} />
       </lineSegments>
     </group>
   );
 }
 
-function ParticleFlow() {
+function ParticleFlow({ accent }: { accent: string }) {
   const pointsRef = useRef<any>(null);
   const count = 1500;
   
@@ -139,12 +140,12 @@ function ParticleFlow() {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" count={count} array={particles} itemSize={3} />
       </bufferGeometry>
-      <pointsMaterial size={0.015} color="#00d2ff" transparent opacity={0.3} sizeAttenuation />
+      <pointsMaterial size={0.015} color={accent} transparent opacity={0.3} sizeAttenuation />
     </points>
   );
 }
 
-function EnergyCore() {
+function EnergyCore({ primary, accent }: { primary: string; accent: string }) {
   const groupRef = useRef<THREE.Group>(null);
   const offset = useMemo(() => Math.random() * 100, []);
   
@@ -174,7 +175,7 @@ function EnergyCore() {
       <mesh>
         <sphereGeometry args={[3.2, 32, 32]} />
         <meshBasicMaterial 
-          color="#0066ff" 
+          color={primary} 
           transparent 
           opacity={0.15} 
           wireframe={true}
@@ -185,7 +186,7 @@ function EnergyCore() {
       <mesh>
         <sphereGeometry args={[2.8, 64, 64]} />
         <meshBasicMaterial 
-          color="#4df8ff" 
+          color={accent} 
           transparent 
           opacity={0.35} 
           wireframe={true}
@@ -195,28 +196,28 @@ function EnergyCore() {
       {/* 核心内发光 */}
       <mesh>
         <sphereGeometry args={[2.2, 32, 32]} />
-        <meshBasicMaterial color="#0066ff" transparent opacity={0.15} blending={THREE.AdditiveBlending} />
+        <meshBasicMaterial color={primary} transparent opacity={0.15} blending={THREE.AdditiveBlending} />
       </mesh>
     </group>
   );
 }
 
-function BackgroundScene() {
+function BackgroundScene({ primary, accent }: { primary: string; accent: string }) {
   return (
     <>
       <fog attach="fog" args={['#000000', 3, 12]} />
-      <NeuralNetwork />
-      <ParticleFlow />
-      <EnergyCore />
+      <NeuralNetwork accent={accent} />
+      <ParticleFlow accent={accent} />
+      <EnergyCore primary={primary} accent={accent} />
       {/* 3D 浮动发光体 - 模拟 3D 光效 */}
       <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1}>
         <mesh position={[3, 2, -4]}>
           <sphereGeometry args={[1.5, 32, 32]} />
-          <meshBasicMaterial color="#3D81E3" transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
+          <meshBasicMaterial color={primary} transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
         </mesh>
         <mesh position={[-3, -2, -6]}>
           <sphereGeometry args={[2, 32, 32]} />
-          <meshBasicMaterial color="#00d2ff" transparent opacity={0.05} depthWrite={false} blending={THREE.AdditiveBlending} />
+          <meshBasicMaterial color={accent} transparent opacity={0.05} depthWrite={false} blending={THREE.AdditiveBlending} />
         </mesh>
       </Float>
     </>
@@ -224,7 +225,7 @@ function BackgroundScene() {
 }
 
 // === 3D Heart Mockup Component ===
-function HeartMockup() {
+function HeartMockup({ accent }: { accent: string }) {
   const meshRef = useRef<any>(null);
   useFrame(({ clock }) => {
     if (meshRef.current) {
@@ -237,7 +238,7 @@ function HeartMockup() {
     <group position={[0, 0, 0]}>
       <ambientLight intensity={0.8} />
       <pointLight position={[10, 10, 10]} color="#ff4081" intensity={2} />
-      <pointLight position={[-10, -10, -10]} color="#00d2ff" intensity={1} />
+      <pointLight position={[-10, -10, -10]} color={accent} intensity={1} />
       <Float speed={4} rotationIntensity={0.5} floatIntensity={0.5}>
         <mesh ref={meshRef}>
           <sphereGeometry args={[1.5, 32, 32]} />
@@ -250,7 +251,7 @@ function HeartMockup() {
 
 // === Primitive UI Components ===
 const LogoMark = () => (
-  <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(0,210,255,0.4)]" />
+  <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(var(--theme-accent-rgb),0.4)]" />
 );
 
 const AppleLogo = ({ className = "w-3.5 h-3.5" }) => (
@@ -263,7 +264,7 @@ const SectionEyebrow = ({ label }: { label: string }) => (
   <div className="flex items-center gap-3">
     <div className="flex items-center gap-2">
       <span className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
-      <span className="text-sm font-medium text-white tracking-wide">{label}</span>
+      <span className="text-sm font-medium text-ink tracking-wide">{label}</span>
     </div>
   </div>
 );
@@ -306,6 +307,7 @@ export default function LandingPage({
   const [time, setTime] = useState("");
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { themeDef } = useTheme();
 
   const handleEnterClick = () => {
     onEnter();
@@ -341,23 +343,23 @@ export default function LandingPage({
   };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-black text-white selection:bg-[#3D81E3]/30">
+    <div className="relative min-h-screen overflow-x-hidden bg-[var(--theme-bg)] text-ink selection:bg-brand/30">
       
       {/* 1. 全局背景 (深空渐变 + 3D 神经网络粒子流 + 体积光) */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         {/* 深海蓝 -> 黑色径向渐变，制造极致深邃感 */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#041029_0%,_#000000_80%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--theme-bg-soft)_0%,_var(--theme-bg)_80%)]" />
         
         {/* 强化微弱体积光晕 */}
-        <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-[#0066ff]/20 mix-blend-screen blur-[150px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#00f0ff]/15 mix-blend-screen blur-[130px]" />
+        <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-[rgba(var(--theme-primary-rgb),0.20)] mix-blend-screen blur-[150px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-[rgba(var(--theme-accent-rgb),0.15)] mix-blend-screen blur-[130px]" />
 
         {/* 底部补充环境光 */}
-        <div className="absolute inset-x-0 bottom-0 h-64 bg-[radial-gradient(ellipse_at_bottom,rgba(0,210,255,0.15),transparent_70%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-64 bg-[radial-gradient(ellipse_at_bottom,rgba(var(--theme-accent-rgb),0.15),transparent_70%)]" />
 
         <div className="absolute inset-0 opacity-80">
           <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
-            <BackgroundScene />
+            <BackgroundScene primary={themeDef.primary} accent={themeDef.accent} />
           </Canvas>
         </div>
       </div>
@@ -379,7 +381,7 @@ export default function LandingPage({
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className={`w-full px-10 h-20 flex items-center relative sticky top-0 z-50 transition-all duration-500 ${isScrolled ? 'bg-[#030712]/70 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]' : 'bg-transparent border-transparent'}`}
+          className={`w-full px-10 h-20 flex items-center relative sticky top-0 z-50 transition-all duration-500 ${isScrolled ? 'bg-cyan-50/70 backdrop-blur-2xl border-b border-line/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]' : 'bg-transparent border-transparent'}`}
         >
           <a href="/" onClick={navigateTo('home')} aria-label="返回首页" className="flex items-center gap-2 cursor-pointer absolute left-6 md:left-10">
             <LogoMark />
@@ -393,10 +395,10 @@ export default function LandingPage({
                 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + i * 0.1 }}
                 aria-current={page === item.page ? 'page' : undefined}
-                className={`text-sm font-semibold transition-colors relative group py-2 ${page === item.page ? 'text-[#00d2ff]' : 'text-white/70 hover:text-[#00d2ff]'}`}
+                className={`text-sm font-semibold transition-colors relative group py-2 ${page === item.page ? 'text-cyan' : 'text-ink/70 hover:text-cyan'}`}
               >
                 {item.label}
-                <div className={`absolute bottom-0 left-0 w-full h-[2px] bg-[#00d2ff] transition-transform origin-left duration-300 shadow-[0_0_10px_#00d2ff] ${page === item.page ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'}`}></div>
+                <div className={`absolute bottom-0 left-0 w-full h-[2px] bg-cyan transition-transform origin-left duration-300 shadow-[0_0_10px_var(--theme-accent)] ${page === item.page ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'}`}></div>
               </motion.a>
             ))}
           </div>
@@ -405,20 +407,20 @@ export default function LandingPage({
             aria-label={isMenuOpen ? '关闭导航菜单' : '打开导航菜单'}
             aria-expanded={isMenuOpen}
             onClick={() => setIsMenuOpen((open) => !open)}
-            className="md:hidden absolute right-6 w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10"
+            className="md:hidden absolute right-6 w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-line/10"
           >
             {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </motion.nav>
 
         {isMenuOpen && (
-          <div className="fixed top-20 inset-x-4 z-50 md:hidden rounded-2xl border border-white/10 bg-[#030712]/95 backdrop-blur-2xl p-3 shadow-2xl">
+          <div className="fixed top-20 inset-x-4 z-50 md:hidden rounded-2xl border border-line/10 bg-cyan-50/95 backdrop-blur-2xl p-3 shadow-2xl">
             {NAV_ITEMS.map((item) => (
               <a
                 key={item.page}
                 href={item.path}
                 onClick={navigateTo(item.page)}
-                className={`block rounded-xl px-4 py-3 text-sm font-semibold ${page === item.page ? 'bg-[#00d2ff]/10 text-[#00d2ff]' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+                className={`block rounded-xl px-4 py-3 text-sm font-semibold ${page === item.page ? 'bg-cyan/10 text-cyan' : 'text-ink/70 hover:bg-white/5 hover:text-ink'}`}
               >
                 {item.label}
               </a>
@@ -431,9 +433,9 @@ export default function LandingPage({
             <div className="flex justify-center"><SectionEyebrow label={PAGE_INTROS[page].eyebrow} /></div>
             <h1 className="mt-7 text-4xl md:text-6xl font-black tracking-tight leading-[1.08]">
               {PAGE_INTROS[page].title}<br />
-              <span className="text-[#00d2ff]">{PAGE_INTROS[page].accent}</span>
+              <span className="text-cyan">{PAGE_INTROS[page].accent}</span>
             </h1>
-            <p className="mt-7 mx-auto max-w-2xl text-base md:text-lg leading-relaxed text-white/60">
+            <p className="mt-7 mx-auto max-w-2xl text-base md:text-lg leading-relaxed text-ink/60">
               {PAGE_INTROS[page].description}
             </p>
           </header>
@@ -447,34 +449,34 @@ export default function LandingPage({
           <div className="absolute inset-0 pointer-events-none overflow-hidden max-w-[100vw] hidden md:block z-0 opacity-60">
             <motion.div 
               initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8, duration: 1 }}
-              className="absolute top-[15%] left-[2%] lg:left-[5%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+              className="absolute top-[15%] left-[2%] lg:left-[5%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-line/10 backdrop-blur-md shadow-[0_0_15px_rgba(var(--theme-accent-rgb),0.1)]"
             >
-              <div className="w-2 h-2 rounded-full bg-[#00d2ff] shadow-[0_0_8px_#00d2ff] animate-pulse" />
-              <span className="text-xs font-semibold text-white/60 tracking-wider">AI 空间驱动</span>
+              <div className="w-2 h-2 rounded-full bg-cyan shadow-[0_0_8px_var(--theme-accent)] animate-pulse" />
+              <span className="text-xs font-semibold text-ink/60 tracking-wider">AI 空间驱动</span>
             </motion.div>
             
             <motion.div 
               initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1, duration: 1 }}
-              className="absolute top-[20%] right-[2%] lg:right-[5%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+              className="absolute top-[20%] right-[2%] lg:right-[5%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-line/10 backdrop-blur-md shadow-[0_0_15px_rgba(var(--theme-accent-rgb),0.1)]"
             >
-              <Activity className="w-3.5 h-3.5 text-[#00d2ff]" />
-              <span className="text-xs font-semibold text-white/60 tracking-wider">60FPS 实时渲染</span>
+              <Activity className="w-3.5 h-3.5 text-cyan" />
+              <span className="text-xs font-semibold text-ink/60 tracking-wider">60FPS 实时渲染</span>
             </motion.div>
 
             <motion.div 
               initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2, duration: 1 }}
-              className="absolute bottom-[25%] left-[4%] lg:left-[8%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+              className="absolute bottom-[25%] left-[4%] lg:left-[8%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-line/10 backdrop-blur-md shadow-[0_0_15px_rgba(var(--theme-accent-rgb),0.1)]"
             >
-              <Hand className="w-3.5 h-3.5 text-[#00d2ff]" />
-              <span className="text-xs font-semibold text-white/60 tracking-wider">毫秒级手势交互</span>
+              <Hand className="w-3.5 h-3.5 text-cyan" />
+              <span className="text-xs font-semibold text-ink/60 tracking-wider">毫秒级手势交互</span>
             </motion.div>
 
             <motion.div 
               initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4, duration: 1 }}
-              className="absolute bottom-[20%] right-[4%] lg:right-[8%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-[0_0_15px_rgba(0,210,255,0.1)]"
+              className="absolute bottom-[20%] right-[4%] lg:right-[8%] flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-line/10 backdrop-blur-md shadow-[0_0_15px_rgba(var(--theme-accent-rgb),0.1)]"
             >
-              <Share2 className="w-3.5 h-3.5 text-[#00d2ff]" />
-              <span className="text-xs font-semibold text-white/60 tracking-wider">跨端无缝协同</span>
+              <Share2 className="w-3.5 h-3.5 text-cyan" />
+              <span className="text-xs font-semibold text-ink/60 tracking-wider">跨端无缝协同</span>
             </motion.div>
           </div>
 
@@ -509,18 +511,18 @@ export default function LandingPage({
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
                   color: 'transparent',
-                  textShadow: '0 0 20px rgba(0, 210, 255, 0.3), 0 0 40px rgba(0, 85, 255, 0.2)'
+                  textShadow: '0 0 20px rgba(var(--theme-accent-rgb), 0.3), 0 0 40px rgba(0, 85, 255, 0.2)'
                 }}
               />
               {/* 发光高亮背板加强 -> 柔和背板以减少视觉疲劳 */}
-              <div className="absolute inset-0 bg-[#00d2ff]/10 blur-[60px] rounded-full pointer-events-none z-0" />
+              <div className="absolute inset-0 bg-cyan/10 blur-[60px] rounded-full pointer-events-none z-0" />
             </div>
           </motion.div>
 
           <motion.p 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 1, ease: "easeOut" }}
-            className="landing-hero-subtitle mt-8 text-white/60 max-w-2xl text-lg md:text-xl leading-relaxed font-medium"
+            className="landing-hero-subtitle mt-8 text-ink/60 max-w-2xl text-lg md:text-xl leading-relaxed font-medium"
           >
             让每个抽象知识点<br />都能被看见、触摸和理解
           </motion.p>
@@ -534,19 +536,19 @@ export default function LandingPage({
               onClick={handleEnterClick}
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
-              className="relative group inline-flex items-center justify-center gap-3 rounded-full px-12 py-4 text-base font-bold text-white overflow-hidden transition-all duration-300 shadow-[0_0_30px_rgba(0,210,255,0.2)] hover:shadow-[0_0_50px_rgba(0,210,255,0.4)]"
+              className="relative group inline-flex items-center justify-center gap-3 rounded-full px-12 py-4 text-base font-bold text-ink overflow-hidden transition-all duration-300 shadow-[0_0_30px_rgba(var(--theme-accent-rgb),0.2)] hover:shadow-[0_0_50px_rgba(var(--theme-accent-rgb),0.4)]"
             >
-              <div className="absolute inset-0 bg-[#0a192f]/40 backdrop-blur-md rounded-full border border-white/10 group-hover:border-[#00d2ff]/50 transition-colors duration-300" />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#00d2ff]/0 via-[#00d2ff]/10 to-[#00d2ff]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-md" />
-              <div className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-[#00d2ff]/80 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className="absolute inset-0 bg-cyan-50/40 backdrop-blur-md rounded-full border border-line/10 group-hover:border-cyan/50 transition-colors duration-300" />
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan/0 via-cyan/10 to-cyan/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-md" />
+              <div className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-cyan/80 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-300" />
               
-              <span className="relative z-10 flex items-center gap-2 drop-shadow-md group-hover:text-[#00d2ff] transition-colors duration-300">
+              <span className="relative z-10 flex items-center gap-2 drop-shadow-md group-hover:text-cyan transition-colors duration-300">
                 立即体验
                 <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
               </span>
             </motion.button>
 
-            <span className="text-sm font-medium tracking-widest uppercase text-white/30">
+            <span className="text-sm font-medium tracking-widest uppercase text-ink/30">
               AI 教具管理 · 手势互动 · 智慧课堂
             </span>
           </motion.div>
@@ -562,16 +564,16 @@ export default function LandingPage({
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="relative rounded-2xl overflow-hidden border border-white/15 bg-[#0a0a0a]/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/5"
+            className="relative rounded-2xl overflow-hidden border border-line/15 bg-cyan-50/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/5"
           >
             {/* 窗口头部 */}
-            <div className="h-12 border-b border-white/10 bg-white/[0.02] flex items-center px-4 relative">
+            <div className="h-12 border-b border-line/10 bg-white/[0.02] flex items-center px-4 relative">
               <div className="flex gap-2 absolute left-4">
                 <button className="w-3.5 h-3.5 rounded-full bg-[#ff5f57] flex items-center justify-center group hover:bg-[#ff5f57]/80"><X className="w-2.5 h-2.5 text-black/50 opacity-0 group-hover:opacity-100" /></button>
                 <button className="w-3.5 h-3.5 rounded-full bg-[#febc2e] flex items-center justify-center group hover:bg-[#febc2e]/80"><Minus className="w-2.5 h-2.5 text-black/50 opacity-0 group-hover:opacity-100" /></button>
                 <button className="w-3.5 h-3.5 rounded-full bg-[#28c840] flex items-center justify-center group hover:bg-[#28c840]/80"><Maximize2 className="w-2.5 h-2.5 text-black/50 opacity-0 group-hover:opacity-100 p-0.5" /></button>
               </div>
-              <div className="w-full text-center text-xs font-semibold text-white/50 tracking-wider">
+              <div className="w-full text-center text-xs font-semibold text-ink/50 tracking-wider">
                 数智课堂 — 教具库
               </div>
             </div>
@@ -580,9 +582,9 @@ export default function LandingPage({
             <div className="grid grid-cols-1 md:grid-cols-12 h-[600px]">
               
               {/* 左侧 Sidebar */}
-              <div className="hidden md:flex flex-col col-span-2 border-r border-white/10 bg-black/40 p-3">
-                <button className="w-full flex items-center justify-center gap-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/5 text-white text-xs font-semibold px-3 py-2.5 mb-6 transition-all">
-                  <Sparkles className="w-3.5 h-3.5 text-[#00d2ff]" />
+              <div className="hidden md:flex flex-col col-span-2 border-r border-line/10 bg-cyan/40 p-3">
+                <button className="w-full flex items-center justify-center gap-2 rounded-lg bg-white/10 hover:bg-white/15 border border-line/5 text-ink text-xs font-semibold px-3 py-2.5 mb-6 transition-all">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan" />
                   AI 生成教具
                 </button>
                 
@@ -594,14 +596,14 @@ export default function LandingPage({
                     { icon: Cpu, label: 'AI 助教' },
                     { icon: BarChart2, label: '数据分析' },
                   ].map((item, i) => (
-                    <div key={i} className={`flex items-center gap-3 text-xs px-3 py-2 rounded-md cursor-pointer transition-colors ${item.active ? 'bg-white/10 text-white font-medium' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                    <div key={i} className={`flex items-center gap-3 text-xs px-3 py-2 rounded-md cursor-pointer transition-colors ${item.active ? 'bg-white/10 text-ink font-medium' : 'text-ink/60 hover:bg-white/5 hover:text-ink'}`}>
                       <item.icon className="w-4 h-4 opacity-80" />
                       <span>{item.label}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="text-[10px] uppercase tracking-widest text-white/40 font-semibold mb-3 px-3">知识图谱标签</div>
+                <div className="text-[10px] uppercase tracking-widest text-ink/40 font-semibold mb-3 px-3">知识图谱标签</div>
                 <div className="space-y-1">
                   {[
                     { label: '地理', color: '#3b82f6' },
@@ -610,7 +612,7 @@ export default function LandingPage({
                     { label: '物理', color: '#8b5cf6' },
                     { label: '历史', color: '#ec4899' },
                   ].map(tag => (
-                    <div key={tag.label} className="flex items-center gap-2 text-xs px-3 py-1.5 text-white/60 hover:bg-white/5 cursor-pointer rounded-md">
+                    <div key={tag.label} className="flex items-center gap-2 text-xs px-3 py-1.5 text-ink/60 hover:bg-white/5 cursor-pointer rounded-md">
                       <div className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: tag.color, color: tag.color }} />
                       {tag.label}
                     </div>
@@ -619,13 +621,13 @@ export default function LandingPage({
               </div>
 
               {/* 中间主视觉 (3D Canvas) */}
-              <div className="col-span-1 md:col-span-7 border-r border-white/10 relative bg-black/20 flex flex-col">
-                <div className="h-10 border-b border-white/10 px-4 flex items-center justify-end bg-black/40 backdrop-blur-sm z-10">
+              <div className="col-span-1 md:col-span-7 border-r border-line/10 relative bg-cyan/20 flex flex-col">
+                <div className="h-10 border-b border-line/10 px-4 flex items-center justify-end bg-cyan/40 backdrop-blur-sm z-10">
                   <div className="flex gap-2">
-                    <button className="text-xs text-white/60 hover:text-white px-2 py-1 rounded hover:bg-white/10 flex items-center gap-1">
+                    <button className="text-xs text-ink/60 hover:text-ink px-2 py-1 rounded hover:bg-white/10 flex items-center gap-1">
                       <Glasses className="w-3.5 h-3.5" /> AR 预览
                     </button>
-                    <button className="text-xs text-white/60 hover:text-white px-2 py-1 rounded hover:bg-white/10 flex items-center gap-1">
+                    <button className="text-xs text-ink/60 hover:text-ink px-2 py-1 rounded hover:bg-white/10 flex items-center gap-1">
                       <Share2 className="w-3.5 h-3.5" /> 投屏
                     </button>
                   </div>
@@ -636,53 +638,53 @@ export default function LandingPage({
                   <div className="absolute inset-0 cursor-move">
                     <Canvas camera={{ position: [0, 0, 4] }}>
                       <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
-                      <HeartMockup />
+                      <HeartMockup accent={themeDef.accent} />
                     </Canvas>
                   </div>
 
                   {/* UI 叠加层：手势识别状态 */}
                   <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none">
-                    <div className="bg-black/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full flex items-center gap-3">
+                    <div className="bg-cyan/60 backdrop-blur-md border border-line/10 px-4 py-2 rounded-full flex items-center gap-3">
                       <div className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00d2ff] opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-[#00d2ff]"></span>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan"></span>
                       </div>
-                      <span className="text-xs text-white/80 font-medium">MediaPipe 手势追踪已开启 · 尝试“捏合”缩放</span>
-                      <Hand className="w-4 h-4 text-white/50 ml-2" />
+                      <span className="text-xs text-ink/80 font-medium">MediaPipe 手势追踪已开启 · 尝试“捏合”缩放</span>
+                      <Hand className="w-4 h-4 text-ink/50 ml-2" />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* 右侧详情面板 */}
-              <div className="hidden md:flex flex-col col-span-3 bg-black/40 p-5 overflow-y-auto">
-                <h3 className="text-sm font-bold text-white mb-4">AI 备课助手</h3>
+              <div className="hidden md:flex flex-col col-span-3 bg-cyan/40 p-5 overflow-y-auto">
+                <h3 className="text-sm font-bold text-ink mb-4">AI 备课助手</h3>
                 
-                <div className="rounded-xl border border-[#00d2ff]/30 bg-[#00d2ff]/5 p-4 mb-6 shadow-inner relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-[#00d2ff] to-transparent" />
-                  <div className="flex items-center gap-2 text-[#00d2ff] text-xs font-bold mb-3">
+                <div className="rounded-xl border border-cyan/30 bg-cyan/5 p-4 mb-6 shadow-inner relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-cyan to-transparent" />
+                  <div className="flex items-center gap-2 text-cyan text-xs font-bold mb-3">
                     <Sparkles className="w-4 h-4" />
                     自动生成讲解词
                   </div>
-                  <p className="text-xs text-white/80 leading-relaxed font-medium">
+                  <p className="text-xs text-ink/80 leading-relaxed font-medium">
                     “同学们请看，这是人体心脏的 3D 模型。心脏有四个腔室，分为左心房、左心室、右心房和右心室。当我们将手掌张开时，模型将展示内部的瓣膜结构...”
                   </p>
                 </div>
 
                 <div className="space-y-5">
                   <div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">互动提问生成</div>
-                    <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-xs text-white/70">
+                    <div className="text-[10px] text-ink/40 uppercase tracking-wider mb-2">互动提问生成</div>
+                    <div className="bg-white/5 border border-line/10 rounded-lg p-3 text-xs text-ink/70">
                       1. 血液是如何通过二尖瓣流动的？<br/>
                       2. 右心室负责将血液泵向哪里？
                     </div>
                   </div>
                   
                   <div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">交互说明</div>
+                    <div className="text-[10px] text-ink/40 uppercase tracking-wider mb-2">交互说明</div>
                     <div className="flex flex-wrap gap-2">
-                      <span className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/80 flex items-center gap-1"><Hand className="w-3 h-3"/> 挥手旋转模型</span>
-                      <span className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/80 flex items-center gap-1"><Mic className="w-3 h-3"/> 语音切换高亮</span>
+                      <span className="px-2 py-1 bg-white/5 border border-line/10 rounded text-[10px] text-ink/80 flex items-center gap-1"><Hand className="w-3 h-3"/> 挥手旋转模型</span>
+                      <span className="px-2 py-1 bg-white/5 border border-line/10 rounded text-[10px] text-ink/80 flex items-center gap-1"><Mic className="w-3 h-3"/> 语音切换高亮</span>
                     </div>
                   </div>
                 </div>
@@ -701,7 +703,7 @@ export default function LandingPage({
         {/* 6. 功能区：AI 教具管理 */}
         {page === 'solutions' && (
         <>
-        <section className="max-w-[76rem] mx-auto px-6 py-24 border-t border-white/5">
+        <section className="max-w-[76rem] mx-auto px-6 py-24 border-t border-line/5">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <motion.div 
               initial={{ opacity: 0, x: -30 }}
@@ -712,9 +714,9 @@ export default function LandingPage({
               <SectionEyebrow label="多模态智能" />
               <h2 className="mt-6 text-4xl md:text-5xl font-bold tracking-tight leading-[1.1]">
                 打破屏幕边界的<br/>
-                <span className="text-[#00d2ff]">沉浸教学体验</span>
+                <span className="text-cyan">沉浸教学体验</span>
               </h2>
-              <p className="mt-6 text-white/60 text-lg leading-relaxed max-w-lg">
+              <p className="mt-6 text-ink/60 text-lg leading-relaxed max-w-lg">
                 数智课堂不仅是一个教具云盘，更是一个懂你的教学引擎。通过空间计算和 AI 大模型，让每个教具都“活”起来。
               </p>
               
@@ -726,12 +728,12 @@ export default function LandingPage({
                   { icon: BarChart2, title: "课堂行为分析", desc: "实时追踪学生的互动专注度" },
                 ].map((feature, i) => (
                   <div key={i} className="flex gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                      <feature.icon className="w-5 h-5 text-[#00d2ff]" />
+                    <div className="w-10 h-10 rounded-lg bg-white/5 border border-line/10 flex items-center justify-center shrink-0">
+                      <feature.icon className="w-5 h-5 text-cyan" />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-white">{feature.title}</div>
-                      <div className="text-xs text-white/50 mt-1">{feature.desc}</div>
+                      <div className="text-sm font-semibold text-ink">{feature.title}</div>
+                      <div className="text-xs text-ink/50 mt-1">{feature.desc}</div>
                     </div>
                   </div>
                 ))}
@@ -749,16 +751,16 @@ export default function LandingPage({
               <div className="liquid-glass rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-2 h-2 rounded-full bg-[#28c840] shadow-[0_0_10px_#28c840]" />
-                  <span className="text-sm font-bold text-white">今日教具资源库动态</span>
+                  <span className="text-sm font-bold text-ink">今日教具资源库动态</span>
                 </div>
                 <div className="space-y-3">
                   {[
-                    { title: "已自动打标签 42 个新模型", color: "#00d2ff", progress: "100%" },
+                    { title: "已自动打标签 42 个新模型", color: "var(--theme-accent)", progress: "100%" },
                     { title: "为 18 个物理实验生成了讲解词", color: "#A4F4FD", progress: "85%" },
                     { title: "3 个生物 3D 模型需要手动确认", color: "#febc2e", progress: "30%" },
                   ].map((item, i) => (
-                    <div key={i} className="bg-black/30 border border-white/5 rounded-lg p-3">
-                      <div className="text-xs text-white/80 font-medium mb-2">{item.title}</div>
+                    <div key={i} className="bg-cyan/30 border border-line/5 rounded-lg p-3">
+                      <div className="text-xs text-ink/80 font-medium mb-2">{item.title}</div>
                       <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: item.progress, backgroundColor: item.color }} />
                       </div>
@@ -769,13 +771,13 @@ export default function LandingPage({
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="liquid-glass rounded-2xl p-6 flex flex-col items-center text-center justify-center h-40">
-                  <Hand className="w-8 h-8 text-[#00d2ff] mb-3" />
+                  <Hand className="w-8 h-8 text-cyan mb-3" />
                   <div className="text-sm font-bold">MediaPipe 引擎</div>
-                  <div className="text-xs text-white/50 mt-1">毫秒级手势追踪就绪</div>
+                  <div className="text-xs text-ink/50 mt-1">毫秒级手势追踪就绪</div>
                 </div>
                 <div className="liquid-glass rounded-2xl p-6 flex flex-col items-center text-center justify-center h-40">
-                  <Cpu className="w-8 h-8 text-[#00d2ff] mb-3" />
-                  <div className="text-xs text-white/50 mt-1">多模态教学认知赋能</div>
+                  <Cpu className="w-8 h-8 text-cyan mb-3" />
+                  <div className="text-xs text-ink/50 mt-1">多模态教学认知赋能</div>
                 </div>
               </div>
             </motion.div>
@@ -783,8 +785,8 @@ export default function LandingPage({
         </section>
 
         {/* 7. Logo Cloud */}
-        <section className="max-w-[76rem] mx-auto px-6 py-20 border-t border-white/5">
-          <div className="text-center text-[10px] md:text-xs uppercase tracking-[0.2em] text-white/40 font-semibold mb-12">
+        <section className="max-w-[76rem] mx-auto px-6 py-20 border-t border-line/5">
+          <div className="text-center text-[10px] md:text-xs uppercase tracking-[0.2em] text-ink/40 font-semibold mb-12">
             适用于未来智慧课堂的各种教学场景
           </div>
           <div className="flex flex-wrap justify-center gap-x-12 gap-y-8">
@@ -795,7 +797,7 @@ export default function LandingPage({
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }}
-                className="text-sm md:text-base font-bold text-white/50 hover:text-white transition-colors cursor-default"
+                className="text-sm md:text-base font-bold text-ink/50 hover:text-ink transition-colors cursor-default"
               >
                 {name}
               </motion.div>
@@ -807,7 +809,7 @@ export default function LandingPage({
 
         {/* 8. Testimonials */}
         {page === 'cases' && (
-        <section className="max-w-[76rem] mx-auto px-6 py-24 border-t border-white/5">
+        <section className="max-w-[76rem] mx-auto px-6 py-24 border-t border-line/5">
           <SectionEyebrow label="教育者的声音" />
           <h2 className="mt-4 text-3xl font-bold mb-12">一线名师的真实反馈</h2>
           <div className="grid md:grid-cols-3 gap-6">
@@ -833,15 +835,15 @@ export default function LandingPage({
                 transition={{ delay: i * 0.1, duration: 0.6 }}
                 className="liquid-glass rounded-2xl p-8 flex flex-col justify-between group"
               >
-                <blockquote className="text-sm text-white/80 leading-[1.8] relative z-10">
+                <blockquote className="text-sm text-ink/80 leading-[1.8] relative z-10">
                   "{t.quote}"
                 </blockquote>
-                <figcaption className="mt-8 pt-6 border-t border-white/10 flex items-center justify-between">
+                <figcaption className="mt-8 pt-6 border-t border-line/10 flex items-center justify-between">
                   <div>
-                    <div className="text-sm font-bold text-white group-hover:text-[#00d2ff] transition-colors">{t.name}</div>
-                    <div className="text-xs text-white/50 mt-1">{t.role}</div>
+                    <div className="text-sm font-bold text-ink group-hover:text-cyan transition-colors">{t.name}</div>
+                    <div className="text-xs text-ink/50 mt-1">{t.role}</div>
                   </div>
-                  <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs font-semibold text-white/70">
+                  <div className="px-3 py-1 bg-white/5 border border-line/10 rounded-full text-xs font-semibold text-ink/70">
                     {t.subject}
                   </div>
                 </figcaption>
@@ -853,13 +855,13 @@ export default function LandingPage({
 
         {/* 9. Pricing */}
         {page === 'pricing' && (
-        <section className="relative border-t border-white/5 py-32 overflow-hidden flex flex-col items-center">
+        <section className="relative border-t border-line/5 py-32 overflow-hidden flex flex-col items-center">
           {/* 巨大的背景水印文字 */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[1200px] text-center z-0 pointer-events-none px-4">
             <div className="text-6xl md:text-[8rem] font-black tracking-tighter leading-[0.85] opacity-20 pricing-watermark">
               数智课堂
             </div>
-            <div className="text-4xl md:text-[5rem] font-bold text-white/5 tracking-tight mt-4">
+            <div className="text-4xl md:text-[5rem] font-bold text-ink/5 tracking-tight mt-4">
               你的专属教具库
             </div>
           </div>
@@ -871,21 +873,21 @@ export default function LandingPage({
                 { tier: "标准版", price: "¥29/月", desc: "适合需要常规授课的教师和小团队教研组。", features: ["100 个高级教具资源", "AI 智能生成讲解词", "手势识别互动展示", "教具云端同步与分享"], highlight: true },
                 { tier: "专业版", price: "¥99/月", desc: "专为学校、机构和全学科生态系统打造。", features: ["无限制教具存储空间", "高级语音/手势多模态互动", "课堂专注度大数据分析", "专属学校品牌定制支持"] }
               ].map((plan, i) => (
-                <div key={i} className={`liquid-glass rounded-3xl p-8 flex flex-col transition-all duration-500 ${plan.highlight ? 'border-[#00d2ff]/40 shadow-[0_0_30px_rgba(0,210,255,0.1)] -translate-y-4' : 'border-white/10'}`}>
-                  <div className={`text-sm font-bold ${plan.highlight ? 'text-[#00d2ff]' : 'text-white/60'} mb-2`}>{plan.tier}</div>
-                  <div className="text-4xl font-bold text-white mb-4">{plan.price}</div>
-                  <div className="text-sm text-white/50 mb-8 min-h-[40px] leading-relaxed">{plan.desc}</div>
+                <div key={i} className={`liquid-glass rounded-3xl p-8 flex flex-col transition-all duration-500 ${plan.highlight ? 'border-cyan/40 shadow-[0_0_30px_rgba(var(--theme-accent-rgb),0.1)] -translate-y-4' : 'border-line/10'}`}>
+                  <div className={`text-sm font-bold ${plan.highlight ? 'text-cyan' : 'text-ink/60'} mb-2`}>{plan.tier}</div>
+                  <div className="text-4xl font-bold text-ink mb-4">{plan.price}</div>
+                  <div className="text-sm text-ink/50 mb-8 min-h-[40px] leading-relaxed">{plan.desc}</div>
                   <ul className="space-y-4 mb-10 flex-1">
                     {plan.features.map((f, j) => (
-                      <li key={j} className="flex items-start gap-3 text-sm text-white/80">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${plan.highlight ? 'bg-[#00d2ff]/20 text-[#00d2ff]' : 'bg-white/10 text-white'}`}>
+                      <li key={j} className="flex items-start gap-3 text-sm text-ink/80">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${plan.highlight ? 'bg-cyan/20 text-cyan' : 'bg-white/10 text-ink'}`}>
                           <svg width="10" height="8" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </div>
                         {f}
                       </li>
                     ))}
                   </ul>
-                  <button className={`w-full py-3.5 rounded-xl font-bold text-sm transition-colors ${plan.highlight ? 'bg-white text-black hover:bg-white/90' : 'bg-white/5 text-white hover:bg-white/10 border border-white/10'}`}>
+                  <button className={`w-full py-3.5 rounded-xl font-bold text-sm transition-colors ${plan.highlight ? 'bg-white text-black hover:bg-white/90' : 'bg-white/5 text-ink hover:bg-white/10 border border-line/10'}`}>
                     选择计划
                   </button>
                 </div>
@@ -896,7 +898,7 @@ export default function LandingPage({
         )}
 
         {page === 'docs' && (
-          <section className="max-w-[76rem] mx-auto px-6 py-20 border-t border-white/5">
+          <section className="max-w-[76rem] mx-auto px-6 py-20 border-t border-line/5">
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {[
                 { icon: BookOpen, title: '快速开始', description: '完成登录、创建教具库，并开始你的第一场 3D 课堂演示。', meta: '约 5 分钟' },
@@ -907,12 +909,12 @@ export default function LandingPage({
                 { icon: Download, title: '部署与设备', description: '查看浏览器、摄像头、投屏设备及学校网络环境建议。', meta: '环境配置' },
               ].map((doc) => (
                 <article key={doc.title} className="liquid-glass rounded-2xl p-7 min-h-56 flex flex-col group">
-                  <div className="w-11 h-11 rounded-xl bg-[#00d2ff]/10 border border-[#00d2ff]/20 flex items-center justify-center">
-                    <doc.icon className="w-5 h-5 text-[#00d2ff]" />
+                  <div className="w-11 h-11 rounded-xl bg-cyan/10 border border-cyan/20 flex items-center justify-center">
+                    <doc.icon className="w-5 h-5 text-cyan" />
                   </div>
-                  <h2 className="mt-6 text-xl font-bold group-hover:text-[#00d2ff] transition-colors">{doc.title}</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-white/55 flex-1">{doc.description}</p>
-                  <div className="mt-6 flex items-center justify-between text-xs text-white/40">
+                  <h2 className="mt-6 text-xl font-bold group-hover:text-cyan transition-colors">{doc.title}</h2>
+                  <p className="mt-3 text-sm leading-relaxed text-ink/55 flex-1">{doc.description}</p>
+                  <div className="mt-6 flex items-center justify-between text-xs text-ink/40">
                     <span>{doc.meta}</span>
                     <ArrowUpRight className="w-4 h-4" />
                   </div>
@@ -922,7 +924,7 @@ export default function LandingPage({
             <div className="mt-10 liquid-glass rounded-2xl p-7 md:p-9 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
                 <h2 className="text-xl font-bold">准备开始实际操作？</h2>
-                <p className="mt-2 text-sm text-white/55">进入平台后，可以直接使用示例教具熟悉完整课堂流程。</p>
+                <p className="mt-2 text-sm text-ink/55">进入平台后，可以直接使用示例教具熟悉完整课堂流程。</p>
               </div>
               <button onClick={handleEnterClick} className="shrink-0 rounded-full bg-white text-black px-7 py-3 text-sm font-bold hover:bg-white/90 transition-colors">
                 进入数智课堂
@@ -933,7 +935,7 @@ export default function LandingPage({
 
         {page === 'join' && (
         <>
-        <section className="max-w-[76rem] mx-auto px-6 py-20 border-t border-white/5">
+        <section className="max-w-[76rem] mx-auto px-6 py-20 border-t border-line/5">
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { icon: Users, title: '学校与教研团队', description: '共同设计学科示范课、校本资源库与教师培训方案。' },
@@ -941,11 +943,11 @@ export default function LandingPage({
               { icon: Cpu, title: '技术与生态伙伴', description: '围绕硬件、模型资源和教育场景建设开放合作生态。' },
             ].map((item) => (
               <div key={item.title} className="liquid-glass rounded-2xl p-8 text-center">
-                <div className="mx-auto w-12 h-12 rounded-xl bg-[#00d2ff]/10 border border-[#00d2ff]/20 flex items-center justify-center">
-                  <item.icon className="w-6 h-6 text-[#00d2ff]" />
+                <div className="mx-auto w-12 h-12 rounded-xl bg-cyan/10 border border-cyan/20 flex items-center justify-center">
+                  <item.icon className="w-6 h-6 text-cyan" />
                 </div>
                 <h2 className="mt-6 text-lg font-bold">{item.title}</h2>
-                <p className="mt-3 text-sm text-white/55 leading-relaxed">{item.description}</p>
+                <p className="mt-3 text-sm text-ink/55 leading-relaxed">{item.description}</p>
               </div>
             ))}
           </div>
@@ -958,22 +960,22 @@ export default function LandingPage({
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
-            className="liquid-glass relative overflow-hidden rounded-[2.5rem] p-12 md:p-20 text-center border border-white/20 shadow-[0_30px_60px_rgba(0,0,0,0.8)]"
+            className="liquid-glass relative overflow-hidden rounded-[2.5rem] p-12 md:p-20 text-center border border-line/20 shadow-[0_30px_60px_rgba(0,0,0,0.8)]"
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-[#00d2ff]/10 to-transparent opacity-50" />
+            <div className="absolute inset-0 bg-gradient-to-b from-cyan/10 to-transparent opacity-50" />
             
-            <h2 className="text-4xl md:text-[4rem] font-bold tracking-tight leading-[1.05] relative z-10 text-white drop-shadow-2xl">
+            <h2 className="text-4xl md:text-[4rem] font-bold tracking-tight leading-[1.05] relative z-10 text-ink drop-shadow-2xl">
               把你的教育经验，<br/>
               带进未来课堂。
             </h2>
-            <p className="mt-8 text-white/70 max-w-lg mx-auto text-base md:text-lg leading-relaxed relative z-10">
+            <p className="mt-8 text-ink/70 max-w-lg mx-auto text-base md:text-lg leading-relaxed relative z-10">
               无论你来自学校、教研团队还是技术生态，我们都期待与你一起探索更直观、更生动的教学方式。
             </p>
             <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
               <button onClick={() => onNavigate('solutions')} className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-full bg-white text-black text-sm font-bold px-8 py-4 transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.4)]">
                 查看教学方案
               </button>
-              <button onClick={handleEnterClick} className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-full border border-white/20 text-white text-sm font-bold px-8 py-4 hover:bg-white/10 transition-colors">
+              <button onClick={handleEnterClick} className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-full border border-line/20 text-ink text-sm font-bold px-8 py-4 hover:bg-white/10 transition-colors">
                 立即体验产品
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -983,9 +985,9 @@ export default function LandingPage({
         </>
         )}
         
-        <footer className={`${page === 'home' ? 'py-4' : 'py-8'} mt-auto border-t border-white/5 text-center flex flex-col items-center`}>
+        <footer className={`${page === 'home' ? 'py-4' : 'py-8'} mt-auto border-t border-line/5 text-center flex flex-col items-center`}>
           <a href="/" onClick={navigateTo('home')} aria-label="返回首页"><LogoMark /></a>
-          <div className={`${page === 'home' ? 'mt-2' : 'mt-4'} text-xs text-white/40 font-medium tracking-wide`}>
+          <div className={`${page === 'home' ? 'mt-2' : 'mt-4'} text-xs text-ink/40 font-medium tracking-wide`}>
             &copy; 2026 数智课堂 · AI 互动教学平台. All rights reserved.
           </div>
         </footer>

@@ -585,7 +585,7 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
   return (
     <div className="w-full h-full relative">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center z-30 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest">
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-gray-900 text-ink text-[10px] font-bold uppercase tracking-widest">
           AI Vision Init...
         </div>
       )}
@@ -606,12 +606,12 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
         <div className="absolute left-1/2 top-2 z-20 -translate-x-1/2 pointer-events-none">
           <div className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black tracking-wide shadow-lg backdrop-blur-md ${
             trackingStatus.phase === 'locked'
-              ? 'border-cyan-300/50 bg-cyan-950/75 text-cyan-100'
+              ? 'border-cyan/50 bg-cyan-950/75 text-cyan'
               : trackingStatus.phase === 'partial_lost' || trackingStatus.phase === 'lost'
                 ? 'border-amber-300/50 bg-amber-950/75 text-amber-100'
                 : trackingStatus.phase === 'confirming'
                   ? 'border-violet-300/50 bg-violet-950/75 text-violet-100'
-                  : 'border-white/20 bg-slate-950/70 text-slate-200'
+                  : 'border-line/20 bg-slate-950/70 text-ink-soft'
           }`}>
             {trackingStatus.text}
           </div>

@@ -498,7 +498,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
         >
           <div className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
             <div className="w-4 h-4 bg-cyan-400 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.8)] animate-pulse" />
-            <div className="absolute w-8 h-8 rounded-full border-2 border-cyan-400/50 animate-ping" />
+            <div className="absolute w-8 h-8 rounded-full border-2 border-cyan/50 animate-ping" />
           </div>
         </div>
       )}
@@ -681,7 +681,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
                 <span>{quizResult.correctCount} / {quizResult.totalQuestions} 正确</span>
               </div>
               <div className="quiz-stat">
-                <Zap size={20} className="text-cyan-400" />
+                <Zap size={20} className="text-cyan" />
                 <span>正确率 {quizResult.accuracy}%</span>
               </div>
               <div className="quiz-stat">

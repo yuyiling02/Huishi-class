@@ -107,23 +107,23 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
 
   const recognitionHint = (() => {
     if (!questionReady) {
-      return { tone: 'text-white/52', icon: <Loader2 className="h-4 w-4 animate-spin text-cyan-200" />, text: '小智正在朗读题目和选项，读完后会自动开启语音识别。' };
+      return { tone: 'text-ink/52', icon: <Loader2 className="h-4 w-4 animate-spin text-cyan" />, text: '小智正在朗读题目和选项，读完后会自动开启语音识别。' };
     }
     switch (recognitionState.phase) {
       case 'waiting':
         return { tone: 'text-amber-100/80', icon: <Loader2 className="h-4 w-4 animate-spin text-amber-200" />, text: recognitionState.message || '正在准备麦克风，请稍候。' };
       case 'connecting':
-        return { tone: 'text-cyan-100', icon: <Loader2 className="h-4 w-4 animate-spin text-cyan-200" />, text: '正在连接语音识别……' };
+        return { tone: 'text-cyan', icon: <Loader2 className="h-4 w-4 animate-spin text-cyan" />, text: '正在连接语音识别……' };
       case 'listening':
         return { tone: 'text-emerald-100', icon: <Mic className="h-4 w-4 animate-pulse text-emerald-300" />, text: '正在聆听，请说“A”或“B”。' };
       case 'recognizing':
-        return { tone: 'text-cyan-100', icon: <Mic className="h-4 w-4 animate-pulse text-cyan-200" />, text: recognitionState.text ? `正在识别：${recognitionState.text}` : '正在识别，请继续说完。' };
+        return { tone: 'text-cyan', icon: <Mic className="h-4 w-4 animate-pulse text-cyan" />, text: recognitionState.text ? `正在识别：${recognitionState.text}` : '正在识别，请继续说完。' };
       case 'recognized':
-        return { tone: 'text-cyan-100', icon: <Mic className="h-4 w-4 text-cyan-200" />, text: recognitionState.text ? `已识别：${recognitionState.text}` : '已识别，正在判断答案。' };
+        return { tone: 'text-cyan', icon: <Mic className="h-4 w-4 text-cyan" />, text: recognitionState.text ? `已识别：${recognitionState.text}` : '已识别，正在判断答案。' };
       case 'error':
         return { tone: 'text-rose-100', icon: <XCircle className="h-4 w-4 text-rose-300" />, text: `语音识别不可用：${recognitionState.message || '请检查麦克风后重试'}；仍可点击或使用手势作答。` };
       default:
-        return { tone: 'text-white/52', icon: <Mic className="h-4 w-4 text-white/45" />, text: '语音识别尚未开启；你仍可点击选项，或开启摄像头后用手掌悬停作答。' };
+        return { tone: 'text-ink/52', icon: <Mic className="h-4 w-4 text-ink/45" />, text: '语音识别尚未开启；你仍可点击选项，或开启摄像头后用手掌悬停作答。' };
     }
   })();
 
@@ -238,7 +238,7 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
 
   return (
     <motion.div
-      className="absolute inset-0 z-[75] flex items-center justify-center bg-black/45 px-6 backdrop-blur-sm"
+      className="absolute inset-0 z-[75] flex items-center justify-center bg-cyan/45 px-6 backdrop-blur-sm"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -259,7 +259,7 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
 
       <motion.div
         layout
-        className="relative w-full max-w-3xl rounded-2xl border border-cyan-300/20 bg-[#07121d]/94 p-6 text-white shadow-2xl shadow-black/60 will-change-transform"
+        className="relative w-full max-w-3xl rounded-2xl border border-cyan/20 bg-cyan-50/94 p-6 text-ink shadow-2xl shadow-black/60 will-change-transform"
         initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 30, scale: 0.965 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.98 }}
@@ -270,7 +270,7 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
         <motion.button
           type="button"
           onClick={onExit}
-          className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
+          className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-xl border border-line/10 bg-white/5 text-ink/60 transition hover:bg-white/10 hover:text-ink"
           aria-label="关闭追问"
           title="关闭"
           initial={reduceMotion ? false : { opacity: 0, scale: 0.8 }}
@@ -290,8 +290,8 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
             <XiaozhiMascot state="questioning" size={22} motion="subtle" />
             <span>小智追问</span>
           </div>
-          <h2 className="mt-2 text-2xl font-black text-cyan-50">{question.subject}</h2>
-          <p className="mt-3 min-h-7 text-lg font-bold leading-relaxed text-white" aria-label={question.question}>
+          <h2 className="mt-2 text-2xl font-black text-cyan">{question.subject}</h2>
+          <p className="mt-3 min-h-7 text-lg font-bold leading-relaxed text-ink" aria-label={question.question}>
             <span aria-hidden="true">{displayedQuestion}</span>
             {!optionsVisible && (
               <motion.span
@@ -344,8 +344,8 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
                           : isHovered
                           ? 'border-pink-300/70 bg-pink-300/14'
                           : !answerInteractionReady
-                          ? 'cursor-wait border-cyan-300/10 bg-cyan-950/18 opacity-65'
-                          : 'border-cyan-300/18 bg-cyan-950/28 hover:border-cyan-300/38 hover:bg-cyan-900/30'
+                          ? 'cursor-wait border-cyan/10 bg-cyan-950/18 opacity-65'
+                          : 'border-cyan/18 bg-cyan-950/28 hover:border-cyan/38 hover:bg-cyan-900/30'
                       }`}
                     >
                       {isHovered && (
@@ -354,10 +354,10 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
                         </div>
                       )}
                       <div className="flex items-start gap-3">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-base font-black text-cyan-100">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-base font-black text-cyan">
                           {optIdx === 0 ? 'A' : 'B'}
                         </span>
-                        <span className="pt-1 text-base font-bold leading-relaxed text-white">
+                        <span className="pt-1 text-base font-bold leading-relaxed text-ink">
                           {getOptionText(option, optIdx)}
                         </span>
                         {isCorrect && <CheckCircle2 className="ml-auto h-5 w-5 shrink-0 text-emerald-300" />}
@@ -388,7 +388,7 @@ const FollowUpQuestionOverlay: React.FC<FollowUpQuestionOverlayProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className={`mt-5 flex items-start gap-2 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 text-xs font-semibold leading-relaxed ${recognitionHint.tone}`}>
+                  <div className={`mt-5 flex items-start gap-2 rounded-2xl border border-line/8 bg-white/[0.04] px-4 py-3 text-xs font-semibold leading-relaxed ${recognitionHint.tone}`}>
                     <span className="mt-0.5 shrink-0">{recognitionHint.icon}</span>
                     <span>{recognitionHint.text} {questionReady && recognitionState.phase !== 'error' ? '也可以点击选项；开启摄像头后，用手掌悬停 1.2 秒确认。' : ''}</span>
                   </div>

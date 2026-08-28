@@ -82,9 +82,9 @@ const KnowledgeNarrationPanel: React.FC<KnowledgeNarrationPanelProps> = ({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col text-white" aria-label="知识讲解">
+    <section className="flex min-h-0 flex-1 flex-col text-slate-100" aria-label="知识讲解">
       <div className="flex h-full min-h-0 flex-col px-5 py-5">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] pb-5">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line/[0.07] pb-5">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] text-amber-200">
               <XiaozhiMascot
@@ -99,7 +99,7 @@ const KnowledgeNarrationPanel: React.FC<KnowledgeNarrationPanelProps> = ({
               <h2 className="truncate text-[clamp(18px,1.25vw,25px)] font-black tracking-wide text-amber-100">
                 知识讲解
               </h2>
-              <div className="mt-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-100/40">
+              <div className="mt-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200/80">
                 <span className={`h-1.5 w-1.5 rounded-full ${isStreaming || isNarrating ? 'animate-pulse bg-amber-300' : 'bg-emerald-300'}`} />
                 {isNarrating ? '正在播报' : isStreaming ? '内容生成中' : '讲解已生成'}
               </div>
@@ -109,7 +109,7 @@ const KnowledgeNarrationPanel: React.FC<KnowledgeNarrationPanelProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.035] text-slate-400 transition hover:border-amber-300/20 hover:bg-amber-300/[0.08] hover:text-amber-100"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-300 transition hover:border-amber-300/20 hover:bg-amber-300/[0.08] hover:text-amber-200"
               aria-label="关闭知识讲解"
               title="关闭知识讲解"
             >
@@ -123,7 +123,7 @@ const KnowledgeNarrationPanel: React.FC<KnowledgeNarrationPanelProps> = ({
             ref={structureImageButtonRef}
             type="button"
             onClick={onStructureImageClick}
-            className="group mx-auto mt-4 flex h-[clamp(84px,14vh,132px)] w-full max-w-[180px] shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/90 p-2 shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition hover:border-amber-300/35 hover:bg-white active:scale-[0.98]"
+            className="group mx-auto mt-4 flex h-[clamp(84px,14vh,132px)] w-full max-w-[180px] shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-line/10 bg-white/90 p-2 shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition hover:border-amber-300/35 hover:bg-white active:scale-[0.98]"
             aria-label="放大结构图"
             title="放大结构图"
           >
@@ -142,7 +142,7 @@ const KnowledgeNarrationPanel: React.FC<KnowledgeNarrationPanelProps> = ({
           onPointerDown={deferAutoScroll}
           className="mt-4 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-color:rgba(251,191,36,0.28)_transparent]"
         >
-          <p className="whitespace-pre-wrap text-[clamp(16px,1.15vw,21px)] font-medium leading-[1.75] text-slate-100/90">
+          <p className="whitespace-pre-wrap text-[clamp(16px,1.15vw,21px)] font-medium leading-[1.75] text-slate-200">
             {tokens.map((token, index) => (
               <span
                 key={`${token.start}-${token.end}`}

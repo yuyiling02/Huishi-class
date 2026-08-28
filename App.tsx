@@ -4,6 +4,8 @@ import Dashboard from './Dashboard';
 import Landing, { MarketingPage } from './Landing';
 import Login, { AuthUser } from './Login';
 import ModelGenerationStudio from './components/ModelGenerationStudio';
+import { useTheme } from './components/ThemeProvider';
+import { isThemeId } from './services/theme';
 
 type AppView = 'landing' | 'login' | 'dashboard' | 'admin' | 'model-generation';
 
@@ -38,6 +40,13 @@ export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [localModelId, setLocalModelId] = useState<string | null>(null);
+  const { setTheme } = useTheme();
+
+  useEffect(() => {
+    if (user?.theme && isThemeId(user.theme)) {
+      setTheme(user.theme, { remote: true });
+    }
+  }, [user?.theme, setTheme]);
 
   useEffect(() => {
     let isMounted = true;
@@ -128,8 +137,8 @@ export default function App() {
 
   if (isCheckingAuth) {
     return (
-      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center">
-        <div className="rounded-lg border border-white/10 bg-white/[0.04] px-6 py-4 text-sm text-white/60">
+      <div className="min-h-screen bg-[var(--theme-bg)] text-ink flex items-center justify-center">
+        <div className="rounded-lg border border-line/10 bg-white/[0.04] px-6 py-4 text-sm text-ink/60">
           正在恢复登录状态...
         </div>
       </div>

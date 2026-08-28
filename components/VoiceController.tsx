@@ -51,6 +51,7 @@ interface VoiceControllerProps {
   answerOptions?: string[];
   activeAnswerQuestionId?: string;
   toggleRequest?: number;
+  forceToggleRequest?: number;
   activateRequest?: VoiceActivationRequest | null;
   deactivateRequest?: number;
   disabled?: boolean;
@@ -72,6 +73,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   answerOptions = [],
   activeAnswerQuestionId,
   toggleRequest = 0,
+  forceToggleRequest = 0,
   activateRequest = null,
   deactivateRequest = 0,
   disabled = false,
@@ -87,6 +89,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const utteranceStartedRef = useRef(false);
   const lastToggleRequestRef = useRef(toggleRequest);
+  const lastForceToggleRequestRef = useRef(forceToggleRequest);
   const lastActivateRequestRef = useRef(activateRequest?.id ?? 0);
   const lastDeactivateRequestRef = useRef(deactivateRequest);
   const pendingActivationRequestRef = useRef<VoiceActivationRequest | null>(null);
@@ -174,7 +177,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
         onRecognizedText?.('');
         if (!isFinal) publishRecognitionState({ phase: 'listening' });
         clearTimerRef.current = null;
-      }, 3000);
+      }, 5000);
     }
 
     if (!isFinal) return;
@@ -284,6 +287,24 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
     toggleVoice();
   }, [toggleRequest, toggleVoice]);
 
+  useEffect(() => {
+    if (forceToggleRequest === lastForceToggleRequestRef.current) return;
+    lastForceToggleRequestRef.current = forceToggleRequest;
+    if (isActive) {
+      stopSession();
+    } else {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch { /* noop */ }
+        recognitionRef.current = null;
+      }
+      sessionStartingRef.current = false;
+      stoppedRef.current = false;
+      pausedForAssistantRef.current = false;
+      prepareXiaozhiSpeech();
+      startSession();
+    }
+  }, [forceToggleRequest, isActive, stopSession, startSession]);
+
   const tryPendingActivation = useCallback(() => {
     const request = pendingActivationRequestRef.current;
     if (!request || request.id === lastActivateRequestRef.current) return;
@@ -376,8 +397,8 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
       {/* 实时识别文字气泡 */}
       {recognizedText && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 whitespace-nowrap z-50">
-          <div className="px-4 py-2 rounded-xl bg-cyan-950/80 backdrop-blur-md text-cyan-50 text-sm font-medium shadow-[0_0_15px_rgba(34,211,238,0.2)] border border-cyan-500/30 max-w-[320px] truncate">
-            <span className="text-cyan-400 mr-1.5">♪</span>
+          <div className="px-4 py-2 rounded-xl bg-cyan-950/80 backdrop-blur-md text-cyan text-sm font-medium shadow-[0_0_15px_rgba(34,211,238,0.2)] border border-cyan/30 max-w-[320px] truncate">
+            <span className="text-cyan mr-1.5">♪</span>
             {recognizedText}
           </div>
           <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-cyan-950/80" />
@@ -400,8 +421,8 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
         disabled={isConnecting || disabled}
         className={`p-3 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.15)] border transition-all active:scale-90 ${
           disabled
-            ? 'bg-cyan-950/20 border-cyan-900/30 text-slate-600 cursor-not-allowed shadow-none'
-            : isActive ? 'bg-rose-950/40 border-rose-900/50 text-rose-400 animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.3)]' : 'bg-cyan-950/40 border-cyan-900/50 text-cyan-500 hover:bg-cyan-900/60 hover:text-cyan-300'
+            ? 'bg-cyan-950/20 border-cyan/30 text-slate-600 cursor-not-allowed shadow-none'
+            : isActive ? 'bg-rose-950/40 border-rose-900/50 text-rose-400 animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.3)]' : 'bg-cyan-950/40 border-cyan/50 text-cyan hover:bg-cyan-900/60 hover:text-cyan'
         }`}
         aria-label={isActive ? '关闭语音识别' : '开启语音识别'}
         title={disabled ? '请先加载模型' : (isActive ? '关闭语音识别' : '开启语音识别')}

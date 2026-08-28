@@ -29,9 +29,9 @@ export const Badge: React.FC<{ active: boolean; label: string; color?: string }>
 export const ProcessingOverlay: React.FC<{ steps: string[], currentStep: number, aiAnalysis?: string }> = ({ steps, currentStep, aiAnalysis }) => (
   <div className="absolute inset-0 z-[100] bg-white/40 backdrop-blur-2xl flex flex-col items-center justify-center animate-in fade-in duration-500">
     <div className="relative mb-12">
-      <div className="absolute inset-0 bg-[#86e3ce]/20 blur-[100px] rounded-full animate-pulse"></div>
-      <div className="relative bg-white p-10 rounded-full shadow-2xl border border-white">
-        <Loader2 className="w-16 h-16 text-[#86e3ce] animate-spin" strokeWidth={1.5} />
+      <div className="absolute inset-0 bg-cyan/20 blur-[100px] rounded-full animate-pulse"></div>
+      <div className="relative bg-white p-10 rounded-full shadow-2xl border border-line">
+        <Loader2 className="w-16 h-16 text-cyan animate-spin" strokeWidth={1.5} />
       </div>
     </div>
     
@@ -48,7 +48,7 @@ export const ProcessingOverlay: React.FC<{ steps: string[], currentStep: number,
         {steps.map((step, idx) => (
           <div key={idx} className={`flex items-center gap-4 transition-all duration-500 ${idx === currentStep ? 'opacity-100 translate-x-2' : idx < currentStep ? 'opacity-40' : 'opacity-20'}`}>
             {idx < currentStep ? (
-              <CheckCircle2 className="w-5 h-5 text-[#86e3ce]" />
+              <CheckCircle2 className="w-5 h-5 text-cyan" />
             ) : idx === currentStep ? (
               <div className="w-5 h-5 rounded-full border-2 border-pink-400 border-t-transparent animate-spin"></div>
             ) : (
@@ -62,9 +62,9 @@ export const ProcessingOverlay: React.FC<{ steps: string[], currentStep: number,
       </div>
 
       {aiAnalysis && (
-        <div className="mt-10 p-5 bg-white/60 rounded-3xl border border-white shadow-sm animate-in slide-in-from-bottom-4">
+        <div className="mt-10 p-5 bg-white/60 rounded-3xl border border-line shadow-sm animate-in slide-in-from-bottom-4">
           <p className="text-[11px] font-bold text-gray-500 leading-relaxed italic">
-            <span className="text-[#86e3ce] mr-1">● AI LOG:</span>
+            <span className="text-cyan mr-1">● AI LOG:</span>
             {aiAnalysis}
           </p>
         </div>

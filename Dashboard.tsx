@@ -13,6 +13,7 @@ import XiaozhiMascot from './components/XiaozhiMascot';
 import FollowUpQuestionOverlay from './components/FollowUpQuestionOverlay';
 import MultiAgentPanel from './components/MultiAgentPanel';
 import ModelDetailPanel, { type DetailPanelTab } from './components/ModelDetailPanel';
+import ThemeSwitcher from './components/ThemeSwitcher';
 import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation, buildOrchestratorDecision, buildFollowUpQuestion, getAutonomousDisassemblyArgs } from './services/agentRuntime';
 import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen, BookOpenCheck } from 'lucide-react';
 import { ModelType } from './types';
@@ -37,6 +38,15 @@ const BUILT_IN_MODELS = {
   nacl: '/models/nacl-crystal.glb',
   sio2: '/models/sio2-crystal.glb',
   nitrobenzene: '/models/7416-bas-color-print_NIH3D.glb',
+  brain: '/models/organ-brain.glb',
+  organHeart: '/models/organ-heart.glb',
+  organLungs: '/models/organ-lungs.glb',
+  organLiver: '/models/organ-liver.glb',
+  organKidneys: '/models/organ-kidneys.glb',
+  organEyeball: '/models/organ-eyeball.glb',
+  organIntestine: '/models/organ-intestine.glb',
+  organPancreas: '/models/organ-pancreas.glb',
+  organSkin: '/models/organ-skin.glb',
   naili: '/models/naili.glb',
   nailiguozi: '/models/nailiguozi.glb',
   xiaoshaoqing: '/models/xiaoshaoqing.glb',
@@ -76,6 +86,15 @@ const MODEL_ID_BY_URL: Record<string, TeachingModelId> = {
   [BUILT_IN_MODELS.nacl]: 'nacl',
   [BUILT_IN_MODELS.sio2]: 'sio2',
   [BUILT_IN_MODELS.nitrobenzene]: 'nitrobenzene',
+  [BUILT_IN_MODELS.brain]: 'brain',
+  [BUILT_IN_MODELS.organHeart]: 'organ_heart',
+  [BUILT_IN_MODELS.organLungs]: 'lungs',
+  [BUILT_IN_MODELS.organLiver]: 'liver',
+  [BUILT_IN_MODELS.organKidneys]: 'kidneys',
+  [BUILT_IN_MODELS.organEyeball]: 'eyeball',
+  [BUILT_IN_MODELS.organIntestine]: 'intestine',
+  [BUILT_IN_MODELS.organPancreas]: 'pancreas',
+  [BUILT_IN_MODELS.organSkin]: 'skin',
   '/models/earth-layers.glb': 'earth_layers',
   '/models/terrain-topography.glb': 'terrain',
 };
@@ -343,6 +362,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const [xiaozhiState, setXiaozhiState] = useState<XiaozhiVisualState>('idle');
   const [xiaozhiVoiceActive, setXiaozhiVoiceActive] = useState(false);
   const [voiceToggleRequest, setVoiceToggleRequest] = useState(0);
+  const [forceVoiceToggle, setForceVoiceToggle] = useState(0);
   const [voiceActivateRequest, setVoiceActivateRequest] = useState<VoiceActivationRequest | null>(null);
   const [voiceDeactivateRequest, setVoiceDeactivateRequest] = useState(0);
   const [voiceListeningLocked, setVoiceListeningLocked] = useState(false);
@@ -381,6 +401,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const followUpSpeechEpochRef = useRef(0);
   const followUpTimelineIdRef = useRef<string | null>(null);
   const pendingKnowledgeNarrationRef = useRef<PendingKnowledgeNarration | null>(null);
+  const onKnowledgeNarrationCompleteRef = useRef<(() => void) | null>(null);
   const answeredFollowUpQuestionIdRef = useRef<string | null>(null);
   const voiceConversationLoopRef = useRef(false);
   const voiceTurnRef = useRef(0);
@@ -398,12 +419,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     : modelUrl
       ? MODEL_ID_BY_URL[modelUrl] || null
       : null;
-  const voiceWorkBlocked = isAgentRunning
-    || isAgentRequestPending
+  const voiceWorkBlocked = isAgentRequestPending
     || isFollowUpPreparing
     || isXiaozhiSpeaking
-    || isVoiceInputLockedByAssistantState(xiaozhiState)
-    || Boolean(followUpQuestion && !followUpQuestionReady);
+    || isVoiceInputLockedByAssistantState(xiaozhiState);
   voiceWorkBlockedRef.current = voiceWorkBlocked;
   const voiceInputDisabled = voiceWorkBlocked || voiceListeningLocked || globalSpeechActive;
   const knowledgePresentationActive = activeContent === 'model'
@@ -572,6 +591,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const resetKnowledgeSpeech = useCallback(() => {
     knowledgeNarrationEpochRef.current += 1;
     knowledgeNarrationPlaybackEndedRef.current = false;
+    onKnowledgeNarrationCompleteRef.current = null;
     knowledgeSpeechStreamRef.current?.stop();
     knowledgeSpeechStreamRef.current = null;
     setIsXiaozhiSpeaking(false);
@@ -628,12 +648,18 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             setIsKnowledgeNarrating(false);
           }
           finishVoiceTurn(voiceTurn);
+          const cb = onKnowledgeNarrationCompleteRef.current;
+          onKnowledgeNarrationCompleteRef.current = null;
+          cb?.();
         },
         onError: (error) => {
           if (knowledgeNarrationEpochRef.current !== narrationEpoch) return;
           knowledgeNarrationPlaybackEndedRef.current = true;
           setKnowledgeNarrationCharIndex(null);
           reportVoicePlaybackError('Knowledge', error);
+          const cb = onKnowledgeNarrationCompleteRef.current;
+          onKnowledgeNarrationCompleteRef.current = null;
+          cb?.();
         },
       });
     }
@@ -661,6 +687,15 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     resetKnowledgeSpeech();
     setXiaozhiState((current) => getAssistantStateAfterKnowledgeClose(current));
     setAiAnalysis('知识讲解已关闭，语音输入即将恢复。');
+    setFollowUpQuestion(null);
+    setFollowUpQuestionReady(false);
+    setIsFollowUpPreparing(false);
+    setIsAgentRunning(false);
+    setIsAgentRequestPending(false);
+    setVoiceListeningLocked(false);
+    setAgentTimeline([]);
+    setAgentStatuses(AGENT_STATUS_IDLE);
+    setXiaozhiMessage('');
 
     if (shouldFinishVoiceTurn) {
       finishVoiceTurn(voiceTurn);
@@ -1281,6 +1316,28 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   }, []);
 
   const loadTeachingModel = (modelId: TeachingModelId, source: ModelActivitySource = 'ai') => {
+    if (source !== 'ai') {
+      interactionAbortRef.current?.abort();
+      interactionAbortRef.current = null;
+      stopXiaozhiSpeech();
+      knowledgeSpeechClosedRef.current = true;
+      knowledgeSpeechSessionRef.current += 1;
+      resetKnowledgeSpeech();
+      setIsAgentRunning(false);
+      setIsAgentRequestPending(false);
+      setIsFollowUpPreparing(false);
+      setVoiceListeningLocked(false);
+      setFollowUpQuestion(null);
+      setFollowUpQuestionReady(false);
+      setKnowledgeContent('');
+      setIsKnowledgeStreaming(false);
+      setAgentTimeline([]);
+      setAgentStatuses(AGENT_STATUS_IDLE);
+      setXiaozhiState('idle');
+      setXiaozhiMessage('');
+      setAgentThinking('');
+      setAgentSummary('');
+    }
     switch (modelId) {
       case 'heart':
         showModelStage();
@@ -1317,6 +1374,42 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
         showModelStage();
         loadDemoModel(BUILT_IN_MODELS.nitrobenzene, '硝基苯', 'glb', {}, source);
         return;
+      case 'brain':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.brain, '大脑模型', 'glb', {}, source);
+        return;
+      case 'organ_heart':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organHeart, '心脏（解剖）', 'glb', {}, source);
+        return;
+      case 'lungs':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organLungs, '肺', 'glb', {}, source);
+        return;
+      case 'liver':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organLiver, '肝脏', 'glb', {}, source);
+        return;
+      case 'kidneys':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organKidneys, '肾脏', 'glb', {}, source);
+        return;
+      case 'eyeball':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organEyeball, '眼球', 'glb', {}, source);
+        return;
+      case 'intestine':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organIntestine, '肠', 'glb', {}, source);
+        return;
+      case 'pancreas':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organPancreas, '胰腺', 'glb', {}, source);
+        return;
+      case 'skin':
+        showModelStage();
+        loadDemoModel(BUILT_IN_MODELS.organSkin, '皮肤', 'glb', {}, source);
+        return;
       case 'terrain':
         showModelStage();
         loadDemoModel('/models/terrain-topography.glb', '地形地貌', 'glb', {}, source);
@@ -1351,9 +1444,11 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       switch (call.name) {
         case 'load_model': {
           const modelId = (call.args.modelId || 'earth_layers') as TeachingModelId;
-          // 如果 handleAgentStart 已预加载过同一模型，跳过避免二次刷新
           if (preloadedModelRef.current === modelId) {
             preloadedModelRef.current = null;
+            break;
+          }
+          if (activeContent === 'model' && modelUrl && modelId === 'biodigital_heart') {
             break;
           }
           loadTeachingModel(modelId, 'ai');
@@ -1536,17 +1631,24 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       setAgentTimeline((items) => items.map((item) => item.id === questionerTimelineId
         ? { ...item, detail: `等待作答：${question.question}` }
         : item));
+      let followUpReadyTimer: ReturnType<typeof setTimeout> | null = null;
+      const markFollowUpReady = () => {
+        if (followUpSpeechEpochRef.current !== speechEpoch) return;
+        if (followUpReadyTimer) { clearTimeout(followUpReadyTimer); followUpReadyTimer = null; }
+        setLastFinalVoiceText('');
+        setFollowUpRecognitionState({ phase: 'waiting', message: '正在准备语音识别' });
+        setFollowUpQuestionReady(true);
+      };
+      followUpReadyTimer = setTimeout(() => {
+        if (followUpSpeechEpochRef.current !== speechEpoch) return;
+        markFollowUpReady();
+      }, 15000);
       void letXiaozhiSpeak(
         `小挑战来啦！${question.question} A：${question.options[0]}。B：${question.options[1]}。`,
         'questioning',
         () => {
           if (followUpSpeechEpochRef.current !== speechEpoch) return;
-          setTimeout(() => {
-            if (followUpSpeechEpochRef.current !== speechEpoch) return;
-            setLastFinalVoiceText('');
-            setFollowUpRecognitionState({ phase: 'waiting', message: '正在准备语音识别' });
-            setFollowUpQuestionReady(true);
-          }, 500);
+          setTimeout(markFollowUpReady, 500);
         },
       );
     } catch (error) {
@@ -1572,7 +1674,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     }
   };
 
-  const handleAgentStart = async (request: string, signal?: AbortSignal, interactionEpoch?: number, sessionId?: number | null) => {
+  const handleAgentStart = async (request: string, signal?: AbortSignal, interactionEpoch?: number, sessionId?: number | null, modelOverride?: TeachingModelId | null) => {
     if (isAgentRunning) return;
     let ownedController: AbortController | null = null;
     if (!signal) {
@@ -1603,10 +1705,13 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     setAgentTimeline([]);
     setAgentSummary('');
     setAgentStatuses(makeAgentStatuses({ planner: 'thinking' }));
+    setFollowUpQuestion(null);
+    setFollowUpQuestionReady(false);
+    setIsFollowUpPreparing(false);
     const executedLogs: string[] = [];
 
     try {
-      const matchedModel = inferTeachingModel(request);
+      const matchedModel = modelOverride || inferTeachingModel(request);
       const matchedModelName = getTeachingModelName(matchedModel);
       const initialThinking = `我正在理解教学需求，先识别关键词并匹配教具：当前判断适合使用“${matchedModelName}”。随后会生成演示步骤并调用工具。`;
       setAgentThinking(initialThinking);
@@ -1625,7 +1730,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
         status: 'running',
       });
 
-      const plan = await buildTeachingPlan(request, signal);
+      const plan = await buildTeachingPlan(request, signal, modelOverride);
       throwIfAborted(signal);
       setXiaozhiState('executing');
       setAgentThinking(`规划完成：已选择“${getTeachingModelName(plan.modelId)}”，准备执行 ${plan.steps.length} 个演示步骤。`);
@@ -1689,11 +1794,16 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
         signal,
       );
 
-      if (!signal?.aborted && interactionEpochRef.current === runEpoch && !knowledgeSpeechClosedRef.current && knowledgeSpeechSessionRef.current === knowledgeSpeechSession) {
+      const canNarrate = !signal?.aborted
+        && interactionEpochRef.current === runEpoch
+        && !knowledgeSpeechClosedRef.current
+        && knowledgeSpeechSessionRef.current === knowledgeSpeechSession
+        && fullKnowledge;
+      if (canNarrate) {
         setKnowledgeContent(fullKnowledge);
         setAgentSummary(fullKnowledge);
-        setAiAnalysis('知识讲解已生成，等待完成课堂追问后播报。');
-        if (sessionId && fullKnowledge) {
+        setAiAnalysis('正在朗读知识讲解...');
+        if (sessionId) {
           void appendLearningMessage(sessionId, 'assistant', fullKnowledge, {
             kind: 'knowledge_explanation',
             modelId: plan.modelId,
@@ -1703,17 +1813,27 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       setIsKnowledgeStreaming(false);
       setAgentThinking('');
       setAgentStatuses(makeAgentStatuses({ planner: 'done', executor: 'done', evaluator: 'done' }));
-      setXiaozhiState('complete');
       setAgentTimeline((items) => items.map((item) => item.agent === 'evaluator'
-        ? { ...item, status: 'done', detail: '讲解内容已生成，等待追问完成后播报' }
+        ? { ...item, status: 'done', detail: canNarrate ? '正在朗读知识讲解' : '讲解内容已生成' }
         : item));
       throwIfAborted(signal);
-      await triggerFollowUpQuestion(
-        plan.modelId,
-        signal,
-        runEpoch,
-        knowledgeSpeechClosedRef.current ? '' : fullKnowledge,
-      );
+      if (canNarrate) {
+        onKnowledgeNarrationCompleteRef.current = () => {
+          onKnowledgeNarrationCompleteRef.current = null;
+          if (signal?.aborted || interactionEpochRef.current !== runEpoch) return;
+          void triggerFollowUpQuestion(plan.modelId, signal, runEpoch, '');
+        };
+        enqueueKnowledgeSpeech(fullKnowledge);
+        flushKnowledgeSpeech();
+      } else {
+        setXiaozhiState('complete');
+        await triggerFollowUpQuestion(
+          plan.modelId,
+          signal,
+          runEpoch,
+          knowledgeSpeechClosedRef.current ? '' : fullKnowledge,
+        );
+      }
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         controlRef.current.zoomSpeed = 0;
@@ -1756,6 +1876,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     stopXiaozhiSpeech();
     knowledgeSpeechClosedRef.current = true;
     knowledgeSpeechSessionRef.current += 1;
+    onKnowledgeNarrationCompleteRef.current = null;
     pendingKnowledgeNarrationRef.current = null;
     answeredFollowUpQuestionIdRef.current = null;
     followUpSpeechEpochRef.current += 1;
@@ -1863,6 +1984,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       const decision = await buildOrchestratorDecision(trimmedRequest, {
         currentModelId: currentTeachingModelId,
         currentModelName: currentTeachingModelId ? getTeachingModelName(currentTeachingModelId) : fileName,
+        currentModelSeedKey: activeModelSeedKey,
         hasModel: Boolean(modelUrl || activeContent === 'biodigital'),
         sessionId: activeSessionId,
       }, controller.signal, (token) => {
@@ -1953,7 +2075,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       }
 
       if (decision.action === 'teach_demo') {
-        await handleAgentStart(decision.request || trimmedRequest, controller.signal, interactionEpoch, activeSessionId);
+        await handleAgentStart(decision.request || trimmedRequest, controller.signal, interactionEpoch, activeSessionId, decision.modelId);
         return;
       }
 
@@ -2271,7 +2393,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   }, [zoomSpeedMultiplier, rotationSpeedMultiplier]);
 
   return (
-    <div className={`lab-shell flex h-screen flex-col overflow-hidden text-white ${playIntro ? 'lab-intro' : ''} ${isStageAppFullscreen ? 'lab-shell-app-fullscreen' : ''}`}>
+    <div className={`lab-shell flex h-screen flex-col overflow-hidden text-ink ${playIntro ? 'lab-intro' : ''} ${isStageAppFullscreen ? 'lab-shell-app-fullscreen' : ''}`}>
       <div className="lab-stars" aria-hidden="true" />
       <div className="lab-ambient lab-ambient-left" aria-hidden="true" />
       <div className="lab-ambient lab-ambient-bottom" aria-hidden="true" />
@@ -2285,10 +2407,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity"
             onClick={onBack}
           >
-            <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(39,242,255,0.46)]" />
+            <img src="/brand/smart-cube-tech/mark.svg" alt="数智课堂 Logo" className="h-10 w-10 drop-shadow-[0_0_18px_rgba(var(--theme-accent-rgb),0.46)]" />
             <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tight text-white">数智课堂</span>
-              <span className="text-xs font-semibold tracking-wide text-slate-400">AI 沉浸式教学系统</span>
+              <span className="text-xl font-black tracking-tight text-ink">数智课堂</span>
+              <span className="text-xs font-semibold tracking-wide text-ink-soft">AI 沉浸式教学系统</span>
             </div>
           </div>
 
@@ -2296,7 +2418,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
 
         <div className="flex items-center gap-5">
           <button type="button" className="lab-pill-button" onClick={onOpenModelGeneration}>
-            <Sparkles className="mr-1.5 text-white/90" size={14} /> 3D建模生成
+            <Sparkles className="mr-1.5 text-ink/90" size={14} /> 3D建模生成
           </button>
 
           <div className="relative group">
@@ -2309,35 +2431,62 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
             />
             <button className="lab-pill-button" disabled={isSavingLocalModel}>
-              {isSavingLocalModel ? <Loader2 className="mr-1.5 animate-spin text-white/90" size={14} /> : <Download className="mr-1.5 text-white/90" size={14} />}
+              {isSavingLocalModel ? <Loader2 className="mr-1.5 animate-spin text-ink/90" size={14} /> : <Download className="mr-1.5 text-ink/90" size={14} />}
               {isSavingLocalModel ? '保存中' : '导入模型'}
             </button>
           </div>
+
+          <button
+            type="button"
+            className={`lab-pill-button ${xiaozhiVoiceActive ? 'lab-pill-button-live' : ''}`}
+            onClick={() => {
+              setSidebarTab('agent');
+              setIsSidebarCollapsed(false);
+              cancelVoiceTurn();
+              if (!xiaozhiVoiceActive) {
+                stopXiaozhiSpeech();
+                globalSpeechActiveRef.current = false;
+                setGlobalSpeechActive(false);
+                setIsXiaozhiSpeaking(false);
+                setIsAgentRequestPending(false);
+                setIsFollowUpPreparing(false);
+                setXiaozhiState('idle');
+              }
+              voiceConversationLoopRef.current = !xiaozhiVoiceActive;
+              setForceVoiceToggle((current) => current + 1);
+            }}
+            title={xiaozhiVoiceActive ? '点击关闭语音输入' : '点击开始语音输入'}
+            aria-label={xiaozhiVoiceActive ? '关闭语音输入' : '开始语音输入'}
+          >
+            <XiaozhiMascot size={15} motion={xiaozhiVoiceActive ? 'happy' : 'static'} /> 小智
+          </button>
+
+          <ThemeSwitcher />
 
           <div className="relative">
             <button
               type="button"
               onClick={() => setIsAccountMenuOpen((open) => !open)}
-              className="flex h-10 items-center gap-1.5 rounded-full border border-[#3ff6ff]/45 bg-[#09222b]/80 px-2 pr-3 text-white shadow-[0_0_24px_rgba(39,242,255,0.22),inset_0_0_18px_rgba(39,242,255,0.18)] transition hover:border-[#3ff6ff]/75 hover:bg-[#0b2d38]"
+              className="flex h-10 items-center gap-1.5 rounded-full border border-cyan/30 bg-cyan-50 px-2 pr-3 text-cyan shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-cyan/50 hover:bg-cyan-100"
               aria-label="打开个人中心"
             >
-              <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-white/15 bg-cyan-200 text-xs font-black text-[#061626]">
+              <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-line/15 bg-cyan-200 text-xs font-black text-[#061626]">
                 {currentUser.avatarUrl ? (
                   <img src={currentUser.avatarUrl} alt={userLabel(currentUser)} className="h-full w-full object-cover" />
                 ) : (
                   userInitial(currentUser)
                 )}
               </span>
-              <span className="max-w-[100px] truncate text-xs font-bold text-slate-100">{userLabel(currentUser)}</span>
-              <ChevronDown className={`h-3.5 w-3.5 text-cyan-100 transition ${isAccountMenuOpen ? 'rotate-180' : ''}`} />
+              <span className="max-w-[100px] truncate text-xs font-bold text-ink-soft">{userLabel(currentUser)}</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-cyan transition ${isAccountMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isAccountMenuOpen && (
-              <div className="absolute right-0 top-[calc(100%+10px)] z-[80] w-44 overflow-hidden rounded-xl border border-white/12 bg-[#07121d]/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <div className="absolute right-0 top-[calc(100%+10px)] z-[80] w-44 overflow-hidden rounded-xl border border-line/12 bg-cyan-50/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={openProfileSettings}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-white/82 transition hover:bg-cyan-300/10 hover:text-white"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink/82 transition hover:bg-cyan-300/10 hover:text-ink"
                 >
                   <Settings className="h-4 w-4" />
                   个人设置
@@ -2345,7 +2494,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 <button
                   type="button"
                   onClick={() => void loadMemoryCenter()}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-white/82 transition hover:bg-cyan-300/10 hover:text-white"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink/82 transition hover:bg-cyan-300/10 hover:text-ink"
                 >
                   <MessageSquare className="h-4 w-4" />
                   学习记忆
@@ -2353,7 +2502,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 <button
                   type="button"
                   onClick={openFeedback}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-white/82 transition hover:bg-cyan-300/10 hover:text-white"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink/82 transition hover:bg-cyan-300/10 hover:text-ink"
                 >
                   <MessageSquare className="h-4 w-4" />
                   使用反馈
@@ -2365,7 +2514,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       setIsAccountMenuOpen(false);
                       onOpenAdmin();
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/10 hover:text-white"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-cyan transition hover:bg-cyan-300/10 hover:text-ink"
                   >
                     <ShieldCheck className="h-4 w-4" />
                     管理后台
@@ -2377,7 +2526,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     setIsAccountMenuOpen(false);
                     onLogout();
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-white/82 transition hover:bg-red-400/10 hover:text-red-100"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink/82 transition hover:bg-red-400/10 hover:text-red-100"
                 >
                   <LogOut className="h-4 w-4" />
                   退出
@@ -2389,7 +2538,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       </nav>
 
       {memorySettings.memoryEnabled && !memorySettings.noticeSeen && (
-        <div className="absolute left-1/2 top-[76px] z-[90] flex w-[min(620px,calc(100%-32px))] -translate-x-1/2 items-center gap-4 rounded-xl border border-cyan-300/25 bg-[#09222b]/95 px-4 py-3 text-sm text-cyan-50 shadow-2xl backdrop-blur-xl">
+        <div className="absolute left-1/2 top-[76px] z-[90] flex w-[min(620px,calc(100%-32px))] -translate-x-1/2 items-center gap-4 rounded-xl border border-cyan/25 bg-cyan-50/95 px-4 py-3 text-sm text-cyan shadow-2xl backdrop-blur-xl">
           <XiaozhiMascot state="idle" size={34} motion="subtle" ariaLabel="小智" />
           <p className="min-w-0 flex-1">小智会保存课堂对话摘要和有用的学习偏好，帮助你下次继续学习。你可以随时在“学习记忆”中查看、修改、关闭或清空。</p>
           <button
@@ -2404,7 +2553,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
 
       {isFeedbackOpen && (
         <div
-          className="fixed inset-0 z-[120] grid place-items-center bg-black/60 px-5 backdrop-blur-md"
+          className="fixed inset-0 z-[120] grid place-items-center bg-black/50 px-5 backdrop-blur-md"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeFeedback();
           }}
@@ -2414,13 +2563,13 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             aria-modal="true"
             aria-labelledby="feedback-dialog-title"
             aria-describedby="feedback-dialog-description"
-            className="w-full max-w-lg rounded-2xl border border-cyan-300/20 bg-[#07121d]/96 p-6 text-white shadow-2xl shadow-black/60"
+            className="w-full max-w-lg rounded-2xl border border-black/10 bg-cyan-50/96 p-6 text-ink shadow-2xl shadow-black/60"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-100/55">Feedback</p>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan/55">Feedback</p>
                 <h2 id="feedback-dialog-title" className="mt-2 text-2xl font-black">使用反馈</h2>
-                <p id="feedback-dialog-description" className="mt-2 text-sm leading-6 text-white/55">
+                <p id="feedback-dialog-description" className="mt-2 text-sm leading-6 text-ink/55">
                   告诉我们课堂体验、功能建议或遇到的问题。
                 </p>
               </div>
@@ -2428,7 +2577,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 type="button"
                 onClick={closeFeedback}
                 disabled={feedbackStatus === 'submitting'}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line/10 bg-white/5 text-ink/60 transition hover:bg-white/10 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="关闭使用反馈"
               >
                 <X className="h-4 w-4" />
@@ -2441,7 +2590,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </div>
             ) : (
               <label className="mt-6 block">
-                <span className="text-sm font-bold text-white/75">反馈内容</span>
+                <span className="text-sm font-bold text-ink/75">反馈内容</span>
                 <textarea
                   value={feedbackText}
                   onChange={(event) => {
@@ -2456,10 +2605,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                   autoFocus
                   disabled={feedbackStatus === 'submitting'}
                   aria-invalid={feedbackStatus === 'error'}
-                  className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.08] disabled:cursor-wait disabled:opacity-60"
+                  className="mt-2 w-full resize-y rounded-xl border border-line/10 bg-white/[0.05] px-4 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08] disabled:cursor-wait disabled:opacity-60"
                   placeholder="请写下你的建议（最多 2000 字）"
                 />
-                <span className="mt-2 block text-right text-xs text-white/35">{feedbackText.length} / 2000</span>
+                <span className="mt-2 block text-right text-xs text-ink/35">{feedbackText.length} / 2000</span>
               </label>
             )}
 
@@ -2469,7 +2618,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </div>
             )}
             {feedbackStatus === 'submitting' && (
-              <div className="mt-4 text-sm text-cyan-100/70" role="status" aria-live="polite">提交中，请稍候...</div>
+              <div className="mt-4 text-sm text-cyan/70" role="status" aria-live="polite">提交中，请稍候...</div>
             )}
 
             <div className="mt-6 flex justify-end gap-3">
@@ -2478,7 +2627,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                   <button
                     type="button"
                     onClick={resetFeedback}
-                    className="h-10 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/16"
+                    className="h-10 rounded-lg border border-cyan/20 bg-cyan-300/10 px-4 text-sm font-bold text-cyan transition hover:bg-cyan-300/16"
                   >
                     再提一条
                   </button>
@@ -2496,7 +2645,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     type="button"
                     onClick={closeFeedback}
                     disabled={feedbackStatus === 'submitting'}
-                    className="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-10 rounded-lg border border-line/10 bg-white/5 px-4 text-sm font-bold text-ink/70 transition hover:bg-white/10 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     取消
                   </button>
@@ -2516,17 +2665,17 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       )}
 
       {isProfileOpen && (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/55 px-5 backdrop-blur-md">
-          <div className={`w-full ${profileTab === 'memory' ? 'max-w-2xl' : 'max-w-md'} max-h-[86vh] overflow-y-auto rounded-2xl border border-cyan-300/18 bg-[#07121d]/96 p-6 text-white shadow-2xl shadow-black/60`}>
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-cyan/55 px-5 backdrop-blur-md">
+          <div className={`w-full ${profileTab === 'memory' ? 'max-w-2xl' : 'max-w-md'} max-h-[86vh] overflow-y-auto rounded-2xl border border-cyan/18 bg-cyan-50/96 p-6 text-ink shadow-2xl shadow-black/60`}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-100/55">{profileTab === 'profile' ? 'Profile' : profileTab === 'voice' ? 'Voice' : profileTab === 'password' ? 'Security' : 'Learning Memory'}</p>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan/55">{profileTab === 'profile' ? 'Profile' : profileTab === 'voice' ? 'Voice' : profileTab === 'password' ? 'Security' : 'Learning Memory'}</p>
                 <h2 className="mt-2 text-2xl font-black">{profileTab === 'profile' ? '个人设置' : profileTab === 'voice' ? '声音设置' : profileTab === 'password' ? '修改密码' : '学习记忆'}</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsProfileOpen(false)}
-                className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                className="grid h-9 w-9 place-items-center rounded-lg border border-line/10 bg-white/5 text-ink/60 transition hover:bg-white/10 hover:text-ink"
                 aria-label="关闭个人设置"
               >
                 <X className="h-4 w-4" />
@@ -2536,7 +2685,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             {profileTab === 'profile' ? (
               <>
             <div className="mt-6 flex items-center gap-4">
-              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border border-cyan-200/35 bg-cyan-200 text-2xl font-black text-[#061626] shadow-[0_0_28px_rgba(39,242,255,0.24)]">
+              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border border-cyan/35 bg-cyan-200 text-2xl font-black text-[#061626] shadow-[0_0_28px_rgba(var(--theme-accent-rgb),0.24)]">
                 {profileAvatar ? (
                   <img src={profileAvatar} alt="头像预览" className="h-full w-full object-cover" />
                 ) : (
@@ -2544,7 +2693,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/16">
+                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-cyan/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan transition hover:bg-cyan-300/16">
                   <Upload className="h-4 w-4" />
                   {isAvatarProcessing ? '处理中...' : '上传头像'}
                   <input
@@ -2559,27 +2708,27 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                   <button
                     type="button"
                     onClick={() => setProfileAvatar('')}
-                    className="ml-3 text-sm font-semibold text-white/45 transition hover:text-white"
+                    className="ml-3 text-sm font-semibold text-ink/45 transition hover:text-ink"
                   >
                     移除
                   </button>
                 )}
-                <p className="mt-2 text-xs leading-5 text-white/42">支持 PNG、JPEG、WebP，保存前会自动压缩。</p>
+                <p className="mt-2 text-xs leading-5 text-ink/42">支持 PNG、JPEG、WebP，保存前会自动压缩。</p>
               </div>
             </div>
 
             <label className="mt-6 block">
-              <span className="text-sm font-bold text-white/70">昵称</span>
+              <span className="text-sm font-bold text-ink/70">昵称</span>
               <input
                 value={profileName}
                 onChange={(event) => setProfileName(event.target.value)}
                 maxLength={32}
-                className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.05] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.08]"
+                className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.05] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08]"
                 placeholder="请输入昵称"
               />
             </label>
 
-            <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/48">
+            <div className="mt-3 rounded-lg border border-line/8 bg-white/[0.03] px-3 py-2 text-xs text-ink/48">
               登录用户名：{currentUser.username}
             </div>
 
@@ -2593,21 +2742,21 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               <button
                 type="button"
                 onClick={() => void loadMemoryCenter()}
-                className="h-10 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/16"
+                className="h-10 rounded-lg border border-cyan/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan transition hover:bg-cyan-300/16"
               >
                 学习记忆
               </button>
               <button
                 type="button"
                 onClick={() => setProfileTab('voice')}
-                className="h-10 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/16"
+                className="h-10 rounded-lg border border-cyan/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan transition hover:bg-cyan-300/16"
               >
                 声音设置
               </button>
               <button
                 type="button"
                 onClick={openPasswordSettings}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/16"
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-cyan/20 bg-cyan-300/10 px-3 text-sm font-bold text-cyan transition hover:bg-cyan-300/16"
               >
                 <LockKeyhole className="h-4 w-4" />
                 修改密码
@@ -2617,7 +2766,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               <button
                 type="button"
                 onClick={() => setIsProfileOpen(false)}
-                className="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"
+                className="h-10 rounded-lg border border-line/10 bg-white/5 px-4 text-sm font-bold text-ink/70 transition hover:bg-white/10 hover:text-ink"
               >
                 取消
               </button>
@@ -2634,48 +2783,48 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             ) : profileTab === 'voice' ? (
               <div className="mt-6">
                 <div className="space-y-3">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line/10 bg-white/[0.035] p-4">
                     <input type="radio" name="voice-mode" checked={voicePreference.mode === 'system'} onChange={() => setVoicePreference((current) => ({ ...current, mode: 'system' }))} className="mt-1 accent-cyan-300" />
-                    <span><span className="block font-bold text-white">系统默认声音</span><span className="mt-1 block text-xs leading-5 text-white/45">直接使用当前浏览器和设备的默认播报声音。</span></span>
+                    <span><span className="block font-bold text-ink">系统默认声音</span><span className="mt-1 block text-xs leading-5 text-ink/45">直接使用当前浏览器和设备的默认播报声音。</span></span>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-bold text-white/70">本机系统音色</span>
-                    <select value={voicePreference.systemVoiceUri} onChange={(event) => setVoicePreference((current) => ({ ...current, mode: 'system', systemVoiceUri: event.target.value }))} className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#0b1a28] px-3 text-sm text-white outline-none focus:border-cyan-300/60">
+                    <span className="text-sm font-bold text-ink/70">本机系统音色</span>
+                    <select value={voicePreference.systemVoiceUri} onChange={(event) => setVoicePreference((current) => ({ ...current, mode: 'system', systemVoiceUri: event.target.value }))} className="mt-2 h-11 w-full rounded-lg border border-line/10 bg-cyan-50 px-3 text-sm text-ink outline-none focus:border-cyan/60">
                       <option value="">跟随设备默认声音</option>
                       {systemVoices.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</option>)}
                     </select>
                   </label>
-                  <label className={`flex items-start gap-3 rounded-lg border p-4 ${isProviderVoiceAvailable ? 'cursor-pointer border-cyan-300/25 bg-cyan-300/[0.06]' : 'border-white/10 bg-white/[0.02] opacity-55'}`}>
+                  <label className={`flex items-start gap-3 rounded-lg border p-4 ${isProviderVoiceAvailable ? 'cursor-pointer border-cyan/25 bg-cyan-300/[0.06]' : 'border-line/10 bg-white/[0.02] opacity-55'}`}>
                     <input type="radio" name="voice-mode" disabled={!isProviderVoiceAvailable} checked={voicePreference.mode === 'volcengine'} onChange={() => setVoicePreference((current) => ({ ...current, mode: 'volcengine', providerVoiceId: current.providerVoiceId || providerVoices[0]?.id || '' }))} className="mt-1 accent-cyan-300" />
-                    <span><span className="flex items-center gap-2 font-bold text-white"><Volume2 className="h-4 w-4 text-cyan-200" />豆包真人音色</span><span className="mt-1 block text-xs leading-5 text-white/45">DeepSeek 生成文字时实时合成播放。{isProviderVoiceAvailable ? '' : ' 服务端尚未配置。'}</span></span>
+                    <span><span className="flex items-center gap-2 font-bold text-ink"><Volume2 className="h-4 w-4 text-cyan" />豆包真人音色</span><span className="mt-1 block text-xs leading-5 text-ink/45">DeepSeek 生成文字时实时合成播放。{isProviderVoiceAvailable ? '' : ' 服务端尚未配置。'}</span></span>
                   </label>
-                  {isProviderVoiceAvailable && <label className="block"><span className="text-sm font-bold text-white/70">真人音色</span><select value={voicePreference.providerVoiceId} onChange={(event) => setVoicePreference((current) => ({ ...current, mode: 'volcengine', providerVoiceId: event.target.value }))} className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#0b1a28] px-3 text-sm text-white outline-none focus:border-cyan-300/60">{providerVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}</select></label>}
+                  {isProviderVoiceAvailable && <label className="block"><span className="text-sm font-bold text-ink/70">真人音色</span><select value={voicePreference.providerVoiceId} onChange={(event) => setVoicePreference((current) => ({ ...current, mode: 'volcengine', providerVoiceId: event.target.value }))} className="mt-2 h-11 w-full rounded-lg border border-line/10 bg-cyan-50 px-3 text-sm text-ink outline-none focus:border-cyan/60">{providerVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}</select></label>}
                 </div>
-                {voiceMessage && <div className="mt-4 rounded-lg border border-cyan-300/18 bg-cyan-300/8 px-4 py-3 text-sm text-cyan-50">{voiceMessage}</div>}
-                <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setProfileTab('profile')} className="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70">返回</button><button type="button" onClick={() => void saveVoicePreference()} disabled={isSavingVoice} className="h-10 rounded-lg bg-cyan-200 px-5 text-sm font-black text-[#061626] disabled:opacity-55">{isSavingVoice ? '保存中...' : '保存声音'}</button></div>
+                {voiceMessage && <div className="mt-4 rounded-lg border border-cyan/18 bg-cyan-300/8 px-4 py-3 text-sm text-cyan">{voiceMessage}</div>}
+                <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setProfileTab('profile')} className="h-10 rounded-lg border border-line/10 bg-white/5 px-4 text-sm font-bold text-ink/70">返回</button><button type="button" onClick={() => void saveVoicePreference()} disabled={isSavingVoice} className="h-10 rounded-lg bg-cyan-200 px-5 text-sm font-black text-[#061626] disabled:opacity-55">{isSavingVoice ? '保存中...' : '保存声音'}</button></div>
               </div>
             ) : profileTab === 'password' ? (
               <form className="mt-6" onSubmit={changePassword}>
-                <div className="flex items-start gap-3 rounded-xl border border-cyan-300/18 bg-cyan-300/[0.06] p-4">
-                  <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" />
-                  <p className="text-sm leading-6 text-white/60">修改密码前需要验证当前密码。新密码需为 6-128 位，修改后当前登录状态会保留。</p>
+                <div className="flex items-start gap-3 rounded-xl border border-cyan/18 bg-cyan-300/[0.06] p-4">
+                  <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-cyan" />
+                  <p className="text-sm leading-6 text-ink/60">修改密码前需要验证当前密码。新密码需为 6-128 位，修改后当前登录状态会保留。</p>
                 </div>
 
                 <div className="mt-5 space-y-4">
                   <label className="block">
-                    <span className="text-sm font-bold text-white/70">当前密码</span>
+                    <span className="text-sm font-bold text-ink/70">当前密码</span>
                     <input
                       type="password"
                       value={currentPassword}
                       onChange={(event) => setCurrentPassword(event.target.value)}
                       autoComplete="current-password"
                       disabled={isSavingPassword}
-                      className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.05] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.08] disabled:opacity-55"
+                      className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.05] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08] disabled:opacity-55"
                       placeholder="请输入当前密码"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-bold text-white/70">新密码</span>
+                    <span className="text-sm font-bold text-ink/70">新密码</span>
                     <input
                       type="password"
                       value={newPassword}
@@ -2684,12 +2833,12 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       maxLength={128}
                       autoComplete="new-password"
                       disabled={isSavingPassword}
-                      className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.05] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.08] disabled:opacity-55"
+                      className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.05] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08] disabled:opacity-55"
                       placeholder="请输入 6-128 位新密码"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-bold text-white/70">确认新密码</span>
+                    <span className="text-sm font-bold text-ink/70">确认新密码</span>
                     <input
                       type="password"
                       value={confirmPassword}
@@ -2698,7 +2847,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       maxLength={128}
                       autoComplete="new-password"
                       disabled={isSavingPassword}
-                      className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.05] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.08] disabled:opacity-55"
+                      className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.05] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08] disabled:opacity-55"
                       placeholder="请再次输入新密码"
                     />
                   </label>
@@ -2715,7 +2864,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     type="button"
                     onClick={() => setProfileTab('profile')}
                     disabled={isSavingPassword}
-                    className="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                    className="h-10 rounded-lg border border-line/10 bg-white/5 px-4 text-sm font-bold text-ink/70 transition hover:bg-white/10 hover:text-ink disabled:opacity-40"
                   >
                     返回
                   </button>
@@ -2730,10 +2879,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </form>
             ) : (
               <div className="mt-6">
-                <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-line/10 bg-white/[0.04] p-4">
                   <div>
-                    <p className="font-bold text-white">长期学习记忆</p>
-                    <p className="mt-1 text-xs leading-5 text-white/48">开启后逐轮保存课堂对话，原文保留 30 天；摘要和学习记忆会一直保留到你删除。</p>
+                    <p className="font-bold text-ink">长期学习记忆</p>
+                    <p className="mt-1 text-xs leading-5 text-ink/48">开启后逐轮保存课堂对话，原文保留 30 天；摘要和学习记忆会一直保留到你删除。</p>
                   </div>
                   <button
                     type="button"
@@ -2747,11 +2896,11 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 </div>
 
                 {memoryMessage && (
-                  <div className="mt-4 rounded-lg border border-cyan-300/18 bg-cyan-300/8 px-4 py-3 text-sm text-cyan-50">{memoryMessage}</div>
+                  <div className="mt-4 rounded-lg border border-cyan/18 bg-cyan-300/8 px-4 py-3 text-sm text-cyan">{memoryMessage}</div>
                 )}
 
                 <div className="mt-5 flex items-center justify-between">
-                  <p className="flex items-center gap-2 text-sm font-black text-white/75">
+                  <p className="flex items-center gap-2 text-sm font-black text-ink/75">
                     <XiaozhiMascot state="idle" size={20} motion="static" />
                     <span>小智记住的内容</span>
                   </p>
@@ -2762,16 +2911,16 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
 
                 <div className="mt-3 space-y-3">
                   {isMemoryLoading ? (
-                    <div className="py-10 text-center text-sm text-white/45">正在读取学习记忆...</div>
+                    <div className="py-10 text-center text-sm text-ink/45">正在读取学习记忆...</div>
                   ) : learningMemories.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-white/12 px-5 py-10 text-center text-sm leading-6 text-white/42">
+                    <div className="rounded-xl border border-dashed border-line/12 px-5 py-10 text-center text-sm leading-6 text-ink/42">
                       还没有长期学习记忆。和小智完成一些课堂对话后，这里会出现学习偏好、已学主题和掌握情况。
                     </div>
                   ) : learningMemories.map((memory) => (
-                    <div key={memory.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                    <div key={memory.id} className="rounded-xl border border-line/10 bg-white/[0.035] p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="rounded-md bg-cyan-300/10 px-2 py-1 text-[11px] font-black text-cyan-100">{MEMORY_CATEGORY_LABELS[memory.category]}</span>
-                        <span className="text-[11px] text-white/32">{new Date(memory.updatedAt).toLocaleDateString('zh-CN')}</span>
+                        <span className="rounded-md bg-cyan-300/10 px-2 py-1 text-[11px] font-black text-cyan">{MEMORY_CATEGORY_LABELS[memory.category]}</span>
+                        <span className="text-[11px] text-ink/32">{new Date(memory.updatedAt).toLocaleDateString('zh-CN')}</span>
                       </div>
                       {editingMemoryId === memory.id ? (
                         <div className="mt-3 flex gap-2">
@@ -2779,19 +2928,19 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                             value={editingMemoryContent}
                             onChange={(event) => setEditingMemoryContent(event.target.value)}
                             maxLength={800}
-                            className="h-10 min-w-0 flex-1 rounded-lg border border-cyan-300/35 bg-black/20 px-3 text-sm text-white outline-none"
+                            className="h-10 min-w-0 flex-1 rounded-lg border border-cyan/35 bg-cyan/20 px-3 text-sm text-ink outline-none"
                           />
                           <button type="button" onClick={() => void saveEditedMemory(memory.id)} className="rounded-lg bg-cyan-200 px-3 text-xs font-black text-[#061626]">保存</button>
-                          <button type="button" onClick={() => setEditingMemoryId(null)} className="rounded-lg border border-white/10 px-3 text-xs text-white/60">取消</button>
+                          <button type="button" onClick={() => setEditingMemoryId(null)} className="rounded-lg border border-line/10 px-3 text-xs text-ink/60">取消</button>
                         </div>
                       ) : (
-                        <p className="mt-3 text-sm leading-6 text-white/78">{memory.content}</p>
+                        <p className="mt-3 text-sm leading-6 text-ink/78">{memory.content}</p>
                       )}
                       {editingMemoryId !== memory.id && (
                         <div className="mt-3 flex items-center gap-3">
-                          <button type="button" onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryContent(memory.content); }} className="text-xs font-bold text-cyan-100/65 transition hover:text-cyan-100">编辑</button>
+                          <button type="button" onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryContent(memory.content); }} className="text-xs font-bold text-cyan/65 transition hover:text-cyan">编辑</button>
                           <button type="button" onClick={() => void removeMemory(memory.id)} className="text-xs font-bold text-red-200/55 transition hover:text-red-100">删除</button>
-                          {memory.sourceSummary && <span className="ml-auto max-w-[55%] truncate text-[11px] text-white/28" title={memory.sourceSummary}>来源：{memory.sourceSummary}</span>}
+                          {memory.sourceSummary && <span className="ml-auto max-w-[55%] truncate text-[11px] text-ink/28" title={memory.sourceSummary}>来源：{memory.sourceSummary}</span>}
                         </div>
                       )}
                     </div>
@@ -2799,7 +2948,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 </div>
 
                 <div className="mt-6 flex justify-between">
-                  <button type="button" onClick={openProfileSettings} className="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white">返回个人设置</button>
+                  <button type="button" onClick={openProfileSettings} className="h-10 rounded-lg border border-line/10 bg-white/5 px-4 text-sm font-bold text-ink/70 transition hover:bg-white/10 hover:text-ink">返回个人设置</button>
                   <button type="button" onClick={() => setIsProfileOpen(false)} className="h-10 rounded-lg bg-cyan-200 px-5 text-sm font-black text-[#061626] transition hover:bg-white">完成</button>
                 </div>
               </div>
@@ -2884,7 +3033,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     ? 'text-slate-500'
                     : cameraActive
                     ? 'is-active text-red-400'
-                    : 'text-slate-500 hover:text-[#22f4df]'
+                    : 'text-slate-500 hover:text-cyan'
                     }`}
                   aria-label={activeContent === 'biodigital' ? '心脏模型2 URL 交互' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
                   title={activeContent === 'biodigital' ? '心脏模型2 URL 交互' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
@@ -2899,7 +3048,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             <>
               <div>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 bg-gray-100/80 rounded-xl p-0.5">
+                  <div className="flex min-w-0 bg-cyan-50 rounded-xl p-0.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -2908,8 +3057,8 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       }}
                       className={`whitespace-nowrap px-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
                         sidebarTab === 'resource'
-                          ? 'bg-white text-gray-700 shadow-sm'
-                          : 'text-gray-400 hover:text-gray-600'
+                          ? 'bg-cyan-100 text-cyan shadow-sm'
+                          : 'text-ink-soft hover:text-ink'
                       }`}
                     >
                       学科资源库
@@ -2922,8 +3071,8 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       }}
                       className={`whitespace-nowrap px-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
                         sidebarTab === 'agent'
-                          ? 'bg-white text-gray-700 shadow-sm'
-                          : 'text-gray-400 hover:text-gray-600'
+                          ? 'bg-cyan-100 text-cyan shadow-sm'
+                          : 'text-ink-soft hover:text-ink'
                       }`}
                     >
                       多智能体平台
@@ -2934,7 +3083,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     onClick={() => {
                       setIsSidebarCollapsed(true);
                     }}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/60 text-gray-400 shadow-sm transition hover:bg-white hover:text-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/30 text-ink-soft shadow-sm transition hover:bg-black/40 hover:text-ink"
                     aria-label="收起"
                     title="收起"
                   >
@@ -2957,16 +3106,16 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                           return next;
                         });
                       }}
-                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-violet-300 hover:bg-violet-950/30 transition-colors rounded-2xl"
+                      className="w-full p-2.5 flex items-center justify-between text-sm font-bold text-cyan hover:bg-cyan-300/15 transition-colors rounded-2xl"
                     >
                       <div className="flex items-center gap-2.5">
-                        <FolderOpen size={16} className="text-violet-300" />
+                        <FolderOpen size={16} className="text-cyan" />
                         <span>我的模型</span>
                         {visibleStaticModels.length + localModels.length > 0 && (
-                          <span className="rounded-full bg-violet-400/15 px-1.5 py-0.5 text-[9px] text-violet-200">{visibleStaticModels.length + localModels.length}</span>
+                          <span className="rounded-full bg-cyan-300/15 px-1.5 py-0.5 text-[9px] text-cyan">{visibleStaticModels.length + localModels.length}</span>
                         )}
                       </div>
-                      <ChevronDown size={13} className={`text-violet-300 transition-transform duration-200 ${expandedCategories.has(LOCAL_MODELS_CATEGORY_KEY) ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={13} className={`text-cyan transition-transform duration-200 ${expandedCategories.has(LOCAL_MODELS_CATEGORY_KEY) ? 'rotate-180' : ''}`} />
                     </button>
                     {expandedCategories.has(LOCAL_MODELS_CATEGORY_KEY) && (
                       <div className="px-2 pb-2 space-y-0.5">
@@ -2976,15 +3125,15 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                               type="button"
                               onClick={() => loadDemoModel(model.url, model.name, 'glb')}
                               title={model.name}
-                              className={`w-full py-1.5 pl-2.5 pr-8 rounded-lg flex items-center text-left text-xs font-medium cursor-pointer transition-colors ${modelUrl === model.url ? 'bg-violet-900/40 text-violet-200' : 'text-slate-400 hover:bg-violet-950/30'}`}
+                              className={`w-full py-1.5 pl-2.5 pr-8 rounded-lg flex items-center text-left text-xs font-medium cursor-pointer transition-colors ${modelUrl === model.url ? 'bg-cyan-300/20 text-cyan' : 'text-ink-soft hover:bg-cyan-300/10'}`}
                             >
-                              <span className={`w-1.5 h-1.5 shrink-0 rounded-full mr-2 ${modelUrl === model.url ? 'bg-violet-300 animate-pulse shadow-[0_0_8px_rgba(196,181,253,0.65)]' : 'bg-slate-600'}`}></span>
+                              <span className={`w-1.5 h-1.5 shrink-0 rounded-full mr-2 ${modelUrl === model.url ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(var(--theme-accent-rgb),0.65)]' : 'bg-ink-soft/40'}`}></span>
                               <span className="truncate">{model.name}</span>
                             </button>
                             <button
                               type="button"
                               onClick={(e) => void handleHideStaticModel(e, model)}
-                              className="absolute right-2 z-10 rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-slate-800 hover:text-red-400 group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="absolute right-2 z-10 rounded p-1 text-ink-soft opacity-0 transition-all hover:bg-cyan-300/15 hover:text-red-500 group-hover:opacity-100 group-focus-within:opacity-100"
                               title="从我的模型中移除"
                               aria-label={`从我的模型中移除：${model.name}`}
                             >
@@ -3000,15 +3149,15 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                               type="button"
                               onClick={() => void openLocalModel(model.id)}
                               title={`${model.name} · ${(model.size / 1024 / 1024).toFixed(1)} MB`}
-                              className={`w-full py-1.5 pl-2.5 pr-8 rounded-lg flex items-center text-left text-xs font-medium cursor-pointer transition-colors ${activeLocalModelId === model.id ? 'bg-violet-900/40 text-violet-200' : 'text-slate-400 hover:bg-violet-950/30'}`}
+                              className={`w-full py-1.5 pl-2.5 pr-8 rounded-lg flex items-center text-left text-xs font-medium cursor-pointer transition-colors ${activeLocalModelId === model.id ? 'bg-cyan-300/20 text-cyan' : 'text-ink-soft hover:bg-cyan-300/10'}`}
                             >
-                              <span className={`w-1.5 h-1.5 shrink-0 rounded-full mr-2 ${activeLocalModelId === model.id ? 'bg-violet-300 animate-pulse shadow-[0_0_8px_rgba(196,181,253,0.65)]' : 'bg-slate-600'}`}></span>
+                              <span className={`w-1.5 h-1.5 shrink-0 rounded-full mr-2 ${activeLocalModelId === model.id ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(var(--theme-accent-rgb),0.65)]' : 'bg-ink-soft/40'}`}></span>
                               <span className="truncate">{model.name}</span>
                             </button>
                             <button
                               type="button"
                               onClick={(e) => void handleDeleteLocalModel(e, model.id)}
-                              className="absolute right-2 z-10 rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-slate-800 hover:text-red-400 group-hover:opacity-100 group-focus-within:opacity-100"
+                              className="absolute right-2 z-10 rounded p-1 text-ink-soft opacity-0 transition-all hover:bg-cyan-300/15 hover:text-red-500 group-hover:opacity-100 group-focus-within:opacity-100"
                               title="删除模型"
                               aria-label={`删除模型：${model.name}`}
                             >
@@ -3017,7 +3166,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                           </div>
                         ))}
                         {visibleStaticModels.length === 0 && localModels.length === 0 && !localLibraryError && (
-                          <div className="px-2.5 py-2 text-[11px] leading-relaxed text-slate-500">图生建模完成后，点击“一键导入”即可保存到这里。</div>
+                          <div className="px-2.5 py-2 text-[11px] leading-relaxed text-ink-soft">图生建模完成后，点击"一键导入"即可保存到这里。</div>
                         )}
                       </div>
                     )}
@@ -3043,14 +3192,14 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                               return next;
                             });
                           }}
-                          className="flex w-full items-center justify-between rounded-2xl p-2.5 text-sm font-bold text-cyan-400 transition-colors hover:bg-cyan-950/40"
+                          className="flex w-full items-center justify-between rounded-2xl p-2.5 text-sm font-bold text-cyan transition-colors hover:bg-cyan-950/40"
                         >
                           <span className="flex min-w-0 items-center gap-2.5">
-                            <TagIcon size={16} className="shrink-0 text-cyan-400" />
+                            <TagIcon size={16} className="shrink-0 text-cyan" />
                             <span className="truncate">{tag.name}</span>
-                            <span className="rounded-full bg-cyan-400/10 px-1.5 py-0.5 text-[9px] text-cyan-200">{tag.models.length}</span>
+                            <span className="rounded-full bg-cyan-400/10 px-1.5 py-0.5 text-[9px] text-cyan">{tag.models.length}</span>
                           </span>
-                          <ChevronDown size={13} className={`shrink-0 text-cyan-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                          <ChevronDown size={13} className={`shrink-0 text-cyan transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                         </button>
                         {isExpanded && (
                           <div className="space-y-0.5 px-2 pb-2">
@@ -3066,13 +3215,13 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                                   disabled={!model.url}
                                   onClick={() => loadDemoModel(model.url, model.name, model.type, model.assets, 'resource', model.seedKey)}
                                   title={model.size > 0 ? `${model.name} · ${(model.size / 1024 / 1024).toFixed(1)} MB` : model.name}
-                                  className={`group/model flex w-full items-center gap-2.5 rounded-xl border px-2 py-2 text-left text-xs font-medium transition-all ${isActive ? 'border-cyan-300/35 bg-cyan-300/10 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.08)]' : 'border-transparent text-slate-400 hover:border-white/8 hover:bg-white/[0.045] hover:text-slate-200'} disabled:cursor-not-allowed disabled:opacity-50`}
+                                  className={`group/model flex w-full items-center gap-2.5 rounded-xl border px-2 py-2 text-left text-xs font-medium transition-all ${isActive ? 'border-cyan/35 bg-cyan-300/10 text-cyan shadow-[0_0_20px_rgba(34,211,238,0.08)]' : 'border-transparent text-ink-soft hover:border-line/8 hover:bg-white/[0.045] hover:text-ink-soft'} disabled:cursor-not-allowed disabled:opacity-50`}
                                 >
-                                  <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/8 bg-white/[0.045]">
+                                  <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-line/8 bg-white/[0.045]">
                                     {modelProfile ? (
                                       <img src={modelProfile.illustration} alt="" className="h-full w-full object-cover transition duration-300 group-hover/model:scale-105" />
                                     ) : (
-                                      <TagIcon size={16} className={isActive ? 'text-cyan-200' : 'text-slate-500'} />
+                                      <TagIcon size={16} className={isActive ? 'text-cyan' : 'text-slate-500'} />
                                     )}
                                   </span>
                                   <span className="min-w-0 flex-1">
@@ -3119,21 +3268,21 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </div>
 
               <div>
-                <h3 className="font-black text-xs text-gray-400 uppercase tracking-[0.2em] mb-4 border-l-4 border-cyan-400 pl-3">全息指令表</h3>
+                <h3 className="font-black text-xs text-ink-soft uppercase tracking-[0.2em] mb-4 border-l-4 border-cyan pl-3">全息指令表</h3>
                 <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-900/30 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-cyan-950/40 p-1">
+                  <div className="p-4 rounded-2xl bg-cyan-50 border border-cyan/20 space-y-3">
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-cyan-50/50 p-1">
                       <button
                         type="button"
                         onClick={() => handleInteractionModeChange('dual')}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-cyan-900/50 text-cyan-300 shadow-sm' : 'text-slate-400 hover:bg-cyan-900/20'}`}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-cyan-100 text-cyan shadow-sm' : 'text-ink-soft hover:bg-cyan-100/50'}`}
                       >
                         <Move3d size={13} /> 双手模式
                       </button>
                       <button
                         type="button"
                         onClick={() => handleInteractionModeChange('single')}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-cyan-900/50 text-cyan-300 shadow-sm' : 'text-slate-400 hover:bg-cyan-900/20'}`}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-cyan-100 text-cyan shadow-sm' : 'text-ink-soft hover:bg-cyan-100/50'}`}
                       >
                         <Hand size={13} /> 单手模式
                       </button>
@@ -3141,50 +3290,50 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
 
                     {interactionMode === 'dual' ? (
                       <>
-                        <div className="flex items-center gap-2 pb-2 border-b border-cyan-900/40">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan-400" /></div>
+                        <div className="flex items-center gap-2 pb-2 border-b border-cyan/40">
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">双手协同</span>
-                            <span className="text-[9px] text-cyan-300 font-bold">左手缩放 | 右手旋转/拖拽</span>
+                            <span className="text-[10px] font-black text-ink-soft uppercase">双手协同</span>
+                            <span className="text-[9px] text-cyan font-bold">左手缩放 | 右手旋转/拖拽</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">左手缩放</span>
-                            <span className="text-[9px] text-slate-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                            <span className="text-[10px] font-black text-ink-soft uppercase">左手缩放</span>
+                            <span className="text-[9px] text-ink-soft font-bold">张开 → 放大 | 握拳 → 缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan-400" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">右手交互</span>
-                            <span className="text-[9px] text-cyan-300 font-bold">捏合 → 拖拽零件</span>
-                            <span className="text-[9px] text-slate-400 font-bold">食指+中指并拢滑动 → 旋转画面</span>
+                            <span className="text-[10px] font-black text-ink-soft uppercase">右手交互</span>
+                            <span className="text-[9px] text-cyan font-bold">捏合 → 拖拽零件</span>
+                            <span className="text-[9px] text-ink-soft font-bold">食指+中指并拢滑动 → 旋转画面</span>
                           </div>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="flex items-center gap-2 pb-2 border-b border-cyan-900/40">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
+                        <div className="flex items-center gap-2 pb-2 border-b border-cyan/40">
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">右手优先</span>
-                            <span className="text-[9px] text-cyan-300 font-bold">张掌放大 | 握拳缩小</span>
+                            <span className="text-[10px] font-black text-ink-soft uppercase">右手优先</span>
+                            <span className="text-[9px] text-cyan font-bold">张掌放大 | 握拳缩小</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">捏合拖拽</span>
-                            <span className="text-[9px] text-slate-400 font-bold">食指+拇指捏合 → 拖拽零件</span>
+                            <span className="text-[10px] font-black text-ink-soft uppercase">捏合拖拽</span>
+                            <span className="text-[9px] text-ink-soft font-bold">食指+拇指捏合 → 拖拽零件</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan-400" /></div>
+                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan" /></div>
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-gray-500 uppercase">互斥控制</span>
-                            <span className="text-[9px] text-cyan-300 font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
+                            <span className="text-[10px] font-black text-ink-soft uppercase">互斥控制</span>
+                            <span className="text-[9px] text-cyan font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
                           </div>
                         </div>
                       </>
@@ -3193,27 +3342,27 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     <div className="hidden">
 
                     {/* 组合指令 */}
-                    <div className="flex items-center gap-2 pb-2 border-b border-cyan-900/40">
-                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan-400" /></div>
+                    <div className="flex items-center gap-2 pb-2 border-b border-cyan/40">
+                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan" /></div>
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-gray-500 uppercase">双人/双手</span>
-                        <span className="text-[9px] text-cyan-300 font-bold">双手协同控制模型</span>
+                        <span className="text-[10px] font-black text-ink-soft uppercase">双人/双手</span>
+                        <span className="text-[9px] text-cyan font-bold">双手协同控制模型</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan-400" /></div>
+                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-gray-500 uppercase">左手 (缩放)</span>
-                        <span className="text-[9px] text-slate-400 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                        <span className="text-[10px] font-black text-ink-soft uppercase">左手 (缩放)</span>
+                        <span className="text-[9px] text-ink-soft font-bold">张开 → 放大 | 握拳 → 缩小</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan-400" /></div>
+                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan" /></div>
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-gray-500 uppercase">右手 (拆解/旋转)</span>
-                        <span className="text-[9px] text-cyan-300 font-bold">捏合 (食+拇) → 抓取零件</span>
-                        <span className="text-[9px] text-slate-400 font-bold">双指并拢 (食+中) → 旋转画面</span>
+                        <span className="text-[10px] font-black text-ink-soft uppercase">右手 (拆解/旋转)</span>
+                        <span className="text-[9px] text-cyan font-bold">捏合 (食+拇) → 抓取零件</span>
+                        <span className="text-[9px] text-ink-soft font-bold">双指并拢 (食+中) → 旋转画面</span>
                       </div>
                     </div>
                   </div>
@@ -3228,10 +3377,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       setCameraActive(!cameraActive);
                     }}
                     className={`w-full py-3 rounded-2xl text-[10px] font-black tracking-widest uppercase border transition-all ${activeContent === 'biodigital'
-                      ? 'bg-cyan-950/10 border-cyan-900/20 text-slate-500 cursor-not-allowed'
+                      ? 'bg-cyan-950/10 border-cyan/20 text-slate-500 cursor-not-allowed'
                       : cameraActive
                       ? 'bg-rose-950/30 border-rose-900/50 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
-                      : 'bg-cyan-950/30 border-cyan-900/50 text-cyan-400 hover:bg-cyan-900/40 hover:text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.1)]'
+                      : 'bg-cyan-950/30 border-cyan/50 text-cyan hover:bg-cyan-900/40 hover:text-cyan shadow-[0_0_15px_rgba(34,211,238,0.1)]'
                       }`}
                   >
                     {activeContent === 'biodigital' ? '手势捕捉不可用' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
@@ -3240,12 +3389,12 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </div>
 
               <div className="mt-auto pt-4">
-                <div className="bg-cyan-950/20 p-4 rounded-2xl border border-cyan-900/40 relative overflow-hidden">
+                <div className="bg-cyan-950/20 p-4 rounded-2xl border border-cyan/40 relative overflow-hidden">
                   <div className="flex items-center gap-2 mb-2">
-                    <MessageSquare size={14} className="text-cyan-400" />
-                    <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider">助教日志</p>
+                    <MessageSquare size={14} className="text-cyan" />
+                    <p className="text-[10px] text-cyan font-bold uppercase tracking-wider">助教日志</p>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed font-medium italic min-h-[3em]">
+                  <p className="text-xs text-ink-soft leading-relaxed font-medium italic min-h-[3em]">
                     "{aiAnalysis}"
                   </p>
                 </div>
@@ -3347,26 +3496,26 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
           {showSettings && activeContent === 'model' && (
             <div className="lab-stage-settings">
               <div className="mb-4 flex items-center justify-between">
-                <h4 className="text-xs font-black tracking-wider text-slate-200">交互速度</h4>
-                <button type="button" onClick={() => setShowSettings(false)} className="text-slate-500 transition hover:text-white" aria-label="关闭交互速度设置"><X size={16} /></button>
+                <h4 className="text-xs font-black tracking-wider text-ink-soft">交互速度</h4>
+                <button type="button" onClick={() => setShowSettings(false)} className="text-slate-500 transition hover:text-ink" aria-label="关闭交互速度设置"><X size={16} /></button>
               </div>
               <div className="space-y-4">
                 <label className="block">
-                  <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-slate-400"><span>缩放速度</span><b className="text-cyan-200">{zoomSpeedMultiplier.toFixed(1)}x</b></span>
+                  <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink-soft"><span>缩放速度</span><b className="text-cyan">{zoomSpeedMultiplier.toFixed(1)}x</b></span>
                   <input type="range" min="0.1" max="5.0" step="0.1" value={zoomSpeedMultiplier} onChange={(event) => setZoomSpeedMultiplier(parseFloat(event.target.value))} className="w-full accent-cyan-300" />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-slate-400"><span>旋转速度</span><b className="text-cyan-200">{rotationSpeedMultiplier.toFixed(1)}x</b></span>
+                  <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink-soft"><span>旋转速度</span><b className="text-cyan">{rotationSpeedMultiplier.toFixed(1)}x</b></span>
                   <input type="range" min="0.1" max="5.0" step="0.1" value={rotationSpeedMultiplier} onChange={(event) => setRotationSpeedMultiplier(parseFloat(event.target.value))} className="w-full accent-cyan-300" />
                 </label>
-                <button type="button" onClick={() => { setZoomSpeedMultiplier(0.8); setRotationSpeedMultiplier(0.5); }} className="w-full rounded-xl border border-white/10 bg-white/[0.045] py-2 text-xs font-black text-slate-300 transition hover:border-cyan-300/25 hover:text-white">恢复默认</button>
+                <button type="button" onClick={() => { setZoomSpeedMultiplier(0.8); setRotationSpeedMultiplier(0.5); }} className="w-full rounded-xl border border-line/10 bg-white/[0.045] py-2 text-xs font-black text-ink-soft transition hover:border-cyan/25 hover:text-ink">恢复默认</button>
               </div>
             </div>
           )}
 
           {expandedStructureImage && (
             <div
-              className="absolute inset-0 z-[70] flex items-center justify-center bg-black/35 p-6 backdrop-blur-sm"
+              className="absolute inset-0 z-[70] flex items-center justify-center bg-cyan/35 p-6 backdrop-blur-sm"
               onClick={() => setExpandedStructureImage(null)}
               role="dialog"
               aria-modal="true"
@@ -3444,14 +3593,14 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                   wireframeEnabled={wireframeEnabled}
                 />
                 {modelLoadError !== null && (
-                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/45 backdrop-blur-sm transition-opacity duration-300">
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-cyan/45 backdrop-blur-sm transition-opacity duration-300">
                     <div className="w-full max-w-md rounded-2xl border border-red-400/25 bg-slate-950/85 px-8 py-7 text-center shadow-2xl">
                       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-red-300/25 bg-red-500/10 text-red-200">
                         <Box size={22} />
                       </div>
                       <div className="text-base font-bold text-red-100">{modelLoadError.title}</div>
-                      <div className="mt-2 text-sm leading-relaxed text-slate-300">{modelLoadError.detail}</div>
-                      <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-400">
+                      <div className="mt-2 text-sm leading-relaxed text-ink-soft">{modelLoadError.detail}</div>
+                      <div className="mt-4 rounded-lg border border-line/10 bg-white/[0.04] px-3 py-2 text-xs text-ink-soft">
                         {fileName || '3D 模型'}
                       </div>
                     </div>
@@ -3459,10 +3608,10 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 )}
                 {/* 模型加载进度遮罩 */}
                 {modelLoadError === null && loadProgress !== null && loadProgress.percent < 100 && (
-                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity duration-300">
-                    <div className="bg-slate-900/80 backdrop-blur-xl border border-cyan-500/20 rounded-2xl px-8 py-6 shadow-2xl max-w-xs w-full text-center">
-                      <div className="text-cyan-400 text-sm font-bold mb-1">🫀 正在加载模型</div>
-                      <div className="text-slate-400 text-xs mb-4">{fileName || '3D 模型'}</div>
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-cyan/40 backdrop-blur-sm transition-opacity duration-300">
+                    <div className="bg-slate-900/80 backdrop-blur-xl border border-cyan/20 rounded-2xl px-8 py-6 shadow-2xl max-w-xs w-full text-center">
+                      <div className="text-cyan text-sm font-bold mb-1">🫀 正在加载模型</div>
+                      <div className="text-ink-soft text-xs mb-4">{fileName || '3D 模型'}</div>
                       <div className="w-full bg-slate-700/60 rounded-full h-2.5 mb-3 overflow-hidden">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300 ease-out"
@@ -3471,7 +3620,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       </div>
                       <div className="flex justify-between text-[11px] text-slate-500">
                         <span>{loadProgress.total > 0 ? `${(loadProgress.loaded / 1024 / 1024).toFixed(1)}MB / ${(loadProgress.total / 1024 / 1024).toFixed(1)}MB` : '计算中...'}</span>
-                        <span className="text-cyan-400 font-semibold">{loadProgress.percent}%</span>
+                        <span className="text-cyan font-semibold">{loadProgress.percent}%</span>
                       </div>
                     </div>
                   </div>
@@ -3505,12 +3654,12 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
 
           {/* 摄像头预览区 */}
           {activeContent === 'model' && cameraActive && (
-            <div className={`absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-black transition-all hover:scale-105 ${quizMode ? 'opacity-0 pointer-events-none -z-10' : 'z-30'}`}>
+            <div className={`absolute bottom-6 right-6 w-56 h-40 rounded-3xl border-4 border-line shadow-2xl overflow-hidden bg-black transition-all hover:scale-105 ${quizMode ? 'opacity-0 pointer-events-none -z-10' : 'z-30'}`}>
               <HandController controlRef={controlRef} onStateChange={handleGestureUpdate} interactionMode={interactionMode} quizMode={quizMode} />
               {!quizMode && (
                 <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <div className="bg-[#86e3ce] w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_#86e3ce]"></div>
-                  <span className="text-[8px] font-black text-white/70 uppercase tracking-widest">Vision Sensor</span>
+                  <div className="bg-cyan w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_var(--theme-accent)]"></div>
+                  <span className="text-[8px] font-black text-ink/70 uppercase tracking-widest">Vision Sensor</span>
                 </div>
               )}
             </div>
@@ -3606,15 +3755,29 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                   pendingKnowledgeNarrationRef.current = null;
                   answeredFollowUpQuestionIdRef.current = null;
                   followUpSpeechEpochRef.current += 1;
+                  interactionAbortRef.current?.abort();
+                  interactionAbortRef.current = null;
                   requestVoiceDeactivation();
                   stopXiaozhiSpeech();
+                  globalSpeechActiveRef.current = false;
+                  setGlobalSpeechActive(false);
                   setIsXiaozhiSpeaking(false);
+                  setIsAgentRunning(false);
+                  setIsAgentRequestPending(false);
+                  setIsFollowUpPreparing(false);
+                  setVoiceListeningLocked(false);
                   setLastFinalVoiceText('');
                   setFollowUpQuestionReady(false);
                   setFollowUpRecognitionState({ phase: 'idle' });
                   setFollowUpQuestion(null);
-                  setAgentStatuses((current) => ({ ...current, questioner: 'idle' }));
+                  setKnowledgeContent('');
+                  setIsKnowledgeStreaming(false);
+                  setAgentTimeline([]);
+                  setAgentStatuses(AGENT_STATUS_IDLE);
                   setXiaozhiState('idle');
+                  setXiaozhiMessage('');
+                  setAgentThinking('');
+                  setAgentSummary('');
                   if (shouldNarrateKnowledge && pendingNarration) {
                     setAiAnalysis('课堂追问已完成，正在朗读知识讲解。');
                     enqueueKnowledgeSpeech(pendingNarration.text);
@@ -3676,7 +3839,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               }}
               onFinalUtterance={(text) => {
                 if (followUpQuestion) {
-                  if (followUpQuestionReady) setLastFinalVoiceText(text);
+                  setLastFinalVoiceText(text);
                   return;
                 }
                 voiceConversationLoopRef.current = true;
@@ -3696,6 +3859,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               answerOptions={followUpQuestion?.options}
               activeAnswerQuestionId={followUpQuestion?.id}
               toggleRequest={voiceToggleRequest}
+              forceToggleRequest={forceVoiceToggle}
               activateRequest={voiceActivateRequest}
               deactivateRequest={voiceDeactivateRequest}
               disabled={voiceInputDisabled}
