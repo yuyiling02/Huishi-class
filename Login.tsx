@@ -3,6 +3,7 @@ import { ArrowLeft, Fingerprint, Lock, ShieldCheck, UserPlus } from 'lucide-reac
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, Sphere, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
+import { useTheme } from './components/ThemeProvider';
 
 export type AuthRole = 'user' | 'admin';
 
@@ -16,6 +17,7 @@ export interface AuthUser {
   lastAccessIp?: string | null;
   role: AuthRole;
   status: 'active' | 'disabled';
+  theme?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -66,7 +68,7 @@ async function readError(response: Response) {
   }
 }
 
-function ParticleFlow() {
+function ParticleFlow({ accent }: { accent: string }) {
   const pointsRef = useRef<THREE.Points>(null);
   const count = 1000;
   
@@ -92,12 +94,12 @@ function ParticleFlow() {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" count={count} array={particles} itemSize={3} />
       </bufferGeometry>
-      <pointsMaterial size={0.015} color="#00d2ff" transparent opacity={0.5} sizeAttenuation />
+      <pointsMaterial size={0.015} color={accent} transparent opacity={0.5} sizeAttenuation />
     </points>
   );
 }
 
-function NeuralNetwork() {
+function NeuralNetwork({ accent }: { accent: string }) {
   const { particles, lines } = useMemo(() => {
     const particleCount = 150;
     const particles = new Float32Array(particleCount * 3);
@@ -144,13 +146,13 @@ function NeuralNetwork() {
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={particles.length / 3} array={particles} itemSize={3} />
         </bufferGeometry>
-        <pointsMaterial size={0.03} color="#00d2ff" transparent opacity={0.5} sizeAttenuation />
+        <pointsMaterial size={0.03} color={accent} transparent opacity={0.5} sizeAttenuation />
       </points>
       <lineSegments>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={lines.length / 3} array={lines} itemSize={3} />
         </bufferGeometry>
-        <lineBasicMaterial color="#00d2ff" transparent opacity={0.15} />
+        <lineBasicMaterial color={accent} transparent opacity={0.15} />
       </lineSegments>
     </group>
   );
@@ -163,6 +165,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { themeDef } = useTheme();
 
   const config = modeConfig[mode];
   const ModeIcon = config.icon;
@@ -203,13 +206,13 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
   };
 
   return (
-    <div className="auth-login-page min-h-screen bg-[#030712] text-white overflow-hidden relative flex items-center justify-center px-5 py-10">
-      <div className="auth-login-bg absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(0,210,255,0.24),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(61,129,227,0.20),transparent_32%),linear-gradient(135deg,#030712_0%,#061326_48%,#04060d_100%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-56 bg-[radial-gradient(ellipse_at_bottom,rgba(0,210,255,0.22),transparent_70%)]" />
+    <div className="auth-login-page min-h-screen bg-[var(--theme-bg)] text-ink overflow-hidden relative flex items-center justify-center px-5 py-10">
+      <div className="auth-login-bg absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(var(--theme-accent-rgb),0.24),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(var(--theme-primary-rgb),0.20),transparent_32%),linear-gradient(135deg,var(--theme-bg)_0%,var(--theme-bg-soft)_48%,var(--theme-bg)_100%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-[radial-gradient(ellipse_at_bottom,rgba(var(--theme-accent-rgb),0.22),transparent_70%)]" />
 
       <button
         onClick={onBack}
-        className="fixed left-6 top-6 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition hover:bg-white/10 hover:text-white"
+        className="fixed left-6 top-6 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-line/10 bg-white/5 text-ink/70 backdrop-blur-md transition hover:bg-white/10 hover:text-ink"
         aria-label="返回首页"
         title="返回首页"
       >
@@ -221,27 +224,27 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
           {/* 3D Showcase */}
           <div className="absolute inset-0 z-0 opacity-80 pointer-events-none">
             <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
-              <NeuralNetwork />
-              <ParticleFlow />
+              <NeuralNetwork accent={themeDef.accent} />
+              <ParticleFlow accent={themeDef.accent} />
             </Canvas>
           </div>
           
-          <div className="relative z-10 pl-8 border-l-2 border-cyan-400/30">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100 mb-6">
+          <div className="relative z-10 pl-8 border-l-2 border-cyan/30">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan mb-6">
               <Lock className="h-4 w-4" />
               Secure Classroom Access
             </div>
-            <h1 className="text-5xl font-black leading-tight tracking-normal text-white drop-shadow-lg">
+            <h1 className="text-5xl font-black leading-tight tracking-normal text-ink drop-shadow-lg">
               探索微观与宏观<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">重塑教学体验</span>
             </h1>
-            <p className="mt-6 text-lg text-cyan-100/70 max-w-md leading-relaxed font-medium">
+            <p className="mt-6 text-lg text-cyan/70 max-w-md leading-relaxed font-medium">
               结合空间手势与多模态AI大模型，将枯燥的抽象知识点转化为可触碰的 3D 互动教具，开启全息智慧课堂新纪元。
             </p>
           </div>
         </section>
 
-        <section className="auth-login-card relative rounded-2xl border border-cyan-400/30 bg-white/[0.03] p-8 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,210,255,0.15)] ring-1 ring-white/10 overflow-hidden">
+        <section className="auth-login-card relative rounded-2xl border border-cyan/30 bg-white/[0.03] p-8 backdrop-blur-3xl shadow-[0_20px_50px_rgba(var(--theme-accent-rgb),0.15)] ring-1 ring-white/10 overflow-hidden">
           {/* 蓝色边缘光与半透明渐变 */}
           <div className="absolute inset-x-0 -top-px h-px w-full bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent" />
           <div className="absolute -left-px top-0 w-px h-full bg-gradient-to-b from-transparent via-cyan-400/30 to-transparent" />
@@ -249,20 +252,21 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
           
           <div className="relative z-10 flex items-start justify-between gap-4">
             <div>
-              <div className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
+              <div className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan/25 bg-cyan-300/10 text-cyan">
                 <ModeIcon className="h-5 w-5" />
               </div>
               <h2 className="mt-5 text-2xl font-bold tracking-normal">{config.title}</h2>
-              <p className="mt-2 text-sm text-white/55">{config.subtitle}</p>
+              <p className="mt-2 text-sm text-ink/55">{config.subtitle}</p>
             </div>
           </div>
 
-          <div className="relative z-10 mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+          <div className="relative z-10 mt-6 grid grid-cols-3 gap-2 rounded-lg border border-line/10 bg-white/[0.03] p-1">
             {([
               ['login', '用户登录'],
+              ['register', '注册'],
               ['admin', '管理员'],
             ] as const).map(([value, label]) => {
-              const isActive = value === 'admin' ? mode === 'admin' : mode !== 'admin';
+              const isActive = mode === value;
 
               return (
               <button
@@ -272,7 +276,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
                   setMode(value);
                   setMessage('');
                 }}
-                className={`h-10 rounded-md text-sm font-semibold transition ${isActive ? 'bg-white text-black' : 'text-white/60 hover:bg-white/8 hover:text-white'}`}
+                className={`h-10 rounded-md text-sm font-semibold transition ${isActive ? 'bg-white text-black' : 'text-ink/60 hover:bg-white/8 hover:text-ink'}`}
               >
                 {label}
               </button>
@@ -282,11 +286,11 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
 
           <form onSubmit={submit} className="relative z-10 mt-6 space-y-4">
             <label className="block">
-              <span className="text-sm font-medium text-white/70">用户名</span>
+              <span className="text-sm font-medium text-ink/70">用户名</span>
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.07]"
+                className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.04] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.07]"
                 placeholder={mode === 'admin' ? 'admin' : '请输入用户名'}
                 autoComplete="username"
                 required
@@ -294,11 +298,11 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-white/70">密码</span>
+              <span className="text-sm font-medium text-ink/70">密码</span>
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.07]"
+                className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.04] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.07]"
                 placeholder="请输入密码"
                 type="password"
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
@@ -308,19 +312,19 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
 
             {mode === 'register' && (
               <label className="block">
-                <span className="text-sm font-medium text-white/70">学校（选填）</span>
+                <span className="text-sm font-medium text-ink/70">学校（选填）</span>
                 <input
                   value={school}
                   onChange={(event) => setSchool(event.target.value)}
                   maxLength={128}
-                  className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/60 focus:bg-white/[0.07]"
+                  className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.04] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.07]"
                   placeholder="请输入学校名称"
                   autoComplete="organization"
                 />
               </label>
             )}
 
-            <p className="h-10 text-sm text-white/45 flex items-start">{helperText}</p>
+            <p className="h-10 text-sm text-ink/45 flex items-start">{helperText}</p>
 
             {message && (
               <div className="rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
@@ -345,14 +349,14 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
                     setMode('register');
                     setMessage('');
                   }}
-                  className="text-sm font-semibold text-cyan-100/80 transition hover:text-white"
+                  className="text-sm font-semibold text-cyan/80 transition hover:text-ink"
                 >
                   注册
                 </button>
               )}
 
               {mode === 'register' && (
-                <div className="text-sm text-white/45">
+                <div className="text-sm text-ink/45">
                   已有账号？
                   <button
                     type="button"
@@ -360,7 +364,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
                       setMode('login');
                       setMessage('');
                     }}
-                    className="ml-1 font-semibold text-cyan-100/80 transition hover:text-white"
+                    className="ml-1 font-semibold text-cyan/80 transition hover:text-ink"
                   >
                     登录
                   </button>

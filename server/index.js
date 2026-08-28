@@ -130,6 +130,7 @@ function publicUser(user) {
     school: user.school ?? null,
     lastAccessAt: user.last_access_at ?? null,
     lastAccessIp: user.last_access_ip ?? null,
+    theme: user.theme || 'tech-blue',
     role: user.role,
     status: user.status,
     createdAt: user.created_at,
@@ -704,6 +705,7 @@ async function initializeDatabase() {
   await ensureUsersColumn('avatar_data_url', 'MEDIUMTEXT NULL AFTER display_name');
   await ensureUsersColumn('last_access_at', 'DATETIME NULL AFTER updated_at');
   await ensureUsersColumn('last_access_ip', 'VARCHAR(45) NULL AFTER last_access_at');
+  await ensureUsersColumn('theme', "VARCHAR(24) NOT NULL DEFAULT 'tech-blue' AFTER last_access_ip");
 
   await initializeActivityLog(pool);
 
@@ -978,6 +980,20 @@ app.patch('/api/voice/preferences', requireAuth, async (req, res) => {
     { userId: req.user.id, ...preference },
   );
   res.json({ preference });
+});
+
+const THEME_IDS = new Set(['tech-blue', 'dream-pink', 'forest-green', 'violet', 'sunset-orange', 'golden', 'cherry-rose']);
+
+app.get('/api/theme', requireAuth, (req, res) => {
+  const theme = THEME_IDS.has(req.user.theme) ? req.user.theme : 'tech-blue';
+  res.json({ theme });
+});
+
+app.patch('/api/theme', requireAuth, async (req, res) => {
+  const theme = typeof req.body?.theme === 'string' && THEME_IDS.has(req.body.theme) ? req.body.theme : null;
+  if (!theme) return res.status(400).json({ message: '无效的主题' });
+  await pool.execute('UPDATE users SET theme = :theme WHERE id = :id', { theme, id: req.user.id });
+  res.json({ theme });
 });
 
 app.get('/api/admin/users', requireAuth, requireAdmin, async (_req, res) => {

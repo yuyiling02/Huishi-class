@@ -63,9 +63,9 @@ export const shouldInterruptTeachingPresentationForFinalUtterance = (
   context: FinalUtteranceContext = {},
 ) => Boolean(text.trim()) && !context.answerOnly;
 
-/** Lock recognition while an Agent is planning/executing or an answer is being prepared and narrated. */
+/** Lock recognition only while an Agent is planning. During executing/explaining, isXiaozhiSpeaking handles TTS overlap. */
 export const isVoiceInputLockedByAssistantState = (state: string) =>
-  state === 'planning' || state === 'executing' || state === 'explaining';
+  state === 'planning';
 
 /** Closing the knowledge panel ends its presentation state without disturbing unrelated work. */
 export const getAssistantStateAfterKnowledgeClose = <State extends string>(state: State): State | 'idle' =>

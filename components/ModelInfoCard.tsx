@@ -25,18 +25,18 @@ const ModelInfoCard: React.FC<ModelInfoCardProps> = ({ profile }) => (
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-6 pt-4 [scrollbar-color:rgba(34,211,238,0.24)_transparent]">
       <header>
         <h2 className="text-2xl font-black tracking-tight text-white">{profile.title}</h2>
-        <p className="mt-1 text-xs font-bold tracking-wide text-cyan-200/75">{profile.subtitle}</p>
+        <p className="mt-1 text-xs font-bold tracking-wide text-cyan-200">{profile.subtitle}</p>
       </header>
       <p className="text-sm leading-7 text-slate-300">{profile.description}</p>
 
       <section aria-label="关键数据">
-        <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
           <BookOpen size={13} /> 关键数据
         </div>
         <dl className="grid grid-cols-1 gap-2 2xl:grid-cols-2">
           {profile.metrics.map((metric) => (
-            <div key={metric.label} className="rounded-xl border border-white/[0.08] bg-white/[0.045] px-3 py-3">
-              <dt className="text-[10px] font-bold tracking-wider text-slate-500">{metric.label}</dt>
+            <div key={metric.label} className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-3">
+              <dt className="text-[10px] font-bold tracking-wider text-slate-400">{metric.label}</dt>
               <dd className="mt-1 text-xs font-semibold leading-5 text-slate-200">{metric.value}</dd>
             </div>
           ))}
@@ -47,9 +47,9 @@ const ModelInfoCard: React.FC<ModelInfoCardProps> = ({ profile }) => (
         {profile.tips.map((tip, index) => {
           const Icon = index === 0 ? Microscope : Lightbulb;
           return (
-            <div key={tip.title} className="flex gap-3 rounded-xl border border-cyan-300/10 bg-cyan-400/[0.05] p-3.5">
+            <div key={tip.title} className="flex gap-3 rounded-xl border border-cyan/10 bg-cyan-400/[0.05] p-3.5">
               <Icon size={15} className="mt-0.5 shrink-0 text-cyan-300" />
-              <p className="text-xs leading-5 text-slate-300"><b className="mr-1 text-cyan-100">{tip.title}</b>{tip.content}</p>
+              <p className="text-xs leading-5 text-slate-300"><b className="mr-1 text-cyan-300">{tip.title}</b>{tip.content}</p>
             </div>
           );
         })}

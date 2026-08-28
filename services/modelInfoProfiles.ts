@@ -189,6 +189,32 @@ export const MODEL_INFO_PROFILES: Record<string, ModelInfoProfile> = {
     { label: '大小', value: '摊开后约 2 平方米' }, { label: '重量', value: '3.5–5 千克' }, { label: '每日', value: '脱落约 5 亿个细胞' },
     { label: '位置', value: '覆盖全身' }, { label: '血液供应', value: '真皮血管丛' }, { label: '功能', value: '保护、感知与散热' },
   ], '表皮、真皮与皮下组织三层，各司其职。', '仅一平方厘米就可能容纳数百个汗腺和数米长的血管。'),
+  'chem-nacl': {
+    seedKey: 'chem-nacl', category: '化学', title: 'NaCl 离子晶体', subtitle: '钠与氯的离子之舞',
+    description: '氯化钠晶体中，每个钠离子被六个氯离子包围，每个氯离子也被六个钠离子包围，形成经典的岩盐结构。',
+    illustration: '/images/diamond-structure.png',
+    metrics: [
+      { label: '化学式', value: 'NaCl' }, { label: '晶体类型', value: '离子晶体' },
+      { label: '配位数', value: '6' }, { label: '晶系', value: '立方晶系' },
+    ],
+    tips: [
+      { title: '结构提示', content: '钠离子与氯离子交替排列，靠静电吸引维持稳定。' },
+      { title: '性质联系', content: '离子键较强，因此氯化钠熔点较高、易溶于水。' },
+    ], capabilities: { organTools: false },
+  },
+  'chem-sio2': {
+    seedKey: 'chem-sio2', category: '化学', title: 'SiO₂ 二氧化硅网络', subtitle: '硅氧四面体的无限延伸',
+    description: '二氧化硅晶体中，每个硅原子与四个氧原子形成共价键，每个氧原子被两个硅原子共享，构成三维网状结构。',
+    illustration: '/images/diamond-structure.png',
+    metrics: [
+      { label: '化学式', value: 'SiO₂' }, { label: '晶体类型', value: '原子晶体' },
+      { label: '硅配位数', value: '4' }, { label: '结构基元', value: '硅氧四面体' },
+    ],
+    tips: [
+      { title: '结构提示', content: '硅氧四面体通过共用顶点氧原子连接，形成三维网状结构。' },
+      { title: '性质联系', content: '全部以共价键连接，因此二氧化硅硬度高、熔点高。' },
+    ], capabilities: { organTools: false },
+  },
 };
 
 export const BUILTIN_MODEL_SEED_KEYS = Object.freeze(Object.keys(MODEL_INFO_PROFILES));
@@ -211,6 +237,8 @@ export const MODEL_SEED_KEY_BY_URL: Record<string, string> = {
   '/models/organ-intestine.glb': 'bio-organ-intestine',
   '/models/organ-pancreas.glb': 'bio-organ-pancreas',
   '/models/organ-skin.glb': 'bio-organ-skin',
+  '/models/nacl-crystal.glb': 'chem-nacl',
+  '/models/sio2-crystal.glb': 'chem-sio2',
 };
 
 export function getModelInfoProfile(seedKey?: string | null) {

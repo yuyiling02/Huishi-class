@@ -12,6 +12,7 @@ import { clone as cloneSkinnedModel } from 'three/examples/jsm/utils/SkeletonUti
 import { ControlRefs, ModelType } from '../types';
 import { resolveModelAssetUrl } from '../services/modelAssetUrl';
 import { ProceduralTerrain } from './ProceduralTerrain';
+import { useTheme } from './ThemeProvider';
 
 // Fix for TypeScript errors regarding R3F intrinsic elements and missing HTML elements
 declare global {
@@ -1013,7 +1014,7 @@ const LocalEnvironment: React.FC = () => {
 };
 
 // Unified model component. FBX / GLB / GLTF all use the same layer-based disassembly path.
-const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget; showEarthLabels?: boolean; crossSectionEnabled?: boolean; wireframeEnabled?: boolean; onLoadProgress?: (progress: LoadProgress) => void; onLoadComplete?: () => void; onLoadError?: (error: ModelLoadError) => void; onPartMoved?: (partName: string) => void }> = ({ url, modelType, assetUrls, controlRef, cameraTarget, showEarthLabels = false, crossSectionEnabled = false, wireframeEnabled = false, onLoadProgress, onLoadComplete, onLoadError, onPartMoved }) => {
+const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Record<string, string>; controlRef: React.MutableRefObject<ControlRefs>; cameraTarget: CameraTarget; showEarthLabels?: boolean; crossSectionEnabled?: boolean; wireframeEnabled?: boolean; accent?: string; onLoadProgress?: (progress: LoadProgress) => void; onLoadComplete?: () => void; onLoadError?: (error: ModelLoadError) => void; onPartMoved?: (partName: string) => void }> = ({ url, modelType, assetUrls, controlRef, cameraTarget, showEarthLabels = false, crossSectionEnabled = false, wireframeEnabled = false, accent = '#86e3ce', onLoadProgress, onLoadComplete, onLoadError, onPartMoved }) => {
   const [modelScene, setModelScene] = useState<THREE.Object3D | null>(null);
   const [modelParts, setModelParts] = useState<GrabbablePart[]>([]);
   const [grabbableParts, setGrabbableParts] = useState<GrabbablePart[]>([]);
@@ -1667,7 +1668,7 @@ const LayeredModel: React.FC<{ url: string; modelType: ModelType; assetUrls?: Re
       <group>
         <mesh position={[0, 0, 0]}>
           <sphereGeometry args={[0.5, 16, 16]} />
-          <meshStandardMaterial color="#86e3ce" wireframe />
+          <meshStandardMaterial color={accent} wireframe />
         </mesh>
       </group>
     );
@@ -2127,6 +2128,7 @@ const CameraPresentationTransition: React.FC<{ active: boolean; target: CameraTa
 };
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrls, controlRef, showLabels: externalShowLabels, onShowLabelsChange, onLoadProgress, onLoadComplete, onLoadError, onPartMoved, quizMode = false, presentationSplitActive = false, crossSectionEnabled = false, wireframeEnabled = false }) => {
+  const { themeDef } = useTheme();
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const [internalShowLabels, setInternalShowLabels] = useState(false);
   const showLabels = externalShowLabels !== undefined ? externalShowLabels : internalShowLabels;
@@ -2228,6 +2230,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl, modelType, assetUrl
                 assetUrls={assetUrls}
                 controlRef={controlRef}
                 cameraTarget={cameraTarget}
+                accent={themeDef.accent}
                 showEarthLabels={lowerModelUrl.includes('earth-layers') && showLabels}
                 crossSectionEnabled={crossSectionEnabled}
                 wireframeEnabled={wireframeEnabled}

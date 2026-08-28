@@ -78,11 +78,11 @@ const ModelDetailPanel: React.FC<ModelDetailPanelProps> = ({
             <ModelInfoCard profile={profile} />
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-              <div className="grid h-14 w-14 place-items-center rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.06] text-cyan-200">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl border border-cyan/15 bg-cyan-300/[0.06] text-cyan">
                 <BookOpen size={23} />
               </div>
               <h2 className="mt-5 text-lg font-black text-white">{modelName || '选择一个模型'}</h2>
-              <p className="mt-2 max-w-[260px] text-xs leading-6 text-slate-400">
+              <p className="mt-2 max-w-[260px] text-xs leading-6 text-slate-300">
                 {modelName ? '该模型暂未配置结构资料，你仍可继续旋转、缩放、手势控制或让小智进行讲解。' : '从左侧资源库选择模型后，这里会显示模型介绍、关键数据和学习提示。'}
               </p>
             </div>
@@ -103,7 +103,7 @@ const ModelDetailPanel: React.FC<ModelDetailPanelProps> = ({
               <Sparkles size={23} />
             </div>
             <h2 className="mt-5 text-lg font-black text-white">等待 AI 讲解</h2>
-            <p className="mt-2 max-w-[260px] text-xs leading-6 text-slate-400">向小智提出“讲解这个模型”等问题，生成的课堂内容会自动出现在这里。</p>
+            <p className="mt-2 max-w-[260px] text-xs leading-6 text-slate-300">向小智提出“讲解这个模型”等问题，生成的课堂内容会自动出现在这里。</p>
           </div>
         )}
       </div>
