@@ -47,6 +47,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
   const pointerSmoothRef = useRef({ x: 0, y: 0, initialized: false });
   const hoverStartRef = useRef<number>(0);
   const hoverOptionRef = useRef<number | null>(null);
+  const lastProgressPctRef = useRef<number>(-1);
   const phaseRef = useRef(phase);
   const sessionRef = useRef(session);
   const reportedSessionRef = useRef<number | null>(null);
@@ -176,8 +177,12 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
           // Same option — accumulate hover time
           const elapsed = performance.now() - hoverStartRef.current;
           const progress = Math.min(1, elapsed / HOVER_CONFIRM_MS);
-          setHoverProgress(progress);
-          setHoveredOption(hitOption);
+          // 只在 progress 的整数 % 变化时才 setState，避免每帧 re-render
+          const progressPct = Math.round(progress * 100);
+          if (progressPct !== lastProgressPctRef.current) {
+            lastProgressPctRef.current = progressPct;
+            setHoverProgress(progress);
+          }
 
           if (progress >= 1) {
             // Confirmed!
@@ -185,9 +190,10 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
             return;
           }
         } else {
-          // Switched to a different option
+          // Switched to a different option (or first hit)
           hoverOptionRef.current = hitOption;
           hoverStartRef.current = performance.now();
+          lastProgressPctRef.current = 0;
           setHoveredOption(hitOption);
           setHoverProgress(0);
         }
@@ -195,6 +201,7 @@ const QuizOverlay: React.FC<QuizOverlayProps> = ({ stageRef, controlRef, cameraA
         // No option hovered
         if (hoverOptionRef.current !== null) {
           hoverOptionRef.current = null;
+          lastProgressPctRef.current = -1;
           setHoveredOption(null);
           setHoverProgress(0);
         }

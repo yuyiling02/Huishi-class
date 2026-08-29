@@ -523,6 +523,10 @@ const HandController: React.FC<HandControllerProps> = ({ controlRef, onStateChan
         controlRef.current.zoomSpeed = 0;
         controlRef.current.isDragging = false;
         controlRef.current.panPosition = { x: 0, y: 0 };
+      } else if (controlRef.current.voiceRotationActive) {
+        // 语音持续旋转中：HandController 不要覆盖 rotationVelocity（保留 VoiceController 的 0.035）
+        controlRef.current.zoomSpeed = finalZoomSpeed;
+        controlRef.current.isDragging = isDragging;
       } else {
         // 正常模式：按手势更新
         controlRef.current.rotationVelocity = { x: finalRotX, y: finalRotY };

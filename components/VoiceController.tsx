@@ -14,19 +14,45 @@ import {
   ServerSpeechRecognition,
 } from '../services/serverSpeechRecognition';
 
-// ====== 语音命令模式（扩展版，支持自然语言变体）======
-const COMMAND_PATTERNS: [RegExp, string, (ctrl: ControlRefs) => void][] = [
-  [/再?放?大一点|大一点|大些|大一些|靠近|拉近|近一点|近一些|放大/, 'zoom_in', (c) => { c.zoomSpeed = 15.0; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
-  [/再?缩?小一点|小一点|小些|小一些|远离|拉远|远一点|远一些|缩小/, 'zoom_out', (c) => { c.zoomSpeed = -15.0; setTimeout(() => { c.zoomSpeed = 0; }, 1500); }],
-  [/锁定旋转|锁住旋转|停止旋转|停止转动|别转|不要转|停转|停下旋转|停下来|暂停|停止|停|结束/, 'lock_rotation', (c) => { c.rotationLocked = true; c.zoomSpeed = 0; c.rotationVelocity = { x: 0, y: 0 }; }],
-  [/解锁旋转|解除锁定|取消锁定|恢复旋转|继续旋转|继续转|开始转|旋转|转起来|转动|转一转|转圈|转一下/, 'rotate', (c) => { c.rotationLocked = false; c.rotationVelocity = { x: 0, y: 0.02 }; }],
+// ====== 语音命令模式（扩展版，支持中英混合 + 自然语言变体）======
+// 注意：lock_rotation 用 _WEAK 标记容易误伤的模糊词（单独的 stop/pause/freeze），
+// extractCommands 里会根据 voiceRotationActive 决定是否忽略
+const LOCK_STRONG = /锁定旋转|锁住旋转|停止旋转|停止转动|别转|不要转|停转|停下旋转|停下来|转.*停|停.*转|不再旋转|别再转|不用转|暂停旋转|暂停转动|暂停|停止/;
+const LOCK_WEAK   = /\b(?:stop(?:\s+rotation|\s+turn|\s+it)?|lock(?:\s+rotation)?|freeze)\b/i;
+
+const COMMAND_PATTERNS: [RegExp, string, (ctrl: ControlRefs) => void, boolean?][] = [
+  [/再?放?大一点|大一点|大些|大一些|靠近|拉近|近一点|近一些|放大|\b(big|bigger|zoomin|zoom in|zoom-in|in|larger|close[ -]?up|closer)\b/i, 'zoom_in', (c) => { console.log('[VoiceCmd] zoom_in fired'); c.zoomSpeed = 15.0; setTimeout(() => { if (!c.voiceRotationActive) c.zoomSpeed = 0; }, 1500); }],
+  [/再?缩?小一点|小一点|小些|小一些|远离|拉远|远一点|远一些|缩小|\b(small|smaller|zoomout|zoom out|zoom-out|out|farther|further|away)\b/i, 'zoom_out', (c) => { console.log('[VoiceCmd] zoom_out fired'); c.zoomSpeed = -15.0; setTimeout(() => { if (!c.voiceRotationActive) c.zoomSpeed = 0; }, 1500); }],
+  [null, 'lock_rotation', (c) => { console.log('[VoiceCmd] lock_rotation fired'); c.rotationLocked = true; c.voiceRotationActive = false; c.zoomSpeed = 0; c.rotationVelocity = { x: 0, y: 0 }; }],
+  [/转(九十度|90度|一下|几圈|一圈)|右?转(九十度|90度)|左?转(九十度|90度)|\bturn(?:\s+(?:90|right|left|around|once))\b|\bspin\s+(?:once|90)\b/i, 'turn_burst', (c) => { console.log('[VoiceCmd] turn_burst fired'); c.rotationLocked = false; c.voiceRotationActive = false; c.rotationVelocity = { x: 0, y: 0.06 }; setTimeout(() => { if (!c.voiceRotationActive) c.rotationVelocity = { x: 0, y: 0 }; }, 400); }],
+  [/解锁旋转|解除锁定|取消锁定|恢复旋转|继续旋转|继续转|开始转|转圈|旋转|一直转|转起来|转动|\b(rotate|rotation|keep[ -]?turning|continuously|start[ -]?spin|keep[ -]?spin)\b/i, 'spin', (c) => { console.log('[VoiceCmd] spin fired, setting velocity.y=0.035'); c.rotationLocked = false; c.voiceRotationActive = true; c.rotationVelocity = { x: 0, y: 0.035 }; }],
 ];
 
 function extractCommands(text: string, controlRef: ControlRefs): string[] {
   const fired: string[] = [];
-  for (const [pattern, name, action] of COMMAND_PATTERNS) {
-    if (name === 'rotate' && fired.includes('lock_rotation')) continue;
-    if (pattern.test(text)) {
+  const voiceActive = controlRef.voiceRotationActive;
+  for (const entry of COMMAND_PATTERNS) {
+    const [pattern, name, action] = entry;
+    // 冲突保护：spin/turn_burst 优先于 lock_rotation（同一次 utterance 里）
+    if (name === 'lock_rotation' && (fired.includes('spin') || fired.includes('turn_burst'))) continue;
+    if ((name === 'spin' || name === 'turn_burst') && fired.includes('lock_rotation')) continue;
+
+    // lock_rotation 特殊处理：用强弱两套正则
+    if (name === 'lock_rotation') {
+      const strong = LOCK_STRONG.test(text);
+      const weak   = LOCK_WEAK.test(text);
+      if (!strong && !weak) continue;
+      // 语音旋转活跃中 → 只有"强"停止词才生效（"别转"/"停止旋转"等），忽略弱词（单独 stop/freeze）
+      if (voiceActive && !strong) {
+        console.log('[VoiceCmd] lock_rotation weak match IGNORED (voiceRotationActive=true), text="', text, '"');
+        continue;
+      }
+      action(controlRef);
+      fired.push(name);
+      continue;
+    }
+
+    if (pattern!.test(text)) {
       action(controlRef);
       fired.push(name);
     }
@@ -416,13 +442,12 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
         </div>
       )}
       <button
-        style={{ display: 'none' }}
         onClick={toggleVoice}
         disabled={isConnecting || disabled}
-        className={`p-3 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.15)] border transition-all active:scale-90 ${
+        className={`p-3 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.15)] border transition-all active:scale-95 hover:scale-105 ${
           disabled
             ? 'bg-cyan-950/20 border-cyan/30 text-slate-600 cursor-not-allowed shadow-none'
-            : isActive ? 'bg-rose-950/40 border-rose-900/50 text-rose-400 animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.3)]' : 'bg-cyan-950/40 border-cyan/50 text-cyan hover:bg-cyan-900/60 hover:text-cyan'
+            : isActive ? 'bg-rose-950/40 border-rose-900/50 text-rose-400 animate-pulse shadow-[0_0_20px_rgba(244,63,94,0.3)]' : 'bg-cyan-950/40 border-cyan/50 text-cyan hover:bg-cyan-900/60 hover:text-cyan shadow-[0_0_15px_rgba(34,211,238,0.3)]'
         }`}
         aria-label={isActive ? '关闭语音识别' : '开启语音识别'}
         title={disabled ? '请先加载模型' : (isActive ? '关闭语音识别' : '开启语音识别')}

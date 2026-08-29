@@ -54,10 +54,10 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
   const specularMap = useLoader(THREE.TextureLoader, '/textures/earth_specular_2048.jpg');
 
   useFrame((state, delta) => {
-    // 1. Slow rotation for showcase
-    if (groupRef.current && !controlRef.current.rotationLocked && controlRef.current.rotationVelocity.x === 0 && controlRef.current.rotationVelocity.y === 0) {
-      groupRef.current.rotation.y += 0.002;
-    }
+    // 关闭默认自转，只响应语音/手势指令
+    // if (groupRef.current && !controlRef.current.rotationLocked && controlRef.current.rotationVelocity.x === 0 && controlRef.current.rotationVelocity.y === 0) {
+    //   groupRef.current.rotation.y += 0.002;
+    // }
 
     // 2. Camera Controls
     const { rotationVelocity, zoomSpeed } = controlRef.current;
@@ -76,7 +76,7 @@ export const ProceduralEarthLayers: React.FC<ProceduralEarthProps> = ({ controlR
     const sph = sphericalRef.current;
 
     if (hasCameraGestureInput && (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001)) {
-      const sensitivity = 5.0 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
+      const sensitivity = 0.5 * (controlRef.current.interactionSettings?.rotationSpeed ?? 1.0);
       const frameScale = Math.min(delta * 60, 3);
       sph.theta -= rotationVelocity.y * sensitivity * frameScale;
       sph.phi -= rotationVelocity.x * sensitivity * frameScale;

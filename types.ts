@@ -52,6 +52,7 @@ export interface AgentDisassemblyControl {
 export interface ControlRefs {
   rotationVelocity: { x: number; y: number }; // x = pitch (up/down), y = yaw (left/right)
   rotationLocked: boolean; // voice lock: blocks any rotation input until unlocked
+  voiceRotationActive: boolean; // true = voice spin is running, HandController must NOT overwrite rotationVelocity
   zoomSpeed: number; // -1 to 1
   panPosition: { x: number; y: number }; // Target position for dragging
   isDragging: boolean;

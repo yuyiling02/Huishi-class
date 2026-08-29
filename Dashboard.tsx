@@ -10,12 +10,12 @@ import QuizOverlay from './components/QuizOverlay';
 import WrongQuestionBook from './components/WrongQuestionBook';
 import XiaozhiAssistant, { XiaozhiVisualState } from './components/XiaozhiAssistant';
 import XiaozhiMascot from './components/XiaozhiMascot';
+import ThemeSwitcher from './components/ThemeSwitcher';
 import FollowUpQuestionOverlay from './components/FollowUpQuestionOverlay';
 import MultiAgentPanel from './components/MultiAgentPanel';
 import ModelDetailPanel, { type DetailPanelTab } from './components/ModelDetailPanel';
-import ThemeSwitcher from './components/ThemeSwitcher';
 import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation, buildOrchestratorDecision, buildFollowUpQuestion, getAutonomousDisassemblyArgs } from './services/agentRuntime';
-import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen, BookOpenCheck } from 'lucide-react';
+import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen, BookOpenCheck, Mic } from 'lucide-react';
 import { ModelType } from './types';
 import type { AuthUser } from './Login';
 import { getLocalModel, listLocalModels, deleteLocalModel, hideStaticModel, listHiddenStaticModelIds, saveUploadedModel, type LocalModelSummary } from './services/localModelLibrary';
@@ -255,6 +255,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const [isStageAppFullscreen, setIsStageAppFullscreen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set([LOCAL_MODELS_CATEGORY_KEY]));
+  const [instructionTab, setInstructionTab] = useState<'gesture' | 'voice'>('gesture');
   const [sidebarTab, setSidebarTab] = useState<'resource' | 'agent'>(() => {
     try {
       const saved = window.localStorage.getItem(`${SIDEBAR_TAB_STORAGE_PREFIX}:${currentUser.id}`);
@@ -350,7 +351,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
   const [editingMemoryContent, setEditingMemoryContent] = useState('');
   const [zoomSpeedMultiplier, setZoomSpeedMultiplier] = useState(0.8);
-  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(0.5);
+  const [rotationSpeedMultiplier, setRotationSpeedMultiplier] = useState(1.0);
   const [showLabels, setShowLabels] = useState(false);
   const [agentStatuses, setAgentStatuses] = useState<Record<AgentRole, AgentStatus>>(AGENT_STATUS_IDLE);
   const [agentTimeline, setAgentTimeline] = useState<AgentTimelineItem[]>([]);
@@ -747,6 +748,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const controlRef = useRef<ControlRefs>({
     rotationVelocity: { x: 0, y: 0 },
     rotationLocked: false,
+    voiceRotationActive: false,
     zoomSpeed: 0,
     panPosition: { x: 0, y: 0 },
     isDragging: false,
@@ -962,6 +964,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     controlRef.current = {
       rotationVelocity: { x: 0, y: 0 },
       rotationLocked: controlRef.current.rotationLocked,
+      voiceRotationActive: false,
       zoomSpeed: 0,
       panPosition: { x: 0, y: 0 },
       isDragging: false,
@@ -1837,6 +1840,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         controlRef.current.zoomSpeed = 0;
+        controlRef.current.voiceRotationActive = false;
         controlRef.current.rotationVelocity = { x: 0, y: 0 };
         if (interactionEpochRef.current === runEpoch) {
           setAgentThinking('智能体流程已被新的语音指令中断。');
@@ -1860,8 +1864,8 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       setAgentTimeline((items) => items.map((item) => item.status === 'running'
         ? { ...item, status: 'error', detail: `${item.detail}（执行异常）` }
         : item));
-      setXiaozhiState('error');
-      setXiaozhiMessage('智能体流程遇到一点问题，请检查网络或 DeepSeek 配置。');
+      setXiaozhiState('idle');
+      voiceConversationLoopRef.current = false;
     } finally {
       if (interactionEpochRef.current === runEpoch) setIsAgentRunning(false);
       if (ownedController && interactionAbortRef.current === ownedController) interactionAbortRef.current = null;
@@ -1882,6 +1886,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
     followUpSpeechEpochRef.current += 1;
     followUpTimelineIdRef.current = null;
     controlRef.current.zoomSpeed = 0;
+    controlRef.current.voiceRotationActive = false;
     controlRef.current.rotationVelocity = { x: 0, y: 0 };
     setIsAgentRunning(false);
     setIsAgentRequestPending(false);
@@ -2089,10 +2094,9 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
       responseSpeech.stop();
       console.error('Xiaozhi orchestrator failed:', error);
       setAgentStatuses((current) => ({ ...current, orchestrator: 'error' }));
-      letXiaozhiSpeak(
-        '小智刚刚没想明白，我们换个说法再试一次。',
-        'error',
-      );
+      setXiaozhiState('idle');
+      voiceConversationLoopRef.current = false;
+      setAiAnalysis('小智暂时没想明白，请稍后再试或换个说法。');
     } finally {
       if (interactionAbortRef.current === controller) interactionAbortRef.current = null;
       setIsAgentRequestPending(false);
@@ -3048,19 +3052,20 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             <>
               <div>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 bg-cyan-50 rounded-xl p-0.5">
+                  <div className="flex flex-1 min-w-0 bg-slate-800/60 rounded-xl p-1 border border-slate-600/50 shadow-inner overflow-hidden">
                     <button
                       type="button"
                       onClick={() => {
                         setSidebarTab('resource');
                         setIsSidebarCollapsed(false);
                       }}
-                      className={`whitespace-nowrap px-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                      className={`group relative flex-1 flex items-center justify-center gap-1 whitespace-nowrap px-2 py-1.5 rounded-lg text-[11px] font-black tracking-wide transition-all duration-200 active:scale-95 ${
                         sidebarTab === 'resource'
-                          ? 'bg-cyan-100 text-cyan shadow-sm'
-                          : 'text-ink-soft hover:text-ink'
+                          ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_10px_rgba(34,211,238,0.5)] ring-1 ring-cyan-300/50'
+                          : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/50'
                       }`}
                     >
+                      <BookOpenCheck size={12} className={sidebarTab === 'resource' ? 'drop-shadow-[0_0_3px_rgba(255,255,255,0.6)]' : ''} />
                       学科资源库
                     </button>
                     <button
@@ -3069,13 +3074,14 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                         setSidebarTab('agent');
                         setIsSidebarCollapsed(false);
                       }}
-                      className={`whitespace-nowrap px-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                      className={`group relative flex-1 flex items-center justify-center gap-1 whitespace-nowrap px-2 py-1.5 rounded-lg text-[11px] font-black tracking-wide transition-all duration-200 active:scale-95 ${
                         sidebarTab === 'agent'
-                          ? 'bg-cyan-100 text-cyan shadow-sm'
-                          : 'text-ink-soft hover:text-ink'
+                          ? 'bg-gradient-to-r from-violet-500/90 to-fuchsia-500/90 text-white shadow-[0_0_10px_rgba(167,139,250,0.5)] ring-1 ring-violet-300/50'
+                          : 'text-slate-400 hover:text-violet-300 hover:bg-slate-700/50'
                       }`}
                     >
-                      多智能体平台
+                      <Atom size={12} className={sidebarTab === 'agent' ? 'drop-shadow-[0_0_3px_rgba(255,255,255,0.6)] animate-pulse' : ''} />
+                      多智能体
                     </button>
                   </div>
                   <button
@@ -3268,104 +3274,124 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </div>
 
               <div>
-                <h3 className="font-black text-xs text-ink-soft uppercase tracking-[0.2em] mb-4 border-l-4 border-cyan pl-3">全息指令表</h3>
+                <h3 className="font-black text-xs text-ink-soft uppercase tracking-[0.2em] mt-2 mb-2 border-l-4 border-cyan pl-3">全息指令表</h3>
                 <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-cyan-50 border border-cyan/20 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-cyan-50/50 p-1">
+                  <div className="p-3 rounded-2xl bg-slate-800/70 border border-cyan-500/30 space-y-3 backdrop-blur-sm">
+                    {/* Tab 切换 */}
+                    <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-900/60 p-1">
                       <button
                         type="button"
-                        onClick={() => handleInteractionModeChange('dual')}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-cyan-100 text-cyan shadow-sm' : 'text-ink-soft hover:bg-cyan-100/50'}`}
+                        onClick={() => setInstructionTab('gesture')}
+                        className={`flex items-center justify-center gap-1 rounded-lg py-1.5 text-[10px] font-black transition-all ${
+                          instructionTab === 'gesture' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'
+                        }`}
                       >
-                        <Move3d size={13} /> 双手模式
+                        <Hand size={11} /> 手势
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleInteractionModeChange('single')}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-cyan-100 text-cyan shadow-sm' : 'text-ink-soft hover:bg-cyan-100/50'}`}
+                        onClick={() => setInstructionTab('voice')}
+                        className={`flex items-center justify-center gap-1 rounded-lg py-1.5 text-[10px] font-black transition-all ${
+                          instructionTab === 'voice' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'
+                        }`}
                       >
-                        <Hand size={13} /> 单手模式
+                        <Mic size={11} /> 语音
                       </button>
                     </div>
 
-                    {interactionMode === 'dual' ? (
+                    {instructionTab === 'gesture' ? (
                       <>
-                        <div className="flex items-center gap-2 pb-2 border-b border-cyan/40">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan" /></div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-ink-soft uppercase">双手协同</span>
-                            <span className="text-[9px] text-cyan font-bold">左手缩放 | 右手旋转/拖拽</span>
-                          </div>
+                        {/* 手势模式切换 */}
+                        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900/60 p-1">
+                          <button
+                            type="button"
+                            onClick={() => handleInteractionModeChange('dual')}
+                            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'}`}
+                          >
+                            <Move3d size={13} /> 双手模式
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInteractionModeChange('single')}
+                            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'}`}
+                          >
+                            <Hand size={13} /> 单手模式
+                          </button>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-ink-soft uppercase">左手缩放</span>
-                            <span className="text-[9px] text-ink-soft font-bold">张开 → 放大 | 握拳 → 缩小</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan" /></div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-ink-soft uppercase">右手交互</span>
-                            <span className="text-[9px] text-cyan font-bold">捏合 → 拖拽零件</span>
-                            <span className="text-[9px] text-ink-soft font-bold">食指+中指并拢滑动 → 旋转画面</span>
-                          </div>
-                        </div>
+
+                        {interactionMode === 'dual' ? (
+                          <>
+                            <div className="flex items-center gap-2 pb-2 border-b border-cyan-500/30">
+                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Move3d size={14} className="text-cyan-300" /></div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-300 uppercase">双手协同</span>
+                                <span className="text-[9px] text-cyan-300 font-bold">左手缩放 | 右手旋转/拖拽</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Hand size={14} className="text-cyan-300" /></div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-300 uppercase">左手缩放</span>
+                                <span className="text-[9px] text-slate-300 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><ScanFace size={14} className="text-cyan-300" /></div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-300 uppercase">右手交互</span>
+                                <span className="text-[9px] text-cyan-300 font-bold">捏合 → 拖拽零件</span>
+                                <span className="text-[9px] text-slate-300 font-bold">食指+中指并拢滑动 → 旋转画面</span>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 pb-2 border-b border-cyan-500/30">
+                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Hand size={14} className="text-cyan-300" /></div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-300 uppercase">右手优先</span>
+                                <span className="text-[9px] text-cyan-300 font-bold">张掌放大 | 握拳缩小</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Hand size={14} className="text-cyan-300" /></div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-300 uppercase">捏合拖拽</span>
+                                <span className="text-[9px] text-slate-300 font-bold">食指+拇指捏合 → 拖拽零件</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><ScanFace size={14} className="text-cyan-300" /></div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-300 uppercase">互斥控制</span>
+                                <span className="text-[9px] text-cyan-300 font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </>
                     ) : (
+                      /* 语音指令卡片 */
                       <>
-                        <div className="flex items-center gap-2 pb-2 border-b border-cyan/40">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-ink-soft uppercase">右手优先</span>
-                            <span className="text-[9px] text-cyan font-bold">张掌放大 | 握拳缩小</span>
-                          </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { zh: '放大', en: 'big / zoom in' },
+                            { zh: '缩小', en: 'small / zoom out' },
+                            { zh: '转圈', en: 'spin / keep turning' },
+                            { zh: '停止旋转', en: 'stop rotation / freeze' },
+                          ].map((item) => (
+                            <div key={item.zh} className="px-2 py-1.5 rounded-lg bg-slate-900/70 border border-cyan-500/40 text-center">
+                              <div className="text-[11px] font-black text-white">{item.zh}</div>
+                              <div className="text-[8px] text-cyan-300 font-bold tracking-wider">{item.en}</div>
+                            </div>
+                          ))}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-ink-soft uppercase">捏合拖拽</span>
-                            <span className="text-[9px] text-ink-soft font-bold">食指+拇指捏合 → 拖拽零件</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan" /></div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-ink-soft uppercase">互斥控制</span>
-                            <span className="text-[9px] text-cyan font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
-                          </div>
+                        <div className="text-center text-[9px] text-slate-400 pt-1 border-t border-cyan-500/30 space-y-0.5">
+                          <div>点右下角麦克风开始说话 · 中英文均可识别</div>
+                          <div className="text-cyan-400/80 text-[8px]">💡 建议连续说 2 次及以上关键词识别更稳</div>
                         </div>
                       </>
                     )}
-
-                    <div className="hidden">
-
-                    {/* 组合指令 */}
-                    <div className="flex items-center gap-2 pb-2 border-b border-cyan/40">
-                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Move3d size={14} className="text-cyan" /></div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-ink-soft uppercase">双人/双手</span>
-                        <span className="text-[9px] text-cyan font-bold">双手协同控制模型</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><Hand size={14} className="text-cyan" /></div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-ink-soft uppercase">左手 (缩放)</span>
-                        <span className="text-[9px] text-ink-soft font-bold">张开 → 放大 | 握拳 → 缩小</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-cyan-900/40 rounded-lg"><ScanFace size={14} className="text-cyan" /></div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-ink-soft uppercase">右手 (拆解/旋转)</span>
-                        <span className="text-[9px] text-cyan font-bold">捏合 (食+拇) → 抓取零件</span>
-                        <span className="text-[9px] text-ink-soft font-bold">双指并拢 (食+中) → 旋转画面</span>
-                      </div>
-                    </div>
-                  </div>
                   </div>
 
                   <button
@@ -3508,7 +3534,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                   <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink-soft"><span>旋转速度</span><b className="text-cyan">{rotationSpeedMultiplier.toFixed(1)}x</b></span>
                   <input type="range" min="0.1" max="5.0" step="0.1" value={rotationSpeedMultiplier} onChange={(event) => setRotationSpeedMultiplier(parseFloat(event.target.value))} className="w-full accent-cyan-300" />
                 </label>
-                <button type="button" onClick={() => { setZoomSpeedMultiplier(0.8); setRotationSpeedMultiplier(0.5); }} className="w-full rounded-xl border border-line/10 bg-white/[0.045] py-2 text-xs font-black text-ink-soft transition hover:border-cyan/25 hover:text-ink">恢复默认</button>
+                <button type="button" onClick={() => { setZoomSpeedMultiplier(0.8); setRotationSpeedMultiplier(1.0); }} className="w-full rounded-xl border border-line/10 bg-white/[0.045] py-2 text-xs font-black text-ink-soft transition hover:border-cyan/25 hover:text-ink">恢复默认</button>
               </div>
             </div>
           )}
