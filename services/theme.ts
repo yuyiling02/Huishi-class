@@ -1,4 +1,5 @@
 export type ThemeId =
+  | 'classic-blue'
   | 'tech-blue'
   | 'dream-pink'
   | 'forest-green'
@@ -15,6 +16,7 @@ export interface ThemeDefinition {
 }
 
 export const THEMES: ThemeDefinition[] = [
+  { id: 'classic-blue', name: '经典蓝', primary: '#3D81E3', accent: '#00D2FF' },
   { id: 'tech-blue', name: '科技蓝', primary: '#3D9EFF', accent: '#24F7FF' },
   { id: 'forest-green', name: '森林绿', primary: '#5EFFB8', accent: '#00FFA3' },
   { id: 'dream-pink', name: '梦幻粉', primary: '#FF8FB0', accent: '#FF6B9D' },
@@ -24,7 +26,7 @@ export const THEMES: ThemeDefinition[] = [
   { id: 'cherry-rose', name: '樱绯红', primary: '#FF7070', accent: '#FF5252' },
 ];
 
-export const DEFAULT_THEME: ThemeId = 'tech-blue';
+export const DEFAULT_THEME: ThemeId = 'classic-blue';
 export const THEME_STORAGE_KEY = 'huishi:theme';
 
 const VALID_THEME_IDS = new Set<string>(THEMES.map((theme) => theme.id));
@@ -34,7 +36,9 @@ export function isThemeId(value: unknown): value is ThemeId {
 }
 
 export function getThemeById(id: string | null | undefined): ThemeDefinition {
-  return THEMES.find((theme) => theme.id === id) ?? THEMES[0];
+  return THEMES.find((theme) => theme.id === id)
+    ?? THEMES.find((theme) => theme.id === DEFAULT_THEME)
+    ?? THEMES[0];
 }
 
 export function getStoredTheme(): ThemeId {

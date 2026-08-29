@@ -7,10 +7,10 @@ import {
   MODEL_SEED_KEY_BY_URL,
 } from './modelInfoProfiles.ts';
 
-test('17 个内置资源均有稳定且完整的模型说明', () => {
-  assert.equal(BUILTIN_MODEL_SEED_KEYS.length, 17);
-  assert.equal(new Set(BUILTIN_MODEL_SEED_KEYS).size, 17);
-  assert.equal(Object.keys(MODEL_SEED_KEY_BY_URL).length, 17);
+test('19 个内置资源均有稳定且完整的模型说明', () => {
+  assert.equal(BUILTIN_MODEL_SEED_KEYS.length, 19);
+  assert.equal(new Set(BUILTIN_MODEL_SEED_KEYS).size, 19);
+  assert.equal(Object.keys(MODEL_SEED_KEY_BY_URL).length, 19);
 
   for (const seedKey of BUILTIN_MODEL_SEED_KEYS) {
     const profile = getModelInfoProfile(seedKey);

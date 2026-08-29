@@ -17,6 +17,7 @@
 - Node.js 20 LTS 或 22+
 - npm
 - MySQL
+- 最新版 Chrome 或 Edge（语音识别使用浏览器 Web Speech API）
 
 ## 快速开始
 
@@ -46,8 +47,7 @@ npm run build          # 构建前端
 npm run preview        # 预览前端构建产物
 npm run test:voice     # 语音与交互服务测试
 npm run test:resource  # 资源库测试
-npm run test:asr       # 语音识别测试
 npm run test:memory    # 学习记忆测试
 ```
 
-本地流式语音识别需要额外下载模型，详见 [ASR 部署说明](docs/asr-deployment.md)。
+语音识别直接使用浏览器 Web Speech API，无需下载本地模型。浏览器实现可能依赖厂商的在线识别服务，不保证离线可用。

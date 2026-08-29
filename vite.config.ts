@@ -9,9 +9,8 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        // The API validates WebSocket origins against CLIENT_ORIGIN. Silently
-        // moving the web app to 3001 leaves normal HTTP requests looking
-        // healthy while ASR/TTS upgrades are rejected by the API on 4000.
+        // The API validates TTS WebSocket origins against CLIENT_ORIGIN.
+        // Keep the web port stable so proxy upgrades continue to match it.
         strictPort: true,
         host: '0.0.0.0',
         proxy: {
@@ -20,10 +19,6 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             xfwd: true,
             ws: true,
-          },
-          '/tts': {
-            target: env.XIAOZHI_TTS_ORIGIN || 'http://127.0.0.1:8787',
-            changeOrigin: true,
           },
         },
       },

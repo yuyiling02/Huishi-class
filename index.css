@@ -103,7 +103,26 @@
 /* 主题配色变量：通过 <html data-theme="..."> 切换。
    浅色模式：背景/文字/边框随主题变化，深色文字保证对比度与可读性。 */
 :root {
-  /* 科技蓝（默认）— 全深色面板主题 */
+  /* 经典蓝（默认）— 还原 05bdd57 版本的深海蓝配色 */
+  --theme-primary: #3D81E3;
+  --theme-accent: #00D2FF;
+  --theme-primary-rgb: 61, 129, 227;
+  --theme-accent-rgb: 0, 210, 255;
+  --theme-accent-strong: #3FF6FF;
+  --theme-accent-text: #00D2FF;
+  --theme-bg: #020812;
+  --theme-bg-soft: #041029;
+  --theme-bg-rgb: 2, 8, 18;
+  --theme-ink: #FFFFFF;
+  --theme-ink-soft: #94A3B8;
+  --danger-color: #E64848;
+  --canvas-bg: #020C17;
+}
+:root[data-theme]:not([data-theme='classic-blue']) {
+  /* 经典蓝以外的现有主题继续使用原有舞台底色。 */
+  --canvas-bg: #1A2230;
+}
+:root[data-theme='tech-blue'] {
   --theme-primary: #3D9EFF;
   --theme-accent: #24F7FF;
   --theme-primary-rgb: 61, 158, 255;
@@ -115,8 +134,6 @@
   --theme-bg-rgb: 15, 23, 41;
   --theme-ink: #FFFFFF;
   --theme-ink-soft: #A8C5E0;
-  --danger-color: #E64848;
-  --canvas-bg: #1A2230;
 }
 :root[data-theme='dream-pink'] {
   --theme-primary: #FF8FB0;
@@ -401,6 +418,56 @@ html, body {
   backdrop-filter: blur(18px);
 }
 
+/* Dense control surfaces stay opaque enough to preserve crisp text and icons. */
+.lab-instruction-card,
+.lab-assistant-log {
+  border: 1px solid color-mix(in oklab, var(--theme-accent-text) 34%, transparent);
+  background: color-mix(in oklab, var(--theme-bg) 92%, var(--theme-ink));
+  box-shadow: 0 10px 26px rgb(0 0 0 / 18%);
+}
+
+.lab-assistant-log {
+  background: color-mix(in oklab, var(--theme-bg) 95%, var(--theme-ink));
+}
+
+.lab-instruction-switch {
+  border: 1px solid color-mix(in oklab, var(--theme-ink) 7%, transparent);
+  background: color-mix(in oklab, var(--theme-bg) 97%, var(--theme-ink));
+}
+
+.lab-instruction-icon {
+  border: 1px solid color-mix(in oklab, var(--theme-accent-text) 18%, transparent);
+  background: color-mix(in oklab, var(--theme-bg) 88%, var(--theme-accent-text));
+}
+
+.lab-gesture-capture-button {
+  border-color: color-mix(in oklab, var(--theme-accent-text) 30%, transparent);
+  background: color-mix(in oklab, var(--theme-accent-text) 8%, var(--theme-bg));
+  color: var(--theme-accent-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 15px rgba(var(--theme-accent-rgb), 0.08);
+}
+
+.lab-gesture-capture-button:hover:not(.is-active):not(.is-disabled) {
+  border-color: color-mix(in oklab, var(--theme-accent-text) 50%, transparent);
+  background: color-mix(in oklab, var(--theme-accent-text) 14%, var(--theme-bg));
+  color: var(--theme-accent-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 18px rgba(var(--theme-accent-rgb), 0.12);
+}
+
+.lab-gesture-capture-button.is-disabled {
+  border-color: color-mix(in oklab, var(--theme-accent-text) 20%, transparent);
+  background: color-mix(in oklab, var(--theme-accent-text) 5%, var(--theme-bg));
+  color: color-mix(in oklab, var(--theme-ink-soft) 72%, var(--theme-bg));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+}
+
+.lab-gesture-capture-button.is-active {
+  border-color: rgba(244, 63, 94, 0.5);
+  background: rgba(127, 29, 29, 0.38);
+  color: rgb(251, 113, 133);
+  box-shadow: 0 0 15px rgba(244,63,94,0.15);
+}
+
 .lab-workspace {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -430,13 +497,13 @@ html, body {
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(58, 151, 255, 0.15);
-  border-radius: 30px;
-  color: #fff;
+  border: 1px solid color-mix(in oklab, var(--theme-accent-text) 22%, transparent);
+  border-radius: 24px;
+  color: var(--theme-ink);
   background:
-    radial-gradient(circle at 78% 4%, rgba(34, 211, 238, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(7, 22, 36, 0.96), rgba(4, 14, 25, 0.88));
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02), 0 24px 60px rgba(0,0,0,0.25);
+    radial-gradient(circle at 78% 4%, rgba(var(--theme-accent-rgb), 0.08), transparent 28%),
+    linear-gradient(180deg, color-mix(in oklab, var(--theme-bg-soft) 94%, var(--theme-ink)), color-mix(in oklab, var(--theme-bg) 96%, transparent));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.025), 0 18px 44px rgba(0,0,0,0.22);
   backdrop-filter: blur(22px);
 }
 
@@ -447,9 +514,9 @@ html, body {
   margin: 10px;
   padding: 4px;
   flex: 0 0 auto;
-  border: 1px solid rgba(255,255,255,0.055);
-  border-radius: 16px;
-  background: rgba(1, 8, 16, 0.5);
+  border: 1px solid color-mix(in oklab, var(--theme-ink) 7%, transparent);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--theme-bg) 96%, var(--theme-ink));
 }
 
 .lab-detail-tab,
@@ -460,8 +527,8 @@ html, body {
   justify-content: center;
   gap: 7px;
   border: 1px solid transparent;
-  border-radius: 12px;
-  color: rgba(148, 163, 184, 0.78);
+  border-radius: 10px;
+  color: color-mix(in oklab, var(--theme-ink-soft) 84%, var(--theme-bg));
   background: transparent;
   font-size: 11px;
   font-weight: 800;
@@ -470,19 +537,19 @@ html, body {
 
 .lab-detail-tab:hover,
 .lab-detail-close:hover {
-  color: rgba(226, 232, 240, 0.96);
-  background: rgba(255,255,255,0.045);
+  color: var(--theme-ink);
+  background: color-mix(in oklab, var(--theme-accent-text) 7%, transparent);
 }
 
 .lab-detail-tab.is-active {
-  color: #cffafe;
-  border-color: rgba(34, 211, 238, 0.2);
-  background: rgba(34, 211, 238, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 0 18px rgba(34,211,238,0.07);
+  color: var(--theme-accent-text);
+  border-color: color-mix(in oklab, var(--theme-accent-text) 32%, transparent);
+  background: color-mix(in oklab, var(--theme-accent-text) 11%, var(--theme-bg));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 0 16px rgba(var(--theme-accent-rgb),0.08);
 }
 
 .lab-detail-close {
-  color: rgba(148, 163, 184, 0.6);
+  color: color-mix(in oklab, var(--theme-ink-soft) 70%, var(--theme-bg));
 }
 
 .lab-stage-tools {

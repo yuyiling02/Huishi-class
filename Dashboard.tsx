@@ -1024,7 +1024,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
         setResourceLibraryError('');
         setExpandedCategories((current) => {
           const next = new Set(current);
-          visibleTags.filter((tag) => tag.name === '地理').forEach((tag) => next.add(resourceCategoryKey(tag.id)));
+          visibleTags.forEach((tag) => next.add(resourceCategoryKey(tag.id)));
           return next;
         });
       })
@@ -3276,14 +3276,14 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               <div>
                 <h3 className="font-black text-xs text-ink-soft uppercase tracking-[0.2em] mt-2 mb-2 border-l-4 border-cyan pl-3">全息指令表</h3>
                 <div className="space-y-4">
-                  <div className="p-3 rounded-2xl bg-slate-800/70 border border-cyan-500/30 space-y-3 backdrop-blur-sm">
+                  <div className="lab-instruction-card space-y-3 rounded-2xl p-3">
                     {/* Tab 切换 */}
-                    <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-900/60 p-1">
+                    <div className="lab-instruction-switch grid grid-cols-2 gap-1 rounded-xl p-1">
                       <button
                         type="button"
                         onClick={() => setInstructionTab('gesture')}
                         className={`flex items-center justify-center gap-1 rounded-lg py-1.5 text-[10px] font-black transition-all ${
-                          instructionTab === 'gesture' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'
+                          instructionTab === 'gesture' ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-[0_3px_10px_rgba(0,210,255,0.22)]' : 'text-ink-soft hover:bg-white/[0.05] hover:text-ink'
                         }`}
                       >
                         <Hand size={11} /> 手势
@@ -3292,7 +3292,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                         type="button"
                         onClick={() => setInstructionTab('voice')}
                         className={`flex items-center justify-center gap-1 rounded-lg py-1.5 text-[10px] font-black transition-all ${
-                          instructionTab === 'voice' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'
+                          instructionTab === 'voice' ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-[0_3px_10px_rgba(0,210,255,0.22)]' : 'text-ink-soft hover:bg-white/[0.05] hover:text-ink'
                         }`}
                       >
                         <Mic size={11} /> 语音
@@ -3302,18 +3302,18 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                     {instructionTab === 'gesture' ? (
                       <>
                         {/* 手势模式切换 */}
-                        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900/60 p-1">
+                        <div className="lab-instruction-switch grid grid-cols-2 gap-2 rounded-2xl p-1">
                           <button
                             type="button"
                             onClick={() => handleInteractionModeChange('dual')}
-                            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'}`}
+                            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'dual' ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-[0_3px_10px_rgba(0,210,255,0.22)]' : 'text-ink-soft hover:bg-white/[0.05] hover:text-ink'}`}
                           >
                             <Move3d size={13} /> 双手模式
                           </button>
                           <button
                             type="button"
                             onClick={() => handleInteractionModeChange('single')}
-                            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-gradient-to-r from-cyan-500/90 to-teal-500/90 text-white shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60'}`}
+                            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[10px] font-black transition ${interactionMode === 'single' ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-[0_3px_10px_rgba(0,210,255,0.22)]' : 'text-ink-soft hover:bg-white/[0.05] hover:text-ink'}`}
                           >
                             <Hand size={13} /> 单手模式
                           </button>
@@ -3322,49 +3322,49 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                         {interactionMode === 'dual' ? (
                           <>
                             <div className="flex items-center gap-2 pb-2 border-b border-cyan-500/30">
-                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Move3d size={14} className="text-cyan-300" /></div>
+                              <div className="lab-instruction-icon rounded-lg p-1.5"><Move3d size={14} className="text-cyan" /></div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-300 uppercase">双手协同</span>
-                                <span className="text-[9px] text-cyan-300 font-bold">左手缩放 | 右手旋转/拖拽</span>
+                                <span className="text-[10px] font-black text-ink uppercase">双手协同</span>
+                                <span className="text-[9px] text-cyan font-bold">左手缩放 | 右手旋转/拖拽</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Hand size={14} className="text-cyan-300" /></div>
+                              <div className="lab-instruction-icon rounded-lg p-1.5"><Hand size={14} className="text-cyan" /></div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-300 uppercase">左手缩放</span>
-                                <span className="text-[9px] text-slate-300 font-bold">张开 → 放大 | 握拳 → 缩小</span>
+                                <span className="text-[10px] font-black text-ink uppercase">左手缩放</span>
+                                <span className="text-[9px] text-ink-soft font-bold">张开 → 放大 | 握拳 → 缩小</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><ScanFace size={14} className="text-cyan-300" /></div>
+                              <div className="lab-instruction-icon rounded-lg p-1.5"><ScanFace size={14} className="text-cyan" /></div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-300 uppercase">右手交互</span>
-                                <span className="text-[9px] text-cyan-300 font-bold">捏合 → 拖拽零件</span>
-                                <span className="text-[9px] text-slate-300 font-bold">食指+中指并拢滑动 → 旋转画面</span>
+                                <span className="text-[10px] font-black text-ink uppercase">右手交互</span>
+                                <span className="text-[9px] text-cyan font-bold">捏合 → 拖拽零件</span>
+                                <span className="text-[9px] text-ink-soft font-bold">食指+中指并拢滑动 → 旋转画面</span>
                               </div>
                             </div>
                           </>
                         ) : (
                           <>
                             <div className="flex items-center gap-2 pb-2 border-b border-cyan-500/30">
-                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Hand size={14} className="text-cyan-300" /></div>
+                              <div className="lab-instruction-icon rounded-lg p-1.5"><Hand size={14} className="text-cyan" /></div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-300 uppercase">右手优先</span>
-                                <span className="text-[9px] text-cyan-300 font-bold">张掌放大 | 握拳缩小</span>
+                                <span className="text-[10px] font-black text-ink uppercase">右手优先</span>
+                                <span className="text-[9px] text-cyan font-bold">张掌放大 | 握拳缩小</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><Hand size={14} className="text-cyan-300" /></div>
+                              <div className="lab-instruction-icon rounded-lg p-1.5"><Hand size={14} className="text-cyan" /></div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-300 uppercase">捏合拖拽</span>
-                                <span className="text-[9px] text-slate-300 font-bold">食指+拇指捏合 → 拖拽零件</span>
+                                <span className="text-[10px] font-black text-ink uppercase">捏合拖拽</span>
+                                <span className="text-[9px] text-ink-soft font-bold">食指+拇指捏合 → 拖拽零件</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="p-1.5 bg-cyan-900/50 rounded-lg"><ScanFace size={14} className="text-cyan-300" /></div>
+                              <div className="lab-instruction-icon rounded-lg p-1.5"><ScanFace size={14} className="text-cyan" /></div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-300 uppercase">互斥控制</span>
-                                <span className="text-[9px] text-cyan-300 font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
+                                <span className="text-[10px] font-black text-ink uppercase">互斥控制</span>
+                                <span className="text-[9px] text-cyan font-bold">双指旋转优先；缩放与拖拽不会同时触发</span>
                               </div>
                             </div>
                           </>
@@ -3402,11 +3402,11 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                       }
                       setCameraActive(!cameraActive);
                     }}
-                    className={`w-full py-3 rounded-2xl text-[10px] font-black tracking-widest uppercase border transition-all ${activeContent === 'biodigital'
-                      ? 'bg-cyan-950/10 border-cyan/20 text-slate-500 cursor-not-allowed'
+                    className={`lab-gesture-capture-button w-full py-3 rounded-2xl text-[10px] font-black tracking-widest uppercase border transition-all ${activeContent === 'biodigital'
+                      ? 'is-disabled cursor-not-allowed'
                       : cameraActive
-                      ? 'bg-rose-950/30 border-rose-900/50 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
-                      : 'bg-cyan-950/30 border-cyan/50 text-cyan hover:bg-cyan-900/40 hover:text-cyan shadow-[0_0_15px_rgba(34,211,238,0.1)]'
+                      ? 'is-active'
+                      : ''
                       }`}
                   >
                     {activeContent === 'biodigital' ? '手势捕捉不可用' : cameraActive ? '停用摄像头' : '启用手势捕捉'}
@@ -3415,7 +3415,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
               </div>
 
               <div className="mt-auto pt-4">
-                <div className="bg-cyan-950/20 p-4 rounded-2xl border border-cyan/40 relative overflow-hidden">
+                <div className="lab-assistant-log relative overflow-hidden rounded-2xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <MessageSquare size={14} className="text-cyan" />
                     <p className="text-[10px] text-cyan font-bold uppercase tracking-wider">助教日志</p>

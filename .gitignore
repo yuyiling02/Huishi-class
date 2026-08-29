@@ -7,8 +7,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+.env
 node_modules
-models/asr/
 dist
 dist-ssr
 .git-local/
@@ -18,9 +18,6 @@ dist-ssr
 scripts/__pycache__/
 __pycache__/
 scripts/.geo_cache/
-services/GPT-SoVITS
-services/GPT-SoVITS/
-services/tts.log
 server/storage/resource-models/
 
 # Editor directories and files

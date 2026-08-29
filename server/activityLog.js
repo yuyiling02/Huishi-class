@@ -54,7 +54,6 @@ const ACTION_DESCRIPTIONS = {
   '3d.job.submit': '用户提交了 3D 建模任务',
   '3d.job.query': '用户查询了 3D 建模任务状态',
   '3d.model.view': '用户打开了 3D 模型文件',
-  'asr.health.view': '用户检查了语音服务状态',
   'activity.event.submit': '用户提交了课堂行为记录',
   'ai.completion': '用户请求了小智课堂分析',
   'ai.stream': '用户请求了小智课堂讲解',
@@ -154,7 +153,6 @@ function humanizePath(path) {
     completion: '分析',
     stream: '讲解',
     health: '服务状态',
-    asr: '语音服务',
     '3d': '3D 建模',
     submit: '提交',
     query: '查询',
@@ -439,8 +437,6 @@ export function mapActivityAction({ method = 'GET', path = '/', statusCode = 200
     return actionWithFailure('3d.job.query', statusCode);
   }
   if (normalizedMethod === 'GET' && normalizedPath === '/api/3d/model') return '3d.model.view';
-  if (normalizedMethod === 'GET' && normalizedPath === '/api/asr/health') return 'asr.health.view';
-
   if (normalizedMethod === 'POST' && normalizedPath === '/api/ai/completion') return 'ai.completion';
   if (normalizedMethod === 'POST' && normalizedPath === '/api/ai/stream') return 'ai.stream';
   if (normalizedMethod === 'POST' && normalizedPath === '/api/memory/sessions') return 'memory.session.create';

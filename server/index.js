@@ -26,7 +26,6 @@ import {
   updateLastAccess,
   validateOptionalSchool,
 } from './activityLog.js';
-import { attachAsrWebSocketServer, createAsrService } from './asr.js';
 import { initializeLearningMemory, registerLearningMemoryRoutes, startLearningMemoryJobs } from './learningMemory.js';
 import { initializeQuizWrongBook, registerQuizWrongBookRoutes } from './quizWrongBook.js';
 import { applyOrganResourceSeed } from './resourceLibrarySeeds.js';
@@ -57,6 +56,17 @@ const RESOURCE_ASSET_EXTENSIONS = new Set([
   '.bin', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tga', '.ktx', '.ktx2', '.dds',
 ]);
 const RESOURCE_ICON_KEYS = new Set(['box', 'flask', 'heart', 'globe', 'atom']);
+const DEFAULT_THEME_ID = 'classic-blue';
+const THEME_IDS = new Set([
+  DEFAULT_THEME_ID,
+  'tech-blue',
+  'dream-pink',
+  'forest-green',
+  'violet',
+  'sunset-orange',
+  'golden',
+  'cherry-rose',
+]);
 
 app.set('trust proxy', TRUST_PROXY);
 
@@ -131,7 +141,7 @@ function publicUser(user) {
     school: user.school ?? null,
     lastAccessAt: user.last_access_at ?? null,
     lastAccessIp: user.last_access_ip ?? null,
-    theme: user.theme || 'tech-blue',
+    theme: THEME_IDS.has(user.theme) ? user.theme : DEFAULT_THEME_ID,
     role: user.role,
     status: user.status,
     createdAt: user.created_at,
@@ -231,6 +241,18 @@ async function ensureUsersColumn(name, definition) {
   const [columns] = await pool.query('SHOW COLUMNS FROM users LIKE ?', [name]);
   if (columns.length === 0) {
     await pool.query(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+  }
+}
+
+async function ensureUsersThemeColumn() {
+  const [columns] = await pool.query("SHOW COLUMNS FROM users LIKE 'theme'");
+  if (columns.length === 0) {
+    await pool.query("ALTER TABLE users ADD COLUMN theme VARCHAR(24) NOT NULL DEFAULT 'classic-blue' AFTER last_access_ip");
+    return;
+  }
+
+  if (columns[0].Default !== DEFAULT_THEME_ID) {
+    await pool.query("ALTER TABLE users ALTER COLUMN theme SET DEFAULT 'classic-blue'");
   }
 }
 
@@ -706,7 +728,7 @@ async function initializeDatabase() {
   await ensureUsersColumn('avatar_data_url', 'MEDIUMTEXT NULL AFTER display_name');
   await ensureUsersColumn('last_access_at', 'DATETIME NULL AFTER updated_at');
   await ensureUsersColumn('last_access_ip', 'VARCHAR(45) NULL AFTER last_access_at');
-  await ensureUsersColumn('theme', "VARCHAR(24) NOT NULL DEFAULT 'tech-blue' AFTER last_access_ip");
+  await ensureUsersThemeColumn();
 
   await initializeActivityLog(pool);
 
@@ -989,10 +1011,8 @@ app.patch('/api/voice/preferences', requireAuth, async (req, res) => {
   res.json({ preference });
 });
 
-const THEME_IDS = new Set(['tech-blue', 'dream-pink', 'forest-green', 'violet', 'sunset-orange', 'golden', 'cherry-rose']);
-
 app.get('/api/theme', requireAuth, (req, res) => {
-  const theme = THEME_IDS.has(req.user.theme) ? req.user.theme : 'tech-blue';
+  const theme = THEME_IDS.has(req.user.theme) ? req.user.theme : DEFAULT_THEME_ID;
   res.json({ theme });
 });
 
@@ -1479,19 +1499,7 @@ app.get('/api/3d/model', requireAuth, async (req, res) => {
   }
 });
 
-const asrService = createAsrService();
 const volcTtsService = createVolcTtsService();
-
-app.get('/api/asr/health', requireAuth, (_req, res) => {
-  res.json(asrService.getHealth());
-});
-
-attachAsrWebSocketServer({
-  server: httpServer,
-  asrService,
-  authenticate: authenticateWebSocketRequest,
-  allowedOrigin: CLIENT_ORIGIN,
-});
 
 attachVolcTtsWebSocketServer({
   server: httpServer,
@@ -1516,7 +1524,7 @@ initializeDatabase()
   .then(() => {
     startLearningMemoryJobs(() => pool);
     httpServer.listen(PORT, () => {
-      console.log(`API and ASR WebSocket listening on http://localhost:${PORT}`);
+      console.log(`API and TTS WebSocket listening on http://localhost:${PORT}`);
     });
   })
   .catch((error) => {

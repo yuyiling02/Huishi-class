@@ -10,9 +10,11 @@ import {
   type VoiceRecognitionState,
 } from '../services/voiceInputLifecycle';
 import {
-  describeAsrError,
-  ServerSpeechRecognition,
-} from '../services/serverSpeechRecognition';
+  BrowserSpeechRecognition,
+  BrowserSpeechRecognitionError,
+  describeBrowserSpeechRecognitionError,
+  isBrowserSpeechRecognitionSupported,
+} from '../services/browserSpeechRecognition';
 
 // ====== 语音命令模式（扩展版，支持中英混合 + 自然语言变体）======
 // 注意：lock_rotation 用 _WEAK 标记容易误伤的模糊词（单独的 stop/pause/freeze），
@@ -109,7 +111,8 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [speechActive, setSpeechActive] = useState(isXiaozhiSpeechActive);
   const [recognizedText, setRecognizedText] = useState('');
-  const recognitionRef = useRef<ServerSpeechRecognition | null>(null);
+  const [speechRecognitionSupported] = useState(isBrowserSpeechRecognitionSupported);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const sessionStartingRef = useRef(false);
   const stoppedRef = useRef(false);
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,7 +135,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   const assistantSpeakingRef = useRef(assistantSpeaking);
   const assistantSpeechTextRef = useRef(assistantSpeechText);
 
-  // The server recognition client keeps its original callbacks for the whole
+  // The browser recognition client keeps its original callbacks for the whole
   // session. Keep changing interaction state/callbacks fresh without reconnecting.
   answerOnlyRef.current = answerOnly;
   answerOptionsRef.current = answerOptions;
@@ -245,21 +248,29 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   }, [controlRef, isAssistantEcho, onRecognizedText, onStatusChange, publishRecognitionState, stopSession]);
 
   const startSession = useCallback(async () => {
+    if (!speechRecognitionSupported) {
+      const message = describeBrowserSpeechRecognitionError(
+        new BrowserSpeechRecognitionError('unsupported', 'SpeechRecognition is unavailable'),
+      );
+      onStatusChange(message);
+      publishRecognitionState({ phase: 'error', message });
+      return false;
+    }
     if (disabledRef.current || !listeningAllowedRef.current || isXiaozhiSpeechActive() || sessionStartingRef.current || recognitionRef.current) return false;
     stoppedRef.current = false;
     pausedForAssistantRef.current = false;
     sessionStartingRef.current = true;
     setIsConnecting(true);
-    onStatusChange('正在连接服务器语音识别...');
+    onStatusChange('正在启动浏览器语音识别...');
     publishRecognitionState({ phase: 'connecting' });
 
-    const recognition = new ServerSpeechRecognition({
+    const recognition = new BrowserSpeechRecognition({
       onPartial: (text) => handleRecognition(text, false),
       onFinal: (text) => handleRecognition(text, true),
       onError: (error) => {
         if (recognitionRef.current !== recognition) return;
         stopSession();
-        const message = describeAsrError(error);
+        const message = describeBrowserSpeechRecognitionError(error);
         onStatusChange(message);
         publishRecognitionState({ phase: 'error', message });
       },
@@ -280,15 +291,18 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
       onActiveChange?.(true);
       publishRecognitionState({ phase: 'listening' });
       onStatusChange(answerOnlyRef.current
-        ? '服务器语音识别已就绪（请说 A 或 B）'
-        : '服务器语音识别已就绪（试试说：放大、缩小、旋转、停止旋转）');
+        ? '浏览器语音识别已就绪（请说 A 或 B）'
+        : '浏览器语音识别已就绪（试试说：放大、缩小、旋转、停止旋转）');
       return true;
     } catch (error) {
       if (recognitionRef.current === recognition) recognitionRef.current = null;
       stoppedRef.current = true;
       setIsActive(false);
       onActiveChange?.(false);
-      const message = describeAsrError(error as any);
+      const recognitionError = error instanceof BrowserSpeechRecognitionError
+        ? error
+        : new BrowserSpeechRecognitionError('start_failed', error instanceof Error ? error.message : String(error));
+      const message = describeBrowserSpeechRecognitionError(recognitionError);
       onStatusChange(message);
       publishRecognitionState({ phase: 'error', message });
       return false;
@@ -296,7 +310,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
       sessionStartingRef.current = false;
       setIsConnecting(false);
     }
-  }, [handleRecognition, onActiveChange, onStatusChange, publishRecognitionState, stopSession]);
+  }, [handleRecognition, onActiveChange, onStatusChange, publishRecognitionState, speechRecognitionSupported, stopSession]);
 
   const toggleVoice = useCallback(() => {
     if (isActive) {
@@ -334,6 +348,14 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   const tryPendingActivation = useCallback(() => {
     const request = pendingActivationRequestRef.current;
     if (!request || request.id === lastActivateRequestRef.current) return;
+    if (!speechRecognitionSupported) {
+      const message = '当前浏览器不支持语音识别，请使用最新版 Chrome 或 Edge。';
+      lastActivateRequestRef.current = request.id;
+      pendingActivationRequestRef.current = null;
+      onStatusChange(message);
+      publishRecognitionState({ phase: 'error', message });
+      return;
+    }
     const disposition = getVoiceActivationDisposition(request, {
       answerOnly: answerOnlyRef.current,
       activeAnswerQuestionId: activeAnswerQuestionIdRef.current,
@@ -364,7 +386,7 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
       lastActivateRequestRef.current = request.id;
       pendingActivationRequestRef.current = null;
     });
-  }, [disabled, isActive, listeningAllowed, publishRecognitionState, speechActive, startSession]);
+  }, [disabled, isActive, listeningAllowed, onStatusChange, publishRecognitionState, speechActive, speechRecognitionSupported, startSession]);
 
   useEffect(() => {
     if (!activateRequest || activateRequest.id === lastActivateRequestRef.current) return;
@@ -386,8 +408,8 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
   }, [deactivateRequest, stopSession]);
 
   useEffect(() => {
-    // Release the stream even while the recognizer is still connecting. This
-    // prevents the assistant's own playback from being sent back to ASR.
+    // Abort recognition even while the browser is still requesting permission.
+    // This prevents the assistant's own playback from being recognized.
     if ((disabled || !listeningAllowed || isXiaozhiSpeechActive()) && recognitionRef.current) stopSession();
   }, [disabled, listeningAllowed, stopSession]);
 
@@ -443,14 +465,16 @@ const VoiceController: React.FC<VoiceControllerProps> = ({
       )}
       <button
         onClick={toggleVoice}
-        disabled={isConnecting || disabled}
+        disabled={isConnecting || disabled || !speechRecognitionSupported}
         className={`p-3 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.15)] border transition-all active:scale-95 hover:scale-105 ${
-          disabled
+          disabled || !speechRecognitionSupported
             ? 'bg-cyan-950/20 border-cyan/30 text-slate-600 cursor-not-allowed shadow-none'
             : isActive ? 'bg-rose-950/40 border-rose-900/50 text-rose-400 animate-pulse shadow-[0_0_20px_rgba(244,63,94,0.3)]' : 'bg-cyan-950/40 border-cyan/50 text-cyan hover:bg-cyan-900/60 hover:text-cyan shadow-[0_0_15px_rgba(34,211,238,0.3)]'
         }`}
         aria-label={isActive ? '关闭语音识别' : '开启语音识别'}
-        title={disabled ? '请先加载模型' : (isActive ? '关闭语音识别' : '开启语音识别')}
+        title={!speechRecognitionSupported
+          ? '当前浏览器不支持语音识别，请使用最新版 Chrome 或 Edge'
+          : disabled ? '请先加载模型' : (isActive ? '关闭语音识别' : '开启语音识别')}
       >
         {isConnecting ? <Loader2 className="animate-spin" size={20} /> : isActive ? <Mic size={20} /> : <MicOff size={20} />}
       </button>
