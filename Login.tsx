@@ -1,5 +1,5 @@
 import React, { FormEvent, useMemo, useState, useRef } from 'react';
-import { ArrowLeft, Fingerprint, Lock, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Fingerprint, Lock, ShieldCheck, UserPlus } from 'lucide-react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, Sphere, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -163,6 +163,7 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
   const [username, setUsername] = useState('');
   const [school, setSchool] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { themeDef } = useTheme();
@@ -299,15 +300,25 @@ const Login: React.FC<LoginProps> = ({ onAuthenticated, onBack }) => {
 
             <label className="block">
               <span className="text-sm font-medium text-ink/70">密码</span>
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="mt-2 h-12 w-full rounded-lg border border-line/10 bg-white/[0.04] px-4 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.07]"
-                placeholder="请输入密码"
-                type="password"
-                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                required
-              />
+              <div className="relative mt-2">
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="h-12 w-full rounded-lg border border-line/10 bg-white/[0.04] px-4 pr-12 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.07]"
+                  placeholder="请输入密码"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 grid h-8 w-8 place-items-center rounded-md text-ink/40 transition hover:bg-white/10 hover:text-ink/80"
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </label>
 
             {mode === 'register' && (

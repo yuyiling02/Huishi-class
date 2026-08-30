@@ -15,7 +15,7 @@ import FollowUpQuestionOverlay from './components/FollowUpQuestionOverlay';
 import MultiAgentPanel from './components/MultiAgentPanel';
 import ModelDetailPanel, { type DetailPanelTab } from './components/ModelDetailPanel';
 import { buildTeachingPlan, getTeachingModelName, inferTeachingModel, buildKnowledgeExplanation, buildOrchestratorDecision, buildFollowUpQuestion, getAutonomousDisassemblyArgs } from './services/agentRuntime';
-import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen, BookOpenCheck, Mic } from 'lucide-react';
+import { Sparkles, Box, Atom, Globe, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Hand, ScanFace, Move3d, Maximize2, Minimize2, FlaskConical, Heart, Settings, ShieldCheck, X, ClipboardCheck, Loader2, LockKeyhole, Play, Download, LogOut, Upload, FolderOpen, Trash2, Volume2, ScanLine, Layers3, Info, PanelRightOpen, BookOpenCheck, Mic, Star } from 'lucide-react';
 import { ModelType } from './types';
 import type { AuthUser } from './Login';
 import { getLocalModel, listLocalModels, deleteLocalModel, hideStaticModel, listHiddenStaticModelIds, saveUploadedModel, type LocalModelSummary } from './services/localModelLibrary';
@@ -322,6 +322,12 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<number>(0);
+  const [feedbackScene, setFeedbackScene] = useState<string>('');
+  const [feedbackSceneOther, setFeedbackSceneOther] = useState<string>('');
+  const [feedbackFeatures, setFeedbackFeatures] = useState<string[]>([]);
+  const [feedbackVoiceAccuracy, setFeedbackVoiceAccuracy] = useState<string>('');
+  const [feedbackModelClarity, setFeedbackModelClarity] = useState<string>('');
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [feedbackMessage, setFeedbackMessage] = useState('');
@@ -2198,6 +2204,12 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   };
 
   const resetFeedback = () => {
+    setFeedbackRating(0);
+    setFeedbackScene('');
+    setFeedbackSceneOther('');
+    setFeedbackFeatures([]);
+    setFeedbackVoiceAccuracy('');
+    setFeedbackModelClarity('');
     setFeedbackText('');
     setFeedbackStatus('idle');
     setFeedbackMessage('');
@@ -2212,9 +2224,20 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
   const submitFeedback = async () => {
     const content = feedbackText.trim();
     const contentLength = Array.from(content).length;
-    if (contentLength < 1 || contentLength > 2000) {
+    if (contentLength > 2000) {
       setFeedbackStatus('error');
-      setFeedbackMessage('反馈内容需为 1-2000 个字符');
+      setFeedbackMessage('自由反馈需为 0-2000 个字符');
+      return;
+    }
+    const hasAny = feedbackRating > 0
+      || feedbackScene !== ''
+      || feedbackFeatures.length > 0
+      || feedbackVoiceAccuracy !== ''
+      || feedbackModelClarity !== ''
+      || content !== '';
+    if (!hasAny) {
+      setFeedbackStatus('error');
+      setFeedbackMessage('请至少填写一项反馈');
       return;
     }
 
@@ -2225,7 +2248,15 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({
+          content,
+          rating: feedbackRating || null,
+          scene: feedbackScene || null,
+          sceneOther: feedbackScene.trim() === 'other' && feedbackSceneOther.trim() ? feedbackSceneOther.trim() : null,
+          features: feedbackFeatures,
+          voiceAccuracy: feedbackVoiceAccuracy || null,
+          modelClarity: feedbackModelClarity || null,
+        }),
       });
 
       if (!response.ok) throw new Error(await readError(response));
@@ -2462,7 +2493,7 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             title={xiaozhiVoiceActive ? '点击关闭语音输入' : '点击开始语音输入'}
             aria-label={xiaozhiVoiceActive ? '关闭语音输入' : '开始语音输入'}
           >
-            <XiaozhiMascot size={15} motion={xiaozhiVoiceActive ? 'happy' : 'static'} /> 小智
+            <XiaozhiMascot size={15} motion={xiaozhiVoiceActive ? 'stateful' : 'static'} /> 小智
           </button>
 
           <ThemeSwitcher />
@@ -2567,14 +2598,14 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
             aria-modal="true"
             aria-labelledby="feedback-dialog-title"
             aria-describedby="feedback-dialog-description"
-            className="w-full max-w-lg rounded-2xl border border-black/10 bg-cyan-50/96 p-6 text-ink shadow-2xl shadow-black/60"
+            className="w-full max-w-xl max-h-[86vh] overflow-y-auto rounded-2xl border border-black/10 bg-cyan-50/96 p-6 text-ink shadow-2xl shadow-black/60"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan/55">Feedback</p>
                 <h2 id="feedback-dialog-title" className="mt-2 text-2xl font-black">使用反馈</h2>
                 <p id="feedback-dialog-description" className="mt-2 text-sm leading-6 text-ink/55">
-                  告诉我们课堂体验、功能建议或遇到的问题。
+                  所有题目均非强制，选填任意项即可提交。
                 </p>
               </div>
               <button
@@ -2593,27 +2624,224 @@ const App: React.FC<DashboardProps> = ({ playIntro = true, initialLocalModelId, 
                 {feedbackMessage}
               </div>
             ) : (
-              <label className="mt-6 block">
-                <span className="text-sm font-bold text-ink/75">反馈内容</span>
-                <textarea
-                  value={feedbackText}
-                  onChange={(event) => {
-                    setFeedbackText(event.target.value);
-                    if (feedbackStatus === 'error') {
-                      setFeedbackStatus('idle');
-                      setFeedbackMessage('');
-                    }
-                  }}
-                  maxLength={2000}
-                  rows={7}
-                  autoFocus
-                  disabled={feedbackStatus === 'submitting'}
-                  aria-invalid={feedbackStatus === 'error'}
-                  className="mt-2 w-full resize-y rounded-xl border border-line/10 bg-white/[0.05] px-4 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08] disabled:cursor-wait disabled:opacity-60"
-                  placeholder="请写下你的建议（最多 2000 字）"
-                />
-                <span className="mt-2 block text-right text-xs text-ink/35">{feedbackText.length} / 2000</span>
-              </label>
+              <div className="mt-6 space-y-6">
+                {/* ⭐ 整体满意度 5星（支持半星） */}
+                <div>
+                  <span className="text-sm font-bold text-ink/75">整体满意度</span>
+                  <div className="mt-2 flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => {
+                      const current = feedbackRating;
+                      const starValue = star;
+                      const halfValue = star - 0.5;
+                      const isFull = current >= starValue;
+                      const isHalf = !isFull && current >= halfValue;
+                      return (
+                        <div key={star} className="relative h-8 w-8">
+                          {/* 整颗按钮 */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFeedbackRating(current === starValue ? 0 : starValue);
+                              if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                            }}
+                            className="absolute inset-0 grid place-items-center rounded transition active:scale-90"
+                            aria-label={`${star} 星`}
+                          >
+                            <Star
+                              className={`h-7 w-7 transition-colors ${isFull ? 'fill-amber-400 text-amber-400' : 'text-ink/20'}`}
+                            />
+                          </button>
+                          {/* 左半边按钮（点半星） */}
+                          {!isFull && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFeedbackRating(current === halfValue ? 0 : halfValue);
+                                if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                              }}
+                              className="absolute left-0 top-0 z-10 h-8 w-4 overflow-hidden grid place-items-center rounded-l"
+                              aria-label={`${halfValue} 星`}
+                            >
+                              <Star className={`h-7 w-7 -ml-1 ${isHalf ? 'fill-amber-400 text-amber-400' : 'text-transparent'}`} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <span className="ml-2 text-sm text-ink/50">
+                      {feedbackRating > 0 ? `${feedbackRating} 星` : '未打分'}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-ink/35">点左边半个 = 半星，点右边整颗 = 整星</div>
+                </div>
+
+                {/* 📍 单选：使用场景 */}
+                <div>
+                  <span className="text-sm font-bold text-ink/75">你最常在哪个场景使用？（单选）</span>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {[
+                      { value: 'classroom', label: '课堂教学' },
+                      { value: 'self', label: '个人自学' },
+                      { value: 'demo', label: '展示演示' },
+                      { value: 'other', label: '其他' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          if (opt.value !== 'other') setFeedbackSceneOther('');
+                          setFeedbackScene(feedbackScene === opt.value ? '' : opt.value);
+                          if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                        }}
+                        className={`h-9 rounded-lg border text-sm transition ${
+                          feedbackScene === opt.value
+                            ? 'border-cyan/60 bg-cyan-300/15 text-ink'
+                            : 'border-line/10 bg-white/5 text-ink/55 hover:bg-white/10 hover:text-ink/80'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {feedbackScene === 'other' && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        value={feedbackSceneOther}
+                        onChange={(e) => {
+                          setFeedbackSceneOther(e.target.value);
+                          if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                        }}
+                        maxLength={80}
+                        placeholder="请输入场景名称（选填）"
+                        className="w-full rounded-lg border border-line/10 bg-white/[0.05] px-3 py-2 text-sm text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08]"
+                      />
+                      <div className="mt-1 text-xs text-ink/35">选填，不写也可以</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ✅ 多选：功能帮助 */}
+                <div>
+                  <span className="text-sm font-bold text-ink/75">哪些功能最有帮助？（可多选）</span>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {[
+                      { value: '3d', label: '3D 模型展示' },
+                      { value: 'voice', label: '语音交互' },
+                      { value: 'quiz', label: '答题测验' },
+                      { value: 'explain', label: '知识讲解' },
+                      { value: 'holo', label: '全息指令表' },
+                      { value: 'wrongbook', label: '错题本' },
+                      { value: 'theme', label: '主题切换' },
+                      { value: 'memory', label: '学习记忆' },
+                    ].map((opt) => {
+                      const checked = feedbackFeatures.includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setFeedbackFeatures(prev => checked ? prev.filter(v => v !== opt.value) : [...prev, opt.value]);
+                            if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                          }}
+                          className={`h-9 rounded-lg border text-sm transition ${
+                            checked
+                              ? 'border-cyan/60 bg-cyan-300/15 text-ink'
+                              : 'border-line/10 bg-white/5 text-ink/55 hover:bg-white/10 hover:text-ink/80'
+                          }`}
+                        >
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`inline-block h-3 w-3 rounded border ${checked ? 'border-cyan bg-cyan' : 'border-ink/30 bg-white/10'}`} />
+                            {opt.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 🎙️ 单选：语音识别准确度 */}
+                <div>
+                  <span className="text-sm font-bold text-ink/75">语音识别准确度如何？（单选）</span>
+                  <div className="mt-2 grid grid-cols-5 gap-2">
+                    {[
+                      { value: 'very_good', label: '非常准' },
+                      { value: 'good', label: '比较准' },
+                      { value: 'normal', label: '一般' },
+                      { value: 'poor', label: '不太准' },
+                      { value: 'bad', label: '很差' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setFeedbackVoiceAccuracy(feedbackVoiceAccuracy === opt.value ? '' : opt.value);
+                          if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                        }}
+                        className={`h-9 rounded-lg border text-xs transition ${
+                          feedbackVoiceAccuracy === opt.value
+                            ? 'border-cyan/60 bg-cyan-300/15 text-ink'
+                            : 'border-line/10 bg-white/5 text-ink/55 hover:bg-white/10 hover:text-ink/80'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 🔬 单选：3D 模型清晰度 */}
+                <div>
+                  <span className="text-sm font-bold text-ink/75">3D 模型展示清晰度（单选）</span>
+                  <div className="mt-2 grid grid-cols-5 gap-2">
+                    {[
+                      { value: 'very_clear', label: '非常清晰' },
+                      { value: 'clear', label: '比较清晰' },
+                      { value: 'normal', label: '一般' },
+                      { value: 'blurry', label: '有点糊' },
+                      { value: 'bad', label: '看不清' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setFeedbackModelClarity(feedbackModelClarity === opt.value ? '' : opt.value);
+                          if (feedbackStatus === 'error') { setFeedbackStatus('idle'); setFeedbackMessage(''); }
+                        }}
+                        className={`h-9 rounded-lg border text-xs transition ${
+                          feedbackModelClarity === opt.value
+                            ? 'border-cyan/60 bg-cyan-300/15 text-ink'
+                            : 'border-line/10 bg-white/5 text-ink/55 hover:bg-white/10 hover:text-ink/80'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ✍️ 自由填写大题 */}
+                <label className="block">
+                  <span className="text-sm font-bold text-ink/75">自由反馈（大题）</span>
+                  <textarea
+                    value={feedbackText}
+                    onChange={(event) => {
+                      setFeedbackText(event.target.value);
+                      if (feedbackStatus === 'error') {
+                        setFeedbackStatus('idle');
+                        setFeedbackMessage('');
+                      }
+                    }}
+                    maxLength={2000}
+                    rows={5}
+                    disabled={feedbackStatus === 'submitting'}
+                    aria-invalid={feedbackStatus === 'error'}
+                    className="mt-2 w-full resize-y rounded-xl border border-line/10 bg-white/[0.05] px-4 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-ink/28 focus:border-cyan/60 focus:bg-white/[0.08] disabled:cursor-wait disabled:opacity-60"
+                    placeholder="有什么想吐槽、建议或功能需求？随便写..."
+                  />
+                  <span className="mt-2 block text-right text-xs text-ink/35">{feedbackText.length} / 2000</span>
+                </label>
+              </div>
             )}
 
             {feedbackStatus === 'error' && (

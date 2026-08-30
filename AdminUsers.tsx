@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Boxes, ClipboardList, LogOut, MonitorPlay, RefreshCw, ShieldCheck, UserCheck, UserCog, Users, UserX } from 'lucide-react';
+import { Boxes, ClipboardList, LogOut, MessageSquare, MonitorPlay, RefreshCw, ShieldCheck, Star, UserCheck, UserCog, Users, UserX } from 'lucide-react';
 import type { AuthUser } from './Login';
 import AdminResourceLibrary from './AdminResourceLibrary';
 import ThemeSwitcher from './components/ThemeSwitcher';
@@ -60,7 +60,7 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ currentUser, onEnterDashboard, 
   const [isLoading, setIsLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'logs' | 'resources'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'logs' | 'resources' | 'feedback'>('users');
   const [resourceRefreshKey, setResourceRefreshKey] = useState(0);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
@@ -68,6 +68,12 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ currentUser, onEnterDashboard, 
   const [selectedLogUserId, setSelectedLogUserId] = useState<number | null>(null);
   const [logsPage, setLogsPage] = useState(1);
   const [logsPagination, setLogsPagination] = useState<LogPagination | null>(null);
+  const [feedbackItems, setFeedbackItems] = useState<any[]>([]);
+  const [feedbackStats, setFeedbackStats] = useState<any>(null);
+  const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [feedbackPagination, setFeedbackPagination] = useState<LogPagination | null>(null);
 
   const loadUsers = async () => {
     setMessage('');
@@ -106,13 +112,35 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ currentUser, onEnterDashboard, 
     }
   };
 
+  const loadFeedback = async () => {
+    setFeedbackMessage('');
+    setIsFeedbackLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(feedbackPage), pageSize: '20' });
+      const response = await fetch(`/api/admin/feedback?${params.toString()}`, { credentials: 'include' });
+      if (!response.ok) throw new Error(await readError(response));
+      const data = await response.json();
+      setFeedbackItems(data.items || []);
+      setFeedbackStats(data.stats || null);
+      setFeedbackPagination(data.pagination || null);
+    } catch (error) {
+      setFeedbackItems([]);
+      setFeedbackStats(null);
+      setFeedbackPagination(null);
+      setFeedbackMessage(error instanceof Error ? error.message : '反馈加载失败');
+    } finally {
+      setIsFeedbackLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadUsers();
   }, []);
 
   useEffect(() => {
     if (activeTab === 'logs') void loadLogs();
-  }, [activeTab, selectedLogUserId, logsPage]);
+    if (activeTab === 'feedback') void loadFeedback();
+  }, [activeTab, selectedLogUserId, logsPage, feedbackPage]);
 
   const openUserLogs = (userId: number) => {
     setSelectedLogUserId(userId);
@@ -242,6 +270,13 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ currentUser, onEnterDashboard, 
             className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md px-4 text-sm font-bold transition sm:flex-none ${activeTab === 'resources' ? 'bg-cyan-300 text-[#06212a]' : 'text-ink/55 hover:bg-white/[0.06] hover:text-ink'}`}
           >
             <Boxes className="h-4 w-4" /> 资源管理
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('feedback')}
+            className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md px-4 text-sm font-bold transition sm:flex-none ${activeTab === 'feedback' ? 'bg-cyan-300 text-[#06212a]' : 'text-ink/55 hover:bg-white/[0.06] hover:text-ink'}`}
+          >
+            <MessageSquare className="h-4 w-4" /> 反馈管理
           </button>
         </div>
 
@@ -434,8 +469,193 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ currentUser, onEnterDashboard, 
               </div>
             </div>
           </section>
-        ) : (
+        ) : activeTab === 'resources' ? (
           <AdminResourceLibrary refreshKey={resourceRefreshKey} />
+        ) : (
+          <section className="space-y-6">
+            {feedbackMessage && (
+              <div className="rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-700">
+                {feedbackMessage}
+              </div>
+            )}
+
+            {/* 统计卡片 */}
+            {feedbackStats && (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="rounded-xl border border-line/10 bg-white/[0.03] p-4">
+                  <div className="text-xs font-bold uppercase tracking-wide text-ink/50">总反馈数</div>
+                  <div className="mt-1 text-2xl font-black tabular-nums">{feedbackStats.total}</div>
+                </div>
+                <div className="rounded-xl border border-line/10 bg-white/[0.03] p-4">
+                  <div className="text-xs font-bold uppercase tracking-wide text-ink/50">平均评分</div>
+                  <div className="mt-1 flex items-center gap-1 text-2xl font-black tabular-nums text-amber-500">
+                    {feedbackStats.avgRating !== null ? feedbackStats.avgRating : '-'}
+                    {feedbackStats.avgRating !== null && <Star className="h-5 w-5 fill-amber-400 text-amber-400" />}
+                  </div>
+                  <div className="mt-0.5 text-xs text-ink/40">{feedbackStats.ratingCount} 人打分</div>
+                </div>
+                <div className="rounded-xl border border-line/10 bg-white/[0.03] p-4">
+                  <div className="text-xs font-bold uppercase tracking-wide text-ink/50">5星占比</div>
+                  <div className="mt-1 text-2xl font-black tabular-nums text-emerald-500">
+                    {feedbackStats.ratingCount > 0 ? Math.round(feedbackStats.ratingBuckets[5] / feedbackStats.ratingCount * 100) : 0}%
+                  </div>
+                </div>
+                <div className="rounded-xl border border-line/10 bg-white/[0.03] p-4">
+                  <div className="text-xs font-bold uppercase tracking-wide text-ink/50">好评率 (≥4星)</div>
+                  <div className="mt-1 text-2xl font-black tabular-nums text-cyan">
+                    {feedbackStats.ratingCount > 0 ? Math.round((feedbackStats.ratingBuckets[4] + feedbackStats.ratingBuckets[5]) / feedbackStats.ratingCount * 100) : 0}%
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 评分分布 + 场景分布 */}
+            {feedbackStats && feedbackStats.ratingCount > 0 && (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border border-line/10 bg-white/[0.03] p-4">
+                  <div className="mb-3 text-sm font-bold text-ink/70">评分分布</div>
+                  <div className="space-y-2">
+                    {[5, 4, 3, 2, 1].map((star) => {
+                      const count = feedbackStats.ratingBuckets[star] || 0;
+                      const pct = feedbackStats.ratingCount > 0 ? (count / feedbackStats.ratingCount * 100) : 0;
+                      return (
+                        <div key={star} className="flex items-center gap-3 text-xs">
+                          <span className="w-8 text-ink/60 tabular-nums">{star}⭐</span>
+                          <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/5">
+                            <div
+                              className="h-full rounded-full bg-amber-400 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="w-10 text-right text-ink/50 tabular-nums">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-line/10 bg-white/[0.03] p-4">
+                  <div className="mb-3 text-sm font-bold text-ink/70">使用场景</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { key: 'classroom', label: '课堂教学' },
+                      { key: 'self', label: '个人自学' },
+                      { key: 'demo', label: '展示演示' },
+                      { key: 'other', label: '其他' },
+                    ].map((s) => {
+                      const c = feedbackStats.sceneBreakdown[s.key] || 0;
+                      return (
+                        <div key={s.key} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
+                          <span className="text-sm text-ink/70">{s.label}</span>
+                          <span className="text-sm font-bold tabular-nums text-cyan">{c}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 反馈列表 */}
+            <div className="rounded-xl border border-line/10 bg-white/[0.03]">
+              <div className="flex items-center justify-between border-b border-line/10 px-5 py-3">
+                <div className="text-sm font-bold text-ink/80">详细反馈</div>
+                <div className="text-xs text-ink/40">共 {feedbackPagination?.total || 0} 条</div>
+              </div>
+
+              {isFeedbackLoading ? (
+                <div className="px-5 py-12 text-center text-ink/50">加载中...</div>
+              ) : feedbackItems.length === 0 ? (
+                <div className="px-5 py-12 text-center text-ink/50">暂无反馈</div>
+              ) : (
+                <div className="divide-y divide-white/8">
+                  {feedbackItems.map((item) => {
+                    const c = item.content || {};
+                    const sceneLabel = { classroom: '课堂教学', self: '个人自学', demo: '展示演示', other: '其他' }[c.scene] || '';
+                    const featureLabels: Record<string, string> = {
+                      '3d': '3D模型', voice: '语音交互', quiz: '答题测验',
+                      explain: '知识讲解', holo: '全息指令表', wrongbook: '错题本',
+                      theme: '主题切换', memory: '学习记忆',
+                    };
+                    const vaLabel = { very_good: '非常准', good: '比较准', normal: '一般', poor: '不太准', bad: '很差' }[c.voiceAccuracy] || '';
+                    const mcLabel = { very_clear: '非常清晰', clear: '比较清晰', normal: '一般', blurry: '有点糊', bad: '看不清' }[c.modelClarity] || '';
+                    return (
+                      <div key={item.id} className="px-5 py-4 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold text-ink">{item.displayName || item.username || '(匿名)'}</span>
+                              {c.rating > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-amber-500">
+                                  {Array.from({ length: Math.round(c.rating) }).map((_, i) => (
+                                    <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                                  ))}
+                                  <span className="ml-1 text-xs tabular-nums">{c.rating}</span>
+                                </span>
+                              )}
+                              {sceneLabel && (
+                                <span className="inline-flex rounded bg-cyan/15 px-2 py-0.5 text-xs text-cyan">{sceneLabel}</span>
+                              )}
+                            </div>
+                            {c.open && (
+                              <div className="mt-2 rounded-lg bg-white/5 px-3 py-2 text-ink/80">
+                                {c.open}
+                              </div>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              {Array.isArray(c.features) && c.features.map((f: string) => (
+                                <span key={f} className="rounded border border-line/10 bg-white/5 px-2 py-0.5 text-ink/60">
+                                  {featureLabels[f] || f}
+                                </span>
+                              ))}
+                              {c.voiceAccuracy && (
+                                <span className="rounded border border-line/10 bg-white/5 px-2 py-0.5 text-ink/60">语音: {vaLabel}</span>
+                              )}
+                              {c.modelClarity && (
+                                <span className="rounded border border-line/10 bg-white/5 px-2 py-0.5 text-ink/60">模型: {mcLabel}</span>
+                              )}
+                              {c.sceneOther && (
+                                <span className="rounded border border-line/10 bg-white/5 px-2 py-0.5 text-ink/60">其他场景: {c.sceneOther}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="shrink-0 whitespace-nowrap text-right text-xs text-ink/40">
+                            {formatDate(item.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 分页 */}
+              {feedbackPagination && feedbackPagination.totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-line/10 px-5 py-3 text-sm">
+                  <span className="text-ink/50">
+                    共 {feedbackPagination.total} 条，第 {feedbackPagination.page} / {feedbackPagination.totalPages} 页
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackPage((p) => Math.max(1, p - 1))}
+                      disabled={feedbackPage <= 1 || isFeedbackLoading}
+                      className="rounded-lg border border-line/10 bg-white/5 px-3 py-2 font-bold text-ink/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      上一页
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackPage((p) => Math.min(feedbackPagination.totalPages, p + 1))}
+                      disabled={feedbackPage >= feedbackPagination.totalPages || isFeedbackLoading}
+                      className="rounded-lg border border-line/10 bg-white/5 px-3 py-2 font-bold text-ink/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      下一页
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
         )}
       </main>
     </div>
