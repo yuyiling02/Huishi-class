@@ -861,7 +861,8 @@ async function loginWithRole(req, res, expectedRole) {
 
     await persistCurrentAccessMetadata(req, user);
     req.activityLogUser = user;
-    res.cookie(COOKIE_NAME, signUser(user), cookieOptions);
+    // session-only cookie：关闭浏览器后过期，每次都需要重新登录
+    res.cookie(COOKIE_NAME, signUser(user), { ...cookieOptions, maxAge: undefined });
     return res.json({ user: publicUser(user) });
   } catch (error) {
     console.error('Login failed:', error);
@@ -960,16 +961,40 @@ app.patch('/api/profile/password', requireAuth, async (req, res) => {
 });
 
 app.post('/api/feedback', requireAuth, async (req, res) => {
-  const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+  const body = req.body || {};
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
   const contentLength = Array.from(content).length;
+  if (contentLength > 2000) {
+    return res.status(400).json({ message: '自由反馈需为 0-2000 个字符' });
+  }
 
-  if (contentLength < 1 || contentLength > 2000) {
-    return res.status(400).json({ message: '反馈内容需为 1-2000 个字符' });
+  // 打包所有结构化字段为 JSON，存入 content 或 open_content 字段
+  const structured = {
+    rating: typeof body.rating === 'number' ? body.rating : null,
+    scene: typeof body.scene === 'string' ? body.scene : null,
+    sceneOther: typeof body.sceneOther === 'string' && body.sceneOther.trim() ? body.sceneOther.trim() : null,
+    features: Array.isArray(body.features) ? body.features : [],
+    voiceAccuracy: typeof body.voiceAccuracy === 'string' ? body.voiceAccuracy : null,
+    modelClarity: typeof body.modelClarity === 'string' ? body.modelClarity : null,
+    open: content || null,
+  };
+
+  // 至少要有一项反馈
+  const hasAny = structured.rating !== null
+    || structured.scene !== null
+    || structured.sceneOther !== null
+    || structured.features.length > 0
+    || structured.voiceAccuracy !== null
+    || structured.modelClarity !== null
+    || structured.open !== null;
+
+  if (!hasAny) {
+    return res.status(400).json({ message: '至少填写一项反馈' });
   }
 
   await pool.execute(
     'INSERT INTO user_feedback (user_id, content) VALUES (:userId, :content)',
-    { userId: req.user.id, content },
+    { userId: req.user.id, content: JSON.stringify(structured) },
   );
   return res.status(201).json({ ok: true });
 });
@@ -1078,6 +1103,101 @@ app.get('/api/admin/logs', requireAuth, requireAdmin, async (req, res) => {
       createdAt: row.created_at,
     })),
     pagination: buildLogPagination({ page, pageSize, total }),
+  });
+});
+
+// ---- 反馈管理 ----
+app.get('/api/admin/feedback', requireAuth, requireAdmin, async (req, res) => {
+  const rawUserId = req.query.userId;
+  let userId = null;
+  if (rawUserId !== undefined && !(typeof rawUserId === 'string' && rawUserId.trim() === '')) {
+    userId = parsePositiveInteger(rawUserId, null);
+    if (!userId) return res.status(400).json({ message: '无效的用户 ID' });
+  }
+
+  const rawPage = Number(req.query.page) || 1;
+  const page = Math.max(1, Math.min(rawPage, 1000));
+  const rawPageSize = Number(req.query.pageSize) || 20;
+  const pageSize = Math.max(5, Math.min(rawPageSize, 100));
+  const offset = (page - 1) * pageSize;
+
+  const whereClause = userId === null ? '' : ' WHERE f.user_id = :userId';
+  const queryValues = userId === null ? {} : { userId };
+
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS total FROM user_feedback f${whereClause}`,
+    queryValues,
+  );
+  const total = Number(countRows[0]?.total || 0);
+
+  const [rows] = await pool.execute(
+    `SELECT f.id, f.content, f.created_at,
+            u.id AS uid, u.username, u.display_name
+     FROM user_feedback f
+     LEFT JOIN users u ON f.user_id = u.id
+     ${whereClause}
+     ORDER BY f.created_at DESC, f.id DESC
+     LIMIT ${pageSize} OFFSET ${offset}`,
+    queryValues,
+  );
+
+  const parseContent = (raw) => {
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return { open: String(raw) }; }
+  };
+
+  const items = rows.map((row) => {
+    const parsed = parseContent(row.content) || {};
+    return {
+      id: Number(row.id),
+      userId: row.uid === null ? null : Number(row.uid),
+      username: row.username || null,
+      displayName: row.display_name || null,
+      content: parsed,
+      createdAt: row.created_at,
+    };
+  });
+
+  // 统计
+  const [allRows] = await pool.execute(
+    `SELECT f.content FROM user_feedback f${whereClause}`,
+    queryValues,
+  );
+  let totalRating = 0;
+  let ratingCount = 0;
+  const ratingBuckets = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const featureCounts = {};
+  let sceneClassroom = 0, sceneSelf = 0, sceneDemo = 0, sceneOther = 0;
+  for (const r of allRows) {
+    const p = parseContent(r.content);
+    if (!p) continue;
+    if (typeof p.rating === 'number' && p.rating > 0) {
+      totalRating += p.rating;
+      ratingCount++;
+      const bucket = Math.round(p.rating);
+      if (bucket >= 1 && bucket <= 5) ratingBuckets[bucket]++;
+    }
+    if (Array.isArray(p.features)) {
+      for (const feat of p.features) featureCounts[feat] = (featureCounts[feat] || 0) + 1;
+    }
+    if (p.scene === 'classroom') sceneClassroom++;
+    else if (p.scene === 'self') sceneSelf++;
+    else if (p.scene === 'demo') sceneDemo++;
+    else if (p.scene === 'other') sceneOther++;
+  }
+  const avgRating = ratingCount > 0 ? +(totalRating / ratingCount).toFixed(2) : null;
+
+  return res.json({
+    items,
+    pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    stats: {
+      total,
+      avgRating,
+      ratingCount,
+      ratingBuckets,
+      featureCounts,
+      sceneBreakdown: { classroom: sceneClassroom, self: sceneSelf, demo: sceneDemo, other: sceneOther },
+    },
   });
 });
 
